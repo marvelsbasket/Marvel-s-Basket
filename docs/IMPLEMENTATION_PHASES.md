@@ -1,0 +1,1249 @@
+# IMPLEMENTATION_PHASES.md
+
+# Marvel's Basket — Phased Implementation Roadmap
+
+**Project:** Marvel's Basket  
+**Organization:** Marvel's Techworks  
+**Document Version:** 1.0  
+**Status:** Proposed Implementation Roadmap  
+**Last Updated:** 19 November 2026
+
+---
+
+# 1. Roadmap Overview
+
+Marvel's Basket will be developed in structured implementation phases.
+
+Each phase must have:
+- Clearly defined objectives.
+- Specific development tasks.
+- Expected deliverables.
+- Dependencies.
+- Testing requirements.
+- Completion criteria.
+
+The project will follow an incremental development approach. Each phase should establish a stable foundation for the next phase.
+
+## 1.1 Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js + TypeScript |
+| Backend | NestJS + TypeScript |
+| Database | PostgreSQL |
+| ORM | Prisma |
+| Architecture | Monorepo |
+| Frontend Directory | `apps/web` |
+| Backend Directory | `apps/api` |
+
+## 1.2 Proposed Development Phases
+
+| Phase | Name | Priority |
+|---|---|---|
+| 00 | Business Rules & Technical Finalization | Critical |
+| 01 | Monorepo & Development Environment Setup | Critical |
+| 02 | Backend Foundation | Critical |
+| 03 | Database Implementation | Critical |
+| 04 | Authentication & Authorization | Critical |
+| 05 | Frontend Foundation & Design System | High |
+| 06 | User & Profile Management | High |
+| 07 | Seller Onboarding & Management | High |
+| 08 | Product Catalog & Categories | High |
+| 09 | Seller Listings & Inventory | High |
+| 10 | Customer Shopping Experience | High |
+| 11 | Cart & Checkout | Critical |
+| 12 | Order Management | Critical |
+| 13 | Payment Integration | Critical |
+| 14 | Delivery & Fulfillment | High |
+| 15 | Coupons, Discounts & Promotions | Medium |
+| 16 | Reviews & Ratings | Medium |
+| 17 | Notifications | Medium |
+| 18 | Seller Dashboard | High |
+| 19 | Admin Dashboard | High |
+| 20 | Financial Management & Settlements | High |
+| 21 | Testing & Security Hardening | Critical |
+| 22 | Deployment & Production Launch | Critical |
+| 23 | Post-Launch Monitoring & Optimization | High |
+
+**Note:** The phase order is a proposed dependency-based roadmap. Some independent features can be developed in parallel after their dependencies are stable.
+
+---
+
+# 2. Phase 00 — Business Rules & Technical Finalization
+
+**Priority:** Critical  
+**Status:** Not Started
+
+### Objective
+
+Finalize the business model and important technical decisions before implementing dependent features.
+
+### Tasks
+
+- [ ] Confirm marketplace product ownership model.
+- [ ] Confirm single-seller or multi-seller checkout.
+- [ ] Finalize delivery responsibility.
+- [ ] Finalize payment methods.
+- [ ] Select payment provider.
+- [ ] Define seller onboarding and approval.
+- [ ] Define commission and settlement rules.
+- [ ] Define cancellation and refund policies.
+- [ ] Define pricing and discount rules.
+- [ ] Finalize authentication methods.
+- [ ] Confirm deployment approach.
+- [ ] Review `DATABASE_SCHEMA.md`.
+- [ ] Update `PROJECT_REQUIREMENTS.md`.
+- [ ] Update `TECHNICAL_ARCHITECTURE.md`.
+- [ ] Update `PROJECT_DECISIONS.md`.
+
+### Deliverables
+
+- Approved business requirements.
+- Approved technical decisions.
+- Validated database design.
+- Confirmed implementation scope.
+
+### Completion Criteria
+
+No critical business rule should remain ambiguous when implementation of the dependent feature begins.
+
+---
+
+# 3. Phase 01 — Monorepo & Development Environment Setup
+
+**Priority:** Critical  
+**Status:** Not Started
+
+### Objective
+
+Create the project repository and establish the development environment.
+
+### Proposed Directory Structure
+
+```text
+marvels-basket/
+│
+├── apps/
+│   ├── web/
+│   └── api/
+│
+├── packages/
+│   └── shared/
+│
+├── docs/
+│
+├── scripts/
+│
+├── package.json
+├── .gitignore
+├── .editorconfig
+└── README.md
+```
+
+### Tasks
+
+- [ ] Create Git repository.
+- [ ] Initialize monorepo.
+- [ ] Select and configure workspace tooling.
+- [ ] Configure package manager.
+- [ ] Initialize Next.js application in `apps/web`.
+- [ ] Initialize NestJS application in `apps/api`.
+- [ ] Configure TypeScript.
+- [ ] Configure ESLint.
+- [ ] Configure code formatting.
+- [ ] Configure environment variables.
+- [ ] Create development scripts.
+- [ ] Configure Git ignore rules.
+- [ ] Add project README.
+- [ ] Verify both applications run independently.
+
+### Deliverables
+
+- Working monorepo.
+- Running Next.js application.
+- Running NestJS application.
+- Standardized development tooling.
+
+### Completion Criteria
+
+Both applications must build and run successfully from the monorepo.
+
+---
+
+# 4. Phase 02 — Backend Foundation
+
+**Priority:** Critical  
+**Status:** Not Started
+
+### Objective
+
+Establish a maintainable NestJS backend architecture.
+
+### Proposed Module Structure
+
+```text
+apps/api/src/
+│
+├── common/
+│   ├── decorators/
+│   ├── filters/
+│   ├── guards/
+│   ├── interceptors/
+│   ├── pipes/
+│   └── utils/
+│
+├── config/
+│
+├── database/
+│
+├── modules/
+│   ├── auth/
+│   ├── users/
+│   ├── sellers/
+│   ├── products/
+│   ├── categories/
+│   ├── inventory/
+│   ├── cart/
+│   ├── orders/
+│   ├── payments/
+│   ├── delivery/
+│   ├── notifications/
+│   └── admin/
+│
+├── app.module.ts
+└── main.ts
+```
+
+### Tasks
+
+- [ ] Configure application bootstrap.
+- [ ] Configure global validation.
+- [ ] Configure centralized exception handling.
+- [ ] Establish API response conventions.
+- [ ] Configure environment validation.
+- [ ] Configure CORS.
+- [ ] Configure API versioning.
+- [ ] Add request logging.
+- [ ] Add health-check endpoint.
+- [ ] Establish module conventions.
+- [ ] Configure API documentation.
+
+### Deliverables
+
+- Structured NestJS application.
+- Standardized API conventions.
+- Centralized error handling.
+- Health-check endpoint.
+- API documentation foundation.
+
+### Completion Criteria
+
+The backend must start reliably, validate incoming requests, and expose documented health and API endpoints.
+
+---
+
+# 5. Phase 03 — Database Implementation
+
+**Priority:** Critical  
+**Status:** Not Started
+
+### Objective
+
+Implement the approved PostgreSQL database design using Prisma.
+
+### Tasks
+
+- [ ] Configure PostgreSQL.
+- [ ] Configure Prisma.
+- [ ] Create initial Prisma schema.
+- [ ] Implement approved enums.
+- [ ] Implement user models.
+- [ ] Implement seller models.
+- [ ] Implement product and category models.
+- [ ] Implement listing and inventory models.
+- [ ] Implement cart models.
+- [ ] Implement order models.
+- [ ] Implement payment and refund models.
+- [ ] Implement delivery models.
+- [ ] Implement commission and settlement models.
+- [ ] Implement notification models.
+- [ ] Implement audit models.
+- [ ] Add indexes and constraints.
+- [ ] Generate Prisma Client.
+- [ ] Create initial migration.
+- [ ] Prepare development seed data.
+- [ ] Test important relationships and constraints.
+
+### Deliverables
+
+- Approved Prisma schema.
+- PostgreSQL database.
+- Versioned migrations.
+- Seed scripts.
+- Database access layer.
+
+### Completion Criteria
+
+All approved models and relationships must migrate successfully and pass database integrity tests.
+
+---
+
+# 6. Phase 04 — Authentication & Authorization
+
+**Priority:** Critical  
+**Status:** Not Started
+
+### Objective
+
+Implement secure authentication and backend authorization.
+
+### Tasks
+
+- [ ] Implement registration.
+- [ ] Implement login.
+- [ ] Implement logout.
+- [ ] Implement password hashing if password authentication is selected.
+- [ ] Implement email or mobile verification as required.
+- [ ] Implement password reset if applicable.
+- [ ] Implement session or token management.
+- [ ] Implement refresh-token handling if applicable.
+- [ ] Implement role-based authorization.
+- [ ] Implement resource-level authorization.
+- [ ] Protect customer routes.
+- [ ] Protect seller routes.
+- [ ] Protect admin routes.
+- [ ] Test unauthorized access scenarios.
+
+### Deliverables
+
+- Authentication APIs.
+- Authorization guards.
+- Role and permission handling.
+- Secure account workflows.
+
+### Completion Criteria
+
+Users must only access resources and operations permitted by their authenticated identity and assigned permissions.
+
+---
+
+# 7. Phase 05 — Frontend Foundation & Design System
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Create the Next.js application foundation and reusable UI system.
+
+### Tasks
+
+- [ ] Configure Next.js App Router.
+- [ ] Establish frontend directory structure.
+- [ ] Configure global styles.
+- [ ] Establish typography and design tokens.
+- [ ] Build reusable buttons.
+- [ ] Build form components.
+- [ ] Build input components.
+- [ ] Build modal and dialog components.
+- [ ] Build dropdown and menu components.
+- [ ] Build cards and layout components.
+- [ ] Build loading and empty states.
+- [ ] Build error states.
+- [ ] Configure API client.
+- [ ] Configure frontend environment variables.
+- [ ] Create responsive layouts.
+- [ ] Establish accessibility standards.
+
+### Deliverables
+
+- Working frontend foundation.
+- Reusable component system.
+- Responsive layout foundation.
+- API integration layer.
+
+### Completion Criteria
+
+The frontend must have a consistent reusable design system and be ready for feature development.
+
+---
+
+# 8. Phase 06 — User & Profile Management
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Implement customer accounts and profile management.
+
+### Tasks
+
+- [ ] Build customer profile APIs.
+- [ ] Build profile update functionality.
+- [ ] Implement address management.
+- [ ] Implement account settings.
+- [ ] Implement account status handling.
+- [ ] Build customer profile screens.
+- [ ] Build address management screens.
+- [ ] Integrate frontend with backend.
+- [ ] Test customer data isolation.
+
+### Deliverables
+
+- Customer profile management.
+- Address management.
+- Account settings.
+
+### Completion Criteria
+
+Customers must be able to manage their own profiles and addresses securely.
+
+---
+
+# 9. Phase 07 — Seller Onboarding & Management
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Implement seller registration, verification, and account management.
+
+### Tasks
+
+- [ ] Build seller registration.
+- [ ] Implement seller profile.
+- [ ] Implement store information.
+- [ ] Implement business details.
+- [ ] Implement document submission if required.
+- [ ] Implement verification workflow.
+- [ ] Implement admin approval.
+- [ ] Implement seller activation and suspension.
+- [ ] Build seller onboarding screens.
+- [ ] Build seller profile screens.
+- [ ] Test seller permissions.
+
+### Deliverables
+
+- Seller onboarding workflow.
+- Seller profiles.
+- Seller approval system.
+- Seller management APIs.
+
+### Completion Criteria
+
+The approved seller onboarding workflow must operate correctly with appropriate administrative controls.
+
+---
+
+# 10. Phase 08 — Product Catalog & Categories
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Build the platform product catalog and category management system.
+
+### Tasks
+
+- [ ] Implement category management.
+- [ ] Implement product creation.
+- [ ] Implement product updates.
+- [ ] Implement product descriptions.
+- [ ] Implement product images.
+- [ ] Implement product attributes.
+- [ ] Implement product variants if required.
+- [ ] Implement product status management.
+- [ ] Implement product search.
+- [ ] Implement product filtering.
+- [ ] Implement product sorting.
+- [ ] Build category pages.
+- [ ] Build product detail pages.
+- [ ] Build admin catalog management.
+
+### Deliverables
+
+- Product catalog APIs.
+- Category management.
+- Product discovery interfaces.
+- Product detail interfaces.
+
+### Completion Criteria
+
+Approved product catalog workflows must support creation, management, discovery, and retrieval.
+
+---
+
+# 11. Phase 09 — Seller Listings & Inventory
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Implement seller-specific product listings, pricing, and stock management.
+
+### Tasks
+
+- [ ] Implement seller product listings.
+- [ ] Associate listings with catalog products.
+- [ ] Implement seller-specific pricing.
+- [ ] Implement listing availability.
+- [ ] Implement stock management.
+- [ ] Implement inventory adjustment history.
+- [ ] Implement stock validation.
+- [ ] Implement stock reservation logic.
+- [ ] Implement concurrency protection.
+- [ ] Build seller inventory screens.
+- [ ] Test inventory consistency.
+
+### Deliverables
+
+- Seller listing management.
+- Inventory APIs.
+- Stock management interfaces.
+- Inventory validation and reservation logic.
+
+### Completion Criteria
+
+Inventory operations must prevent overselling and maintain consistency during concurrent purchase attempts.
+
+---
+
+# 12. Phase 10 — Customer Shopping Experience
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Build the customer-facing marketplace browsing experience.
+
+### Tasks
+
+- [ ] Build homepage.
+- [ ] Build category navigation.
+- [ ] Build product listing pages.
+- [ ] Build product detail pages.
+- [ ] Build search interface.
+- [ ] Implement filters.
+- [ ] Implement sorting.
+- [ ] Display seller availability.
+- [ ] Display pricing and stock information.
+- [ ] Build responsive layouts.
+- [ ] Integrate product APIs.
+
+### Deliverables
+
+- Customer marketplace interface.
+- Product discovery.
+- Search and filtering.
+- Product detail experience.
+
+### Completion Criteria
+
+Customers must be able to discover products and view valid seller-specific offerings.
+
+---
+
+# 13. Phase 11 — Cart & Checkout
+
+**Priority:** Critical  
+**Status:** Not Started
+
+### Objective
+
+Implement cart management and checkout preparation.
+
+### Tasks
+
+- [ ] Implement add-to-cart.
+- [ ] Implement remove-from-cart.
+- [ ] Implement quantity updates.
+- [ ] Validate seller listing availability.
+- [ ] Validate inventory.
+- [ ] Calculate item totals.
+- [ ] Calculate applicable discounts.
+- [ ] Calculate delivery charges.
+- [ ] Validate customer addresses.
+- [ ] Implement checkout summary.
+- [ ] Implement checkout confirmation.
+- [ ] Handle unavailable products.
+- [ ] Handle changed prices and stock.
+- [ ] Implement stock reservation according to the approved model.
+
+### Deliverables
+
+- Cart APIs.
+- Cart interface.
+- Checkout summary.
+- Validated checkout workflow.
+
+### Completion Criteria
+
+The backend must calculate and validate the final checkout amount. Client-provided prices and totals must never be trusted.
+
+---
+
+# 14. Phase 12 — Order Management
+
+**Priority:** Critical  
+**Status:** Not Started
+
+### Objective
+
+Implement order creation and order lifecycle management.
+
+### Tasks
+
+- [ ] Implement order creation.
+- [ ] Implement parent order handling if multi-seller checkout is approved.
+- [ ] Implement seller order handling if required.
+- [ ] Implement order item snapshots.
+- [ ] Implement order status transitions.
+- [ ] Implement seller order acceptance.
+- [ ] Implement order cancellation.
+- [ ] Implement order history.
+- [ ] Implement customer order details.
+- [ ] Implement seller order management.
+- [ ] Implement order audit history.
+- [ ] Test transactional order creation.
+
+### Deliverables
+
+- Order APIs.
+- Order lifecycle.
+- Customer order history.
+- Seller order management.
+
+### Completion Criteria
+
+Order creation and status transitions must follow approved business rules and maintain consistent database records.
+
+---
+
+# 15. Phase 13 — Payment Integration
+
+**Priority:** Critical  
+**Status:** Not Started
+
+### Objective
+
+Integrate the approved payment provider and implement reliable payment processing.
+
+### Tasks
+
+- [ ] Configure payment provider.
+- [ ] Implement payment initiation.
+- [ ] Implement payment verification.
+- [ ] Implement webhook handling.
+- [ ] Verify webhook signatures.
+- [ ] Implement idempotency.
+- [ ] Store payment transactions.
+- [ ] Implement payment status transitions.
+- [ ] Implement payment failure handling.
+- [ ] Implement payment retries where appropriate.
+- [ ] Implement refund workflows.
+- [ ] Implement COD handling if approved.
+- [ ] Test duplicate and delayed webhook events.
+
+### Deliverables
+
+- Payment integration.
+- Transaction records.
+- Payment verification.
+- Refund handling.
+- Payment reconciliation foundation.
+
+### Completion Criteria
+
+Payment records must accurately reflect verified provider events, and repeated callbacks must not create duplicate financial operations.
+
+---
+
+# 16. Phase 14 — Delivery & Fulfillment
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Implement the approved delivery and order fulfillment model.
+
+### Tasks
+
+- [ ] Implement fulfillment status management.
+- [ ] Implement shipment creation if applicable.
+- [ ] Implement delivery assignment if applicable.
+- [ ] Implement delivery tracking.
+- [ ] Implement shipment status updates.
+- [ ] Implement delivery completion.
+- [ ] Implement failed delivery handling.
+- [ ] Implement delivery cancellation.
+- [ ] Implement delivery notifications.
+- [ ] Build customer tracking interface.
+- [ ] Build seller fulfillment interface.
+- [ ] Test delivery lifecycle.
+
+### Deliverables
+
+- Delivery management APIs.
+- Fulfillment workflows.
+- Order tracking.
+- Delivery interfaces.
+
+### Completion Criteria
+
+Customers and authorized sellers must be able to view accurate delivery and fulfillment status.
+
+---
+
+# 17. Phase 15 — Coupons, Discounts & Promotions
+
+**Priority:** Medium  
+**Status:** Not Started
+
+### Objective
+
+Implement the approved promotional and discount system.
+
+### Tasks
+
+- [ ] Implement coupon creation.
+- [ ] Implement coupon validation.
+- [ ] Implement coupon expiration.
+- [ ] Implement minimum order requirements.
+- [ ] Implement usage limits.
+- [ ] Implement customer eligibility.
+- [ ] Implement seller-specific coupons if approved.
+- [ ] Implement platform-wide promotions.
+- [ ] Implement discount calculations.
+- [ ] Build admin promotion management.
+- [ ] Test coupon stacking and eligibility rules.
+
+### Deliverables
+
+- Coupon management.
+- Discount calculation engine.
+- Promotional interfaces.
+
+### Completion Criteria
+
+Discounts must be validated and calculated on the backend according to approved rules.
+
+---
+
+# 18. Phase 16 — Reviews & Ratings
+
+**Priority:** Medium  
+**Status:** Not Started
+
+### Objective
+
+Allow customers to submit reviews and ratings for eligible purchases.
+
+### Tasks
+
+- [ ] Implement review creation.
+- [ ] Implement rating validation.
+- [ ] Restrict reviews to eligible customers.
+- [ ] Implement review editing rules.
+- [ ] Implement review moderation.
+- [ ] Implement review reporting.
+- [ ] Display product ratings.
+- [ ] Build review interfaces.
+- [ ] Test duplicate review restrictions.
+
+### Deliverables
+
+- Review APIs.
+- Rating calculations.
+- Review display and moderation.
+
+### Completion Criteria
+
+Only authorized customers must be able to submit reviews according to the approved review policy.
+
+---
+
+# 19. Phase 17 — Notifications
+
+**Priority:** Medium  
+**Status:** Not Started
+
+### Objective
+
+Build the notification system for important customer, seller, and administrative events.
+
+### Tasks
+
+- [ ] Define notification events.
+- [ ] Implement in-app notifications.
+- [ ] Implement email notifications if selected.
+- [ ] Implement SMS notifications if selected.
+- [ ] Implement push notifications if selected.
+- [ ] Implement notification preferences.
+- [ ] Implement delivery status tracking.
+- [ ] Implement retry handling.
+- [ ] Build notification interfaces.
+- [ ] Test notification delivery.
+
+### Deliverables
+
+- Notification service.
+- Notification event handling.
+- Notification preferences.
+- Delivery tracking.
+
+### Completion Criteria
+
+Important events must trigger the appropriate notifications without blocking critical order or payment operations.
+
+---
+
+# 20. Phase 18 — Seller Dashboard
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Provide sellers with a centralized interface for managing their marketplace operations.
+
+### Features
+
+- Seller overview.
+- Store profile.
+- Product management.
+- Listing management.
+- Inventory management.
+- Order management.
+- Fulfillment management.
+- Sales analytics.
+- Earnings overview.
+- Settlement history.
+- Account settings.
+
+### Tasks
+
+- [ ] Build seller dashboard layout.
+- [ ] Implement seller overview APIs.
+- [ ] Implement product management screens.
+- [ ] Implement inventory screens.
+- [ ] Implement order management screens.
+- [ ] Implement sales reports.
+- [ ] Implement earnings views.
+- [ ] Implement account settings.
+- [ ] Enforce seller-level data isolation.
+
+### Deliverables
+
+A functional seller dashboard.
+
+### Completion Criteria
+
+Sellers must be able to manage only their own authorized marketplace resources.
+
+---
+
+# 21. Phase 19 — Admin Dashboard
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Provide administrators with centralized marketplace management.
+
+### Features
+
+- Platform overview.
+- Customer management.
+- Seller management.
+- Seller approval.
+- Product moderation.
+- Category management.
+- Order monitoring.
+- Payment monitoring.
+- Refund management.
+- Coupon management.
+- Review moderation.
+- Reports and analytics.
+- Audit logs.
+- Platform configuration.
+
+### Tasks
+
+- [ ] Build admin dashboard layout.
+- [ ] Implement admin overview APIs.
+- [ ] Implement customer management.
+- [ ] Implement seller management.
+- [ ] Implement product moderation.
+- [ ] Implement order monitoring.
+- [ ] Implement payment and refund views.
+- [ ] Implement promotional management.
+- [ ] Implement reports.
+- [ ] Implement audit log views.
+- [ ] Enforce administrative permissions.
+
+### Deliverables
+
+A functional administrative dashboard.
+
+### Completion Criteria
+
+Administrators must be able to manage authorized platform operations with traceable administrative actions.
+
+---
+
+# 22. Phase 20 — Financial Management & Settlements
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Implement financial tracking for seller earnings, platform commissions, refunds, and payouts.
+
+### Tasks
+
+- [ ] Implement commission calculations.
+- [ ] Implement seller earning records.
+- [ ] Implement refund adjustments.
+- [ ] Implement settlement calculation.
+- [ ] Implement payout records.
+- [ ] Implement settlement approval if required.
+- [ ] Implement settlement history.
+- [ ] Implement reconciliation reports.
+- [ ] Implement financial audit history.
+- [ ] Test rounding and monetary calculations.
+
+### Deliverables
+
+- Financial management APIs.
+- Commission tracking.
+- Seller earnings.
+- Settlement and payout records.
+- Financial reports.
+
+### Completion Criteria
+
+Every financial movement must be traceable and reconcilable with the corresponding order, payment, refund, or settlement.
+
+---
+
+# 23. Phase 21 — Testing & Security Hardening
+
+**Priority:** Critical  
+**Status:** Not Started
+
+### Objective
+
+Validate the complete system before production deployment.
+
+### Backend Testing
+
+- [ ] Unit tests.
+- [ ] Service tests.
+- [ ] API integration tests.
+- [ ] Database integration tests.
+- [ ] Authorization tests.
+- [ ] Transaction tests.
+- [ ] Payment webhook tests.
+- [ ] Inventory concurrency tests.
+
+### Frontend Testing
+
+- [ ] Component tests.
+- [ ] Form validation tests.
+- [ ] API integration tests.
+- [ ] Responsive layout testing.
+- [ ] Accessibility testing.
+- [ ] Error-state testing.
+
+### End-to-End Testing
+
+- [ ] Customer registration.
+- [ ] Customer login.
+- [ ] Seller onboarding.
+- [ ] Seller product listing.
+- [ ] Product discovery.
+- [ ] Cart operations.
+- [ ] Checkout.
+- [ ] Payment.
+- [ ] Order creation.
+- [ ] Order fulfillment.
+- [ ] Delivery tracking.
+- [ ] Cancellation and refund.
+- [ ] Seller settlement.
+- [ ] Admin management.
+
+### Security Checklist
+
+- [ ] Validate all incoming data.
+- [ ] Enforce authorization on backend routes.
+- [ ] Protect sensitive account information.
+- [ ] Secure authentication sessions.
+- [ ] Verify payment webhooks.
+- [ ] Apply rate limiting where appropriate.
+- [ ] Protect against common web vulnerabilities.
+- [ ] Review CORS and security headers.
+- [ ] Protect secrets and environment variables.
+- [ ] Review database access permissions.
+- [ ] Review file upload validation if uploads are supported.
+- [ ] Review logs for sensitive data exposure.
+
+### Deliverables
+
+- Automated test coverage for critical workflows.
+- Security review.
+- Regression test results.
+- Release readiness report.
+
+### Completion Criteria
+
+Critical workflows must pass their tests, and no unresolved critical security issue may remain at release approval.
+
+---
+
+# 24. Phase 22 — Deployment & Production Launch
+
+**Priority:** Critical  
+**Status:** Not Started
+
+### Objective
+
+Deploy Marvel's Basket to production.
+
+### Tasks
+
+- [ ] Select hosting providers.
+- [ ] Configure production frontend.
+- [ ] Configure production backend.
+- [ ] Configure production PostgreSQL.
+- [ ] Configure production environment variables.
+- [ ] Configure domain and DNS.
+- [ ] Configure HTTPS.
+- [ ] Configure CI/CD.
+- [ ] Configure database migrations.
+- [ ] Configure database backups.
+- [ ] Configure application logging.
+- [ ] Configure error monitoring.
+- [ ] Configure health checks.
+- [ ] Configure production security settings.
+- [ ] Perform production smoke tests.
+- [ ] Verify payment provider production configuration.
+- [ ] Verify email and notification delivery.
+- [ ] Prepare rollback procedures.
+- [ ] Approve production launch.
+
+### Deliverables
+
+- Production frontend.
+- Production backend.
+- Production database.
+- CI/CD pipeline.
+- Monitoring and backup setup.
+- Launch readiness checklist.
+
+### Completion Criteria
+
+All production services must be operational, secure, monitored, and verified through production smoke tests.
+
+---
+
+# 25. Phase 23 — Post-Launch Monitoring & Optimization
+
+**Priority:** High  
+**Status:** Not Started
+
+### Objective
+
+Monitor the live platform and improve performance, reliability, and user experience.
+
+### Tasks
+
+- [ ] Monitor application errors.
+- [ ] Monitor API performance.
+- [ ] Monitor database performance.
+- [ ] Monitor payment failures.
+- [ ] Monitor order failures.
+- [ ] Monitor inventory consistency.
+- [ ] Monitor notification delivery.
+- [ ] Review customer feedback.
+- [ ] Review seller feedback.
+- [ ] Optimize slow queries.
+- [ ] Optimize frontend performance.
+- [ ] Improve caching where appropriate.
+- [ ] Review infrastructure costs.
+- [ ] Address production bugs.
+- [ ] Plan subsequent releases.
+
+### Deliverables
+
+- Monitoring reports.
+- Performance improvements.
+- Bug fixes.
+- Post-launch improvement roadmap.
+
+### Completion Criteria
+
+The platform must have an ongoing process for identifying, prioritizing, and resolving production issues.
+
+---
+
+# 26. Cross-Phase Development Standards
+
+These standards apply to every implementation phase.
+
+## 26.1 Code Quality
+
+- Use TypeScript consistently.
+- Follow established project conventions.
+- Avoid unnecessary code duplication.
+- Keep modules focused on their responsibilities.
+- Prefer reusable components and services.
+- Remove unused code and dependencies.
+
+## 26.2 Database Standards
+
+- Use Prisma migrations.
+- Maintain referential integrity.
+- Add indexes based on query requirements.
+- Use transactions for critical operations.
+- Avoid storing derived values without a clear reason.
+- Preserve financial and order history appropriately.
+
+## 26.3 API Standards
+
+- Validate all incoming requests.
+- Use DTOs for request validation.
+- Apply authorization to protected endpoints.
+- Use consistent response formats.
+- Document endpoints.
+- Handle errors centrally.
+
+## 26.4 Frontend Standards
+
+- Build reusable components.
+- Maintain responsive layouts.
+- Handle loading and error states.
+- Keep sensitive business logic on the backend.
+- Follow accessibility practices.
+- Avoid exposing secrets in client-side code.
+
+## 26.5 Testing Standards
+
+- Write tests alongside features.
+- Test both successful and failure scenarios.
+- Test authorization boundaries.
+- Test concurrent operations where relevant.
+- Test financial and inventory edge cases.
+- Run regression tests before merging major changes.
+
+## 26.6 Git and Version Control
+
+- Use meaningful branch names.
+- Write descriptive commit messages.
+- Keep changes focused.
+- Review changes before merging.
+- Do not commit secrets or local environment files.
+- Keep the main branch stable.
+
+---
+
+# 27. Phase Completion and Approval Process
+
+A phase can only be marked completed after the following conditions are met:
+
+1. All required tasks are implemented.
+2. Relevant automated tests pass.
+3. Manual verification is completed where required.
+4. Security implications are reviewed.
+5. Documentation is updated.
+6. No unresolved critical blocker remains.
+7. The phase deliverables are verified.
+
+### Recommended Phase Status Values
+
+| Status | Meaning |
+|---|---|
+| Not Started | Work has not begun |
+| In Progress | Implementation is underway |
+| Blocked | Work depends on an unresolved issue |
+| In Review | Implementation is awaiting review |
+| Testing | Verification is underway |
+| Completed | All completion criteria are satisfied |
+| Deferred | Work has intentionally been postponed |
+
+---
+
+# 28. Overall Project Milestones
+
+| Milestone | Expected Outcome |
+|---|---|
+| M1 | Business rules and technical decisions approved |
+| M2 | Monorepo and development environment ready |
+| M3 | Backend foundation and database ready |
+| M4 | Authentication and authorization ready |
+| M5 | Frontend foundation and customer profiles ready |
+| M6 | Seller onboarding and product catalog ready |
+| M7 | Listings, inventory, and shopping experience ready |
+| M8 | Cart, checkout, and order management ready |
+| M9 | Payments and delivery workflows ready |
+| M10 | Seller and admin dashboards ready |
+| M11 | Financial workflows and supporting features ready |
+| M12 | Testing and security hardening completed |
+| M13 | Production deployment completed |
+| M14 | Post-launch monitoring active |
+
+No fixed calendar estimates are assigned at this stage. Estimates should be added after scope confirmation and task breakdown.
+
+---
+
+# 29. Current Implementation Status
+
+**Current Stage:** Planning & Documentation
+
+**Documentation Prepared:**
+
+- `PROJECT_CONTEXT.md`
+- `PROJECT_REQUIREMENTS.md`
+- `TECHNICAL_ARCHITECTURE.md`
+- `DATABASE_SCHEMA.md`
+- `PROJECT_STATUS.md`
+- `PROJECT_DECISIONS.md`
+- `IMPLEMENTATION_PHASES.md`
+
+**Implementation Status:** Not Started
+
+**Immediate Next Steps:**
+
+1. Review and approve the seven foundational documents.
+2. Resolve business-critical pending decisions in `PROJECT_DECISIONS.md`.
+3. Finalize the database schema based on approved business rules.
+4. Initialize the monorepo.
+5. Begin Phase 01.
+6. Update `PROJECT_STATUS.md` as verified work progresses.
+
+---
+
+# 30. Roadmap Maintenance
+
+This roadmap must be updated whenever:
+
+- A phase is started or completed.
+- New requirements are introduced.
+- A technical decision changes.
+- A dependency causes a phase to be reordered.
+- Features are added, removed, or deferred.
+- Testing reveals additional implementation work.
+- Production requirements change.
+
+The roadmap should always represent the actual approved implementation plan rather than an outdated estimate.
+
+---
+
+**Document End — IMPLEMENTATION_PHASES.md**
