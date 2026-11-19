@@ -46,21 +46,38 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 
 ---
 
+## 2. Phase 03 — Database Implementation Summary
+
+| Area | Status | Verified Outcome |
+|---|---|---|
+| **Prisma Schema Definition** | Verified | Complete marketplace relational domain baseline in `apps/api/prisma/schema.prisma` with 54 relational tables, 21 enums, explicit foreign key constraints, and cascade behaviors. |
+| **PostgreSQL 16 Engine** | Verified | Running via Docker container `marvels_basket_postgres` on host port 5433, internal port 5432 with health check probes. |
+| **Database Migrations** | Verified | 3 versioned Prisma migrations applied: `20261119074339_init`, `20261119074630_role_and_payment_enums`, and `20261119075000_seller_product_null_variant_unique`. Schema in full sync. |
+| **Monetary Standards** | Verified | All monetary values use PostgreSQL `Decimal(12, 2)` (supporting values up to ₹9,999,999,999.99). Commission rates use `Decimal(5, 2)`. Float/Double strictly prohibited. |
+| **Marketplace Business Invariants** | Verified | Single-store checkout boundary (`Cart.sellerId`, `Order.sellerId`), immutable historical price & address snapshots, double-entry append-only seller ledger (`SellerLedgerEntry`), and double-settlement guard (`SettlementItem.sellerLedgerEntryId` unique). |
+| **Nullable Uniqueness Guarantee** | Verified | PostgreSQL partial unique index on `seller_products(seller_id, product_id) WHERE variant_id IS NULL` guarantees a store cannot create duplicate listings for the same master product. |
+| **Webhook Idempotency Guarantee** | Verified | Unique composite index on `payment_webhook_events(provider, event_id)` prevents gateway replay attacks and duplicate payment captures. |
+| **Deterministic Development Seed** | Verified | `apps/api/prisma/seed.ts` seeds superadmin, sample customer (with profile and addresses), 2 stores with multi-store listings and distinct pricing, delivery rider, categories, master products, inventories, commission rules, coupons, and platform settings. 100% idempotent. |
+| **Database Integrity Tests** | Verified | 10 database integration tests passing (1 suite in `apps/api/test/database-integrity.db-spec.ts`) validating schema, foreign keys, multi-store listings, single-store cart, price snapshots, webhook idempotency, ledger entries, rider assignment, and atomic rollback. |
+| **Root Management Tooling** | Verified | Standardized commands added to root `package.json`: `db:validate`, `db:format`, `db:generate`, `db:migrate`, `db:migrate:deploy`, `db:seed`, `db:status`, `db:test`, and `db:studio`. |
+
+---
+
 ## 3. Documentation Status Matrix
 
-| # | Document | Version | Status | Key Updates in Phase 00, 01 & 02 |
+| # | Document | Version | Status | Key Updates in Phase 00, 01, 02 & 03 |
 |---|---|---|---|---|
 | 1 | `PROJECT_CONTEXT.md` | 1.1 | Updated | Aligned core business model to single-store checkout and hybrid catalog. |
 | 2 | `PROJECT_REQUIREMENTS.md` | 2.0 | Updated | Locked MVP scope, single-store cart/order rules, BR-001 to BR-022, edge cases, out-of-scope boundaries. |
-| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.1 | Updated | Added Section 5.5 documenting Backend Foundation, response envelopes, Prisma/Redis services, health probes, and Swagger. |
-| 4 | `DATABASE_SCHEMA.md` | 2.0 | Validated | Streamlined single-store order models, webhook idempotency, double-entry seller ledger, platform delivery models. |
-| 5 | `PROJECT_DECISIONS.md` | 2.2 | Updated | Added **ADR-023** through **ADR-028** (URI versioning, standard envelopes, correlation tracking, Joi validation, health architecture, infrastructure services). |
-| 6 | `IMPLEMENTATION_PHASES.md` | 2.2 | Updated | Phase 02 marked Completed with full task verification; subsequent phases aligned. |
-| 7 | `PROJECT_STATUS.md` | 2.2 | Updated | Phase 02 completed; backend verified; Phase 03 ready to start. |
+| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.2 | Updated | Added Section 6.7 documenting Database Implementation, migrations, partial indexes, and root tooling. |
+| 4 | `DATABASE_SCHEMA.md` | 2.1 | Validated | Streamlined single-store order models, webhook idempotency, double-entry seller ledger, partial unique index. |
+| 5 | `PROJECT_DECISIONS.md` | 2.3 | Updated | Added **ADR-029** through **ADR-035** (UUID v4 keys, Decimal precision, partial unique index, single-store boundary, immutable snapshots, financial ledger, webhook idempotency). |
+| 6 | `IMPLEMENTATION_PHASES.md` | 2.3 | Updated | Phase 03 marked Completed with full task verification; Phase 04 unblocked. |
+| 7 | `PROJECT_STATUS.md` | 2.3 | Updated | Phase 03 completed; database verified; Phase 04 ready to start. |
 | 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.0 | Preserved | Approved visual direction preserved without modification; implemented in `apps/web`. |
-| 9 | `README.md` | 2.1 | Updated | Added backend architecture overview, health endpoints, Swagger documentation, and testing commands. |
+| 9 | `README.md` | 2.2 | Updated | Added database management commands, Prisma migration guides, and seed instructions. |
 | 10 | `infrastructure/docker/README.md`| 1.0 | Created | Dedicated Docker architecture, volume lifecycle, health probes, and safety commands. |
-| 11 | `apps/api/README.md` | 1.0 | Created | Complete backend onboarding, architecture layout, API conventions, and module development guidelines. |
+| 11 | `apps/api/README.md` | 1.1 | Updated | Added database models, migration commands, and testing conventions. |
 
 ---
 
@@ -71,8 +88,8 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 | **Phase 00** | Business Rules & Technical Finalization | Critical | **Completed** | Technical baseline locked; commercial parameters documented in ADRs. |
 | **Phase 01** | Monorepo & Development Environment | Critical | **Completed** | Monorepo initialized, Docker active, all checks passing. |
 | **Phase 02** | Backend Foundation | Critical | **Completed** | NestJS architecture, Prisma/Redis services, Swagger, tests passing. |
-| **Phase 03** | Database Implementation | Critical | **Ready to Start** | Dependent on Phase 01 & 02 (Unblocked). |
-| **Phase 04** | Authentication & Authorization | Critical | Not Started | Dependent on Phase 02 & 03. |
+| **Phase 03** | Database Implementation | Critical | **Completed** | 54 tables, 21 enums, 3 migrations, seed data, 10/10 DB tests passing. |
+| **Phase 04** | Authentication & Authorization | Critical | **Ready to Start** | Unblocked by Phase 02 & Phase 03 completion. |
 | **Phase 05** | Frontend Foundation & Design System | High | Not Started | Dependent on Phase 01. |
 | **Phase 06** | User & Profile Management | High | Not Started | Dependent on Phase 04 & 05. |
 | **Phase 07** | Seller Onboarding & KYC | High | Not Started | Dependent on Phase 04. |

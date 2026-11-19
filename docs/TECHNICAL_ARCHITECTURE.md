@@ -966,6 +966,31 @@ The `Order` entity maps directly to that store (`sellerId`), customer, frozen de
 
 This eliminates parent/child order orchestration bugs, atomic multi-order status aggregation overhead, and complex multi-seller split liabilities during the MVP launch. Multi-seller split orders are deferred to a post-MVP architecture if ever required.
 
+## 6.7 Database Implementation & Operational Tooling (Phase 03)
+
+### 6.7.1 Technology Stack & Topology
+- **Engine:** PostgreSQL 16 on Docker container `marvels_basket_postgres` (host port 5433).
+- **ORM & Client:** Prisma ORM 5.22 with `@prisma/client` generated to root `node_modules/@prisma/client`.
+- **Database Access:** Encapsulated inside `apps/api/src/database/prisma.service.ts` inheriting `PrismaClient` with `onModuleInit`, `onModuleDestroy`, and raw health probe `isHealthy()`.
+
+### 6.7.2 Applied Migrations (Version Controlled)
+1. `20261119074339_init`: Created the full 54-table relational foundation, foreign keys, cascades, indexes, and initial enums.
+2. `20261119074630_role_and_payment_enums`: Bound `UserRoleType` to `Role.roleType` and `PaymentMethod` to `Payment.paymentMethod`.
+3. `20261119075000_seller_product_null_variant_unique`: Added PostgreSQL partial unique index `CREATE UNIQUE INDEX "seller_products_seller_id_product_id_null_variant_key" ON "seller_products"("seller_id", "product_id") WHERE "variant_id" IS NULL;` ensuring strict uniqueness for non-variant store listings.
+
+### 6.7.3 Root-Level Database Tooling
+| Command | Action |
+|---|---|
+| `npm run db:validate` | Validates `apps/api/prisma/schema.prisma` syntax and relation integrity. |
+| `npm run db:format` | Formats the Prisma schema with canonical indentation. |
+| `npm run db:generate` | Generates the typed Prisma Client into `node_modules/@prisma/client`. |
+| `npm run db:migrate` | Runs interactive development migrations (`prisma migrate dev`). |
+| `npm run db:migrate:deploy` | Applies unapplied versioned migrations in CI/CD and production (`prisma migrate deploy`). |
+| `npm run db:seed` | Executes deterministic, idempotent development database seed (`apps/api/prisma/seed.ts`). |
+| `npm run db:status` | Inspects migration sync status against PostgreSQL. |
+| `npm run db:test` | Executes database integrity and marketplace invariant test suite (`apps/api/test/database-integrity.db-spec.ts`). |
+| `npm run db:studio` | Launches web-based visual data inspector Prisma Studio. |
+
 ---
 
 # 7. AUTHENTICATION AND AUTHORIZATION ARCHITECTURE
