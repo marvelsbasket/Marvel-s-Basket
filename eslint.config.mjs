@@ -14,6 +14,7 @@ export default [
       '**/coverage/**',
       '**/*.d.ts',
       '**/scripts/**',
+      '**/*.config.js',
     ],
   },
   js.configs.recommended,
@@ -46,6 +47,7 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+      'no-undef': 'off',
       '@typescript-eslint/no-unused-vars': [
         'warn',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },

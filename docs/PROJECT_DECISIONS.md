@@ -882,6 +882,46 @@ Individual controller route protection can easily lead to accidental security la
 
 ---
 
+## ADR-040: Tailwind Design Token Centralization & CVA Component Architecture
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Phase 05 establishes the frontend design foundation for Marvel's Basket (`apps/web`). The application requires strict visual fidelity to the approved brand identity (Official Logo and Website UI Reference Image), avoiding ad-hoc styling, hardcoded hex values across components, or disparate component variants.
+
+### Decision
+1. All visual design tokens (colors, radii, shadows, breakpoints) are centralized in `apps/web/src/styles/tokens.ts` and mirrored in `tailwind.config.ts` and `globals.css`.
+2. Primary brand palette strictly codifies:
+   - Forest Green (`#0B5D2A`): Top header background, hero banner gradient, primary typography.
+   - Emerald Brand Green (`#15803D`): Active indicators, brand logo accents, trust elements.
+   - Citrus Yellow CTA (`#F4E022`): Primary conversion buttons, high-contrast actions.
+   - Lime Chartreuse Highlight (`#D4E137`): Key value proposition pills (`Multiple Sellers`, `Best Prices`, `Quick Delivery`).
+   - Category Tile Neutral (`#F4F6F8`): High-utility category rail icon backgrounds with 14px border radius.
+3. Component primitives utilize `class-variance-authority` (CVA) coupled with `clsx` and `tailwind-merge` (`cn` helper) to guarantee strict variant constraints and resolve conflicting Tailwind utilities.
+4. Navigation faithfully replicates the reference dual-tier structure:
+   - Tier 1: Brand logo, location selector modal (`Deliver to: Azamgarh, UP`), 9999px pill search bar, customer authentication action, and shopping cart counter.
+   - Tier 2: Category trigger (`All Categories ▾`), curated promotional links (`Offers`, `Become a Seller`, `Track Order`, `Help`), and responsive mobile drawer navigation.
+
+---
+
+## ADR-041: Typed Next.js Fetch API Client with Credential Transport
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+The Next.js storefront must communicate reliably with the NestJS backend (`apps/api`) at `/api/v1`. The frontend requires normalized error structures, configurable request timeouts, automatic query string serialization, bearer token support, and automatic transport of `HttpOnly` refresh token cookies.
+
+### Decision
+1. Implement a unified, lightweight, typed `ApiClient` class in `apps/web/src/lib/api/client.ts` using the native Web `fetch` API.
+2. The client automatically includes `credentials: 'include'` on all network requests to transport `HttpOnly` refresh token and session cookies seamlessly.
+3. Enforces an `AbortController`-based request timeout (default 15,000ms) converting network timeouts into normalized `ApiError` instances with code `REQUEST_TIMEOUT` and status 408.
+4. Deserializes standard backend envelope responses (`ApiResponse<T>`) and normalizes non-2xx responses into structured `ApiError` instances carrying status code, error code, field errors, and correlation IDs.
+5. All backend routes are declared in a centralized, typed endpoint dictionary (`apps/web/src/lib/api/endpoints.ts`) aligning with `/api/v1` backend endpoints.
+
+---
+
 # Part C — Complete Decision Register Summary
 
 | ADR # | Decision Topic | Status | Category | Key Implementation Invariant |
@@ -925,6 +965,8 @@ Individual controller route protection can easily lead to accidental security la
 | **ADR-037** | Email OTP Verification via Resend | **Accepted** | Security/Auth | 6-digit numeric OTP via Resend, SHA-256 in Redis, 5m TTL, 60s cooldown, 5-attempt limit |
 | **ADR-038** | Refresh Token Rotation & Family Reuse Detection | **Accepted** | Security/Auth | Opaque 80-char hex in HttpOnly cookie; `token_family_id` tracks lineage and revokes family on reuse |
 | **ADR-039** | Global Declarative Guard Architecture | **Accepted** | Security/Auth | `JwtAuthGuard`, `RolesGuard`, `PermissionsGuard` as APP_GUARD with `@Public()` bypass |
+| **ADR-040** | Tailwind Design Token Centralization & CVA Architecture | **Accepted** | Frontend/UI | Strict tokens in `tokens.ts`, CVA components, faithful dual-tier navbar |
+| **ADR-041** | Typed Next.js Fetch API Client with Credential Transport | **Accepted** | Frontend/API | Unified `ApiClient`, `credentials: 'include'`, timeout handling, normalized errors |
 
 ---
 

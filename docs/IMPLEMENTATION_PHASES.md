@@ -362,41 +362,48 @@ All authentication endpoints (`/register`, `/verify-email`, `/resend-verificatio
 # 7. Phase 05 — Frontend Foundation & Design System
 
 **Priority:** High  
-**Status:** Not Started
+**Status:** Completed (Verified on 19 November 2026)
 
 ### Objective
 
-Create the Next.js application foundation and reusable UI system.
+Establish a scalable, responsive, accessible, and production-ready Next.js 15 App Router frontend foundation and design system for Marvel's Basket (`apps/web`), faithfully reproducing the official brand identity and UI reference design.
 
 ### Tasks
 
-- [ ] Configure Next.js App Router.
-- [ ] Establish frontend directory structure.
-- [ ] Configure global styles.
-- [ ] Establish typography and design tokens.
-- [ ] Build reusable buttons.
-- [ ] Build form components.
-- [ ] Build input components.
-- [ ] Build modal and dialog components.
-- [ ] Build dropdown and menu components.
-- [ ] Build cards and layout components.
-- [ ] Build loading and empty states.
-- [ ] Build error states.
-- [ ] Configure API client.
-- [ ] Configure frontend environment variables.
-- [ ] Create responsive layouts.
-- [ ] Establish accessibility standards.
+- [x] Configure Next.js App Router with TypeScript and strict type checking.
+- [x] Establish scalable frontend directory architecture (`src/app/`, `components/ui/`, `components/feedback/`, `components/layout/`, `components/shared/`, `lib/api/`, `styles/`).
+- [x] Integrate official brand logo assets (`logo.png`, `logo-light.png`, `logo-dark.jpg`) in public directories and create responsive `Logo` component.
+- [x] Centralize design tokens in `src/styles/tokens.ts` and integrate with `tailwind.config.ts` (Forest Green `#0B5D2A`, Brand Green `#15803D`, Citrus Yellow CTA `#F4E022`, Lime Highlight `#D4E137`, Category Surface `#F4F6F8`, custom radii).
+- [x] Configure global styles and accessibility baseline in `src/app/globals.css` (focus rings, reduced motion, custom scrollbar).
+- [x] Build CVA reusable button primitives (`primary`/`cta`, `brand`, `secondary`, `outline`, `ghost`, `destructive`, `link`, with sizes, pill variants, and loading spinner).
+- [x] Build form components with accessible labels and error handling (`Input`, `Textarea`, `Select`, `Checkbox`, `Radio`, `Switch`).
+- [x] Build surface primitives (`Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`, `Badge`).
+- [x] Build accessible overlay components (`Dialog` with backdrop blur and focus trapping, `DropdownMenu` with keyboard and outside-click dismiss).
+- [x] Build feedback components (`Spinner`, `Skeleton`, `StoreCardSkeleton`, `CategoryTileSkeleton`, `EmptyState`, `ErrorState`).
+- [x] Build layout components (`StorefrontLayout`, `Header`, `Footer`).
+- [x] Faithfully reproduce the dual-tier header from the reference design (Tier 1: logo, Azamgarh location selector modal, 9999px pill search bar, login, cart; Tier 2: Category trigger, promotional links, mobile drawer).
+- [x] Build homepage showcase components (`HeroBanner` with wave accent and 3 trust badges, `CategoryRail` with 8 categories on `#F4F6F8` tiles, `FeaturedSellers` with rating stars and delivery times).
+- [x] Implement typed `ApiClient` with timeout abort, query parameter serialization, JSON error normalization, and `credentials: 'include'` for cookie transport.
+- [x] Build error, loading, and not-found route handlers (`error.tsx`, `loading.tsx`, `not-found.tsx`).
+- [x] Validate frontend builds, type checks, lint checks, and unit tests (all passing cleanly).
 
 ### Deliverables
 
-- Working frontend foundation.
-- Reusable component system.
-- Responsive layout foundation.
-- API integration layer.
+- `apps/web/src/styles/tokens.ts` (Centralized design tokens).
+- `apps/web/tailwind.config.ts` (Tailwind theme extension).
+- `apps/web/src/app/globals.css` (Global styles and focus states).
+- `apps/web/src/components/ui/` (Button, Input, Textarea, Select, Checkbox, Radio, Switch, Badge, Card, Dialog, DropdownMenu).
+- `apps/web/src/components/feedback/` (Spinner, Skeleton, EmptyState, ErrorState).
+- `apps/web/src/components/layout/` (Header, Footer, StorefrontLayout).
+- `apps/web/src/components/shared/` (Logo, HeroBanner, CategoryRail, FeaturedSellers).
+- `apps/web/src/lib/api/` (ApiClient, ApiError, endpoints, types).
+- `apps/web/src/app/` (Root layout, Home page showcase, error, loading, not-found boundaries).
+- `apps/web/public/images/` (Official logo and brand assets).
+- `apps/web/src/lib/api/client.spec.ts` & `apps/web/src/lib/utils/cn.spec.ts` (Unit tests for API client and design tokens).
 
 ### Completion Criteria
 
-The frontend must have a consistent reusable design system and be ready for feature development.
+The Next.js frontend builds without errors (`npm run build:web`), passes strict type checking, format checking, and linting (`npm run check`), satisfies WCAG 2.2 AA accessibility requirements, faithfully reproduces the provided brand identity and UI reference image, and provides an extensible foundation for subsequent feature phases.
 
 ---
 
