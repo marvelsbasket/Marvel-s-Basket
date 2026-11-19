@@ -6,11 +6,12 @@ import {
   ChevronDown,
   HelpCircle,
   LayoutGrid,
+  LogOut,
   MapPin,
   Menu,
   Percent,
   Search,
-  ShoppingCart,
+  ShoppingBag,
   Store,
   Truck,
   User,
@@ -19,9 +20,11 @@ import {
 import { Logo } from '@/components/shared/logo';
 import { Dialog } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownItem, DropdownDivider } from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/features/auth';
 import { cn } from '@/lib/utils';
 
 export interface HeaderProps {
+  basketItemCount?: number;
   cartItemCount?: number;
   currentLocation?: string;
   onLocationChange?: (location: string) => void;
@@ -29,11 +32,14 @@ export interface HeaderProps {
 }
 
 export function Header({
+  basketItemCount,
   cartItemCount = 0,
   currentLocation = 'Azamgarh, UP',
   onLocationChange,
   onSearch,
 }: HeaderProps) {
+  const itemCount = basketItemCount ?? cartItemCount;
+  const { user, isAuthenticated, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(currentLocation);
@@ -121,52 +127,65 @@ export function Header({
           {/* 4. User Actions (Login & Cart) */}
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Account / Login Action */}
-            <DropdownMenu
-              align="right"
-              trigger={
-                <button
-                  type="button"
-                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                >
-                  <User className="h-5 w-5 text-ink" />
-                  <span className="hidden lg:inline">Login</span>
-                </button>
-              }
-            >
-              <div className="px-3 py-2">
-                <p className="text-xs font-bold text-ink">Welcome</p>
-                <p className="text-[11px] text-ink-muted">To manage orders and profile</p>
-              </div>
-              <DropdownDivider />
-              <DropdownItem>
-                <Link href="/login" className="w-full">
-                  Customer Sign In
-                </Link>
-              </DropdownItem>
-              <DropdownItem>
-                <Link href="/register" className="w-full">
-                  Create Account
-                </Link>
-              </DropdownItem>
-              <DropdownDivider />
-              <DropdownItem>
-                <Link href="/seller/login" className="w-full text-brand">
+            {isAuthenticated && user ? (
+              <DropdownMenu
+                align="right"
+                trigger={
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  >
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand">
+                      {user.name ? user.name[0].toUpperCase() : 'U'}
+                    </div>
+                    <span className="hidden lg:inline max-w-[120px] truncate">
+                      {user.name || 'Account'}
+                    </span>
+                  </button>
+                }
+              >
+                <div className="px-3 py-2">
+                  <p className="text-xs font-bold text-ink truncate">{user.name || 'Customer'}</p>
+                  <p className="text-[11px] text-ink-muted truncate">{user.email}</p>
+                </div>
+                <DropdownDivider />
+                <DropdownItem href="/profile">My Profile</DropdownItem>
+                <DropdownItem href="/addresses">Delivery Addresses</DropdownItem>
+                <DropdownItem href="/account">Account Settings</DropdownItem>
+                <DropdownDivider />
+                <DropdownItem href="/seller/login" className="text-brand font-bold">
                   Seller Portal
-                </Link>
-              </DropdownItem>
-            </DropdownMenu>
+                </DropdownItem>
+                <DropdownDivider />
+                <DropdownItem
+                  destructive
+                  icon={<LogOut className="h-4 w-4" />}
+                  onClick={() => logout()}
+                >
+                  Sign Out
+                </DropdownItem>
+              </DropdownMenu>
+            ) : (
+              <Link
+                href="/login"
+                className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <User className="h-5 w-5 text-ink" />
+                <span className="hidden lg:inline">Login</span>
+              </Link>
+            )}
 
-            {/* Cart Action */}
+            {/* Basket Action */}
             <Link
-              href="/cart"
+              href="/basket"
               className="relative flex items-center gap-2 rounded-xl bg-brand/10 px-3.5 py-2 text-sm font-bold text-brand transition-all hover:bg-brand hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-              aria-label={`Shopping cart with ${cartItemCount} items`}
+              aria-label={`Shopping basket with ${itemCount} items`}
             >
-              <ShoppingCart className="h-5 w-5" />
-              <span className="hidden sm:inline">Cart</span>
-              {cartItemCount > 0 && (
+              <ShoppingBag className="h-5 w-5" />
+              <span className="hidden sm:inline">Basket</span>
+              {itemCount > 0 && (
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cta text-xs font-black text-ink shadow-xs">
-                  {cartItemCount}
+                  {itemCount}
                 </span>
               )}
             </Link>
@@ -292,6 +311,51 @@ export function Header({
             <span className="text-[11px] text-brand">Change</span>
           </button>
           <nav className="flex flex-col space-y-2 text-sm font-semibold text-ink">
+            {isAuthenticated && user ? (
+              <div className="mb-2 rounded-xl bg-surface p-3">
+                <p className="text-xs font-bold text-ink">{user.name || 'Customer'}</p>
+                <p className="text-[11px] text-ink-muted">{user.email}</p>
+              </div>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-white shadow-soft transition-all hover:bg-brand-dark"
+              >
+                <User className="h-4 w-4" />
+                <span>Sign In / Register</span>
+              </Link>
+            )}
+
+            {isAuthenticated && (
+              <>
+                <Link
+                  href="/profile"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5 rounded-lg p-2 hover:bg-surface"
+                >
+                  <User className="h-4 w-4 text-brand" />
+                  <span>My Profile & Account</span>
+                </Link>
+                <Link
+                  href="/addresses"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5 rounded-lg p-2 hover:bg-surface"
+                >
+                  <MapPin className="h-4 w-4 text-brand" />
+                  <span>Delivery Addresses</span>
+                </Link>
+              </>
+            )}
+
+            <Link
+              href="/basket"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="flex items-center gap-2.5 rounded-lg p-2 hover:bg-surface"
+            >
+              <ShoppingBag className="h-4 w-4 text-brand" />
+              <span>View Basket</span>
+            </Link>
             <Link
               href="/categories"
               onClick={() => setIsMobileMenuOpen(false)}
@@ -332,6 +396,20 @@ export function Header({
               <HelpCircle className="h-4 w-4 text-brand" />
               <span>Help & Support</span>
             </Link>
+
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  logout();
+                }}
+                className="flex items-center gap-2.5 rounded-lg p-2 text-red-600 hover:bg-red-50 text-left font-bold"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Sign Out</span>
+              </button>
+            )}
           </nav>
         </div>
       )}

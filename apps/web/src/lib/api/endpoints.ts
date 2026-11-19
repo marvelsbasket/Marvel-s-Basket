@@ -21,4 +21,18 @@ export const ENDPOINTS = {
     RESET_PASSWORD: '/auth/reset-password',
     ME: '/auth/me',
   },
+  USERS: {
+    ME: '/users/me',
+    ACCOUNT: '/users/me/account',
+    PREFERENCES: '/users/me/preferences',
+    DEACTIVATE: '/users/me/deactivate',
+  },
+  ADDRESSES: {
+    LIST: '/addresses',
+    CREATE: '/addresses',
+    DETAIL: (id: string) => `/addresses/${id}`,
+    UPDATE: (id: string) => `/addresses/${id}`,
+    DELETE: (id: string) => `/addresses/${id}`,
+    SET_DEFAULT: (id: string) => `/addresses/${id}/default`,
+  },
 } as const;

@@ -81,6 +81,16 @@ export class ApiClient {
       const data = isJson ? await response.json() : null;
 
       if (!response.ok) {
+        if (response.status === 401 && typeof window !== 'undefined') {
+          this.setAccessToken(null);
+          try {
+            localStorage.removeItem('mb_access_token');
+          } catch {
+            // Ignore storage access errors
+          }
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        }
+
         const errorData = data as ApiErrorResponse | null;
         throw new ApiError({
           message: errorData?.message || `Request failed with status ${response.status}`,

@@ -922,6 +922,87 @@ The Next.js storefront must communicate reliably with the NestJS backend (`apps/
 
 ---
 
+## ADR-042: Mobile-First UX Architecture & Persistent Mobile Bottom Navigation
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Over 90% of Marvel's Basket quick-commerce customers browse, order, and manage their delivery addresses via mobile smartphones. A desktop-first layout shrunk down to mobile creates poor thumb accessibility, cluttered navigation, and compromised touch ergonomics.
+
+### Decision
+1. Design priority is strictly enforced: 1) Mobile smartphones (highest priority), 2) Tablets (second priority), 3) Desktop (third priority).
+2. Implement a persistent, sticky mobile bottom navigation bar (`apps/web/src/components/layout/mobile-bottom-nav.tsx`) hidden on desktop (`md:hidden`) with 5 primary destinations: Home, Categories, Basket, Addresses, and Profile.
+3. Touch targets comply with WCAG 2.2 AA standards (minimum 44x44px clickable area), and containers incorporate `pb-safe` and `pb-16 md:pb-0` layout offsets so navigation never obstructs content.
+4. Desktop layouts gracefully expand using a cohesive 4-column account layout with a persistent sidebar without altering the underlying mobile logic.
+
+---
+
+## ADR-043: Strict Customer Data Isolation & Server-Derived Ownership Invariant
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+In multi-tenant e-commerce platforms, Insecure Direct Object References (IDOR) allow malicious users to view, tamper with, or delete other users' personal profiles, phone numbers, and delivery addresses by guessing or manipulating UUIDs in HTTP requests.
+
+### Decision
+1. Customer identity is strictly derived from the validated JWT session on the server via `@CurrentUser('id')`. Client-supplied user IDs in URL parameters or request bodies are strictly rejected.
+2. Database queries enforce ownership constraints in the `WHERE` clause (e.g. `prisma.customerAddress.findFirst({ where: { id: addressId, userId } })`).
+3. If an address ID does not belong to the authenticated user, the backend returns HTTP 404 (Not Found) rather than 403 (Forbidden) to prevent attackers from enumerating or confirming the existence of resource IDs across tenant boundaries.
+4. Verified with an automated E2E test suite (`test/customer-isolation.e2e-spec.ts`) creating two independent customer accounts and verifying cross-access denial.
+
+---
+
+## ADR-044: Atomic Default Address Management & Automatic Reassignment Policy
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Customers can maintain multiple saved addresses (Home, Work, Other), but must have at most one default address at any time. When adding a new default address, previous defaults must be cleared atomically. When a default address is deleted, leaving the customer with no default address causes checkout friction.
+
+### Decision
+1. First address created by a customer is automatically designated as `isDefault: true`.
+2. Whenever an address is created or updated with `isDefault: true`, or designated via `PATCH /api/v1/addresses/:id/default`, the operation executes inside a PostgreSQL `$transaction` that resets all existing addresses for that user (`isDefault = false`) before setting the target to `true`.
+3. If a customer deletes their active default address, the deletion transaction automatically queries remaining addresses for that user and promotes the most recently updated remaining address to `isDefault: true`.
+
+---
+
+## ADR-045: Customer-Facing Basket Terminology Standardization
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+To align directly with the Marvel's Basket brand identity and Indian quick-commerce market conventions, the platform standardizes on "Basket" instead of "Cart".
+
+### Decision
+1. All customer-facing UI, page headings, button labels, navigation tabs, empty states, and accessibility labels strictly use **Basket** (e.g. "My Basket", "View Basket", "Your Basket is Empty", "Add to Basket", `Shopping basket with {n} items`).
+2. Internal database models, schema names, and backend modules retain `Cart` where already established in Phase 03 to preserve architectural integrity without unnecessary churn.
+3. Legacy `/cart` route cleanly redirects (`HTTP 307`) to `/basket`.
+
+---
+
+## ADR-046: Frontend Route Authorization & Reactive AuthGuard Architecture
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+When unauthenticated users visited protected customer routes (such as `/profile`, `/addresses`, `/account`), the pages loaded without a client-side gate, received an HTTP 401 Unauthorized response from backend APIs, and rendered an error state rather than enforcing authentication. Furthermore, the storefront navigation unconditionally presented an "Account" menu instead of a "Login" call to action.
+
+### Decision
+1. **Global Auth State (`AuthProvider` & `useAuth`):** Implemented React Context providing current user profile, loading state, and session initialization from `localStorage` (`mb_access_token`) and the `/api/v1/auth/me` endpoint.
+2. **Declarative Route Guard (`AuthGuard`):** Protected routes (`/(customer)/*`) are wrapped inside `<AuthGuard>`. Unauthenticated requests immediately display an accessible "Sign In Required" banner and trigger an automatic redirect to `/login?redirect=${encodeURIComponent(pathname)}`.
+3. **Reactive 401 Invalidation:** When any API request receives an HTTP 401 Unauthorized, the `ApiClient` automatically dispatches an `auth:unauthorized` event, clearing the token and resetting user state so `AuthGuard` seamlessly redirects to the login screen.
+4. **Context-Aware Navigation Elements:**
+   - Storefront Header displays `👤 Login` for unauthenticated visitors (matching the official design reference) and dynamic user name + avatar with "Sign Out" dropdown for authenticated users.
+   - Mobile Bottom Nav displays `Login` (`/login`) for unauthenticated visitors and `Profile` (`/profile`) for authenticated customers.
+5. **Argon2id Seed Alignment:** Development database seed script (`prisma/seed.ts`) hashes passwords using Argon2id (`memoryCost: 65536, timeCost: 3, parallelism: 4`), matching the backend authentication service.
+
+---
+
 # Part C — Complete Decision Register Summary
 
 | ADR # | Decision Topic | Status | Category | Key Implementation Invariant |
@@ -967,6 +1048,11 @@ The Next.js storefront must communicate reliably with the NestJS backend (`apps/
 | **ADR-039** | Global Declarative Guard Architecture | **Accepted** | Security/Auth | `JwtAuthGuard`, `RolesGuard`, `PermissionsGuard` as APP_GUARD with `@Public()` bypass |
 | **ADR-040** | Tailwind Design Token Centralization & CVA Architecture | **Accepted** | Frontend/UI | Strict tokens in `tokens.ts`, CVA components, faithful dual-tier navbar |
 | **ADR-041** | Typed Next.js Fetch API Client with Credential Transport | **Accepted** | Frontend/API | Unified `ApiClient`, `credentials: 'include'`, timeout handling, normalized errors |
+| **ADR-042** | Mobile-First UX Architecture & Bottom Navigation | **Accepted** | Frontend/UX | 5 persistent tabs (Home, Categories, Basket, Addresses, Profile), pb-safe |
+| **ADR-043** | Customer Data Isolation & Server Ownership Derivation | **Accepted** | Security/Auth | `@CurrentUser('id')`, cross-customer queries return 404 to eliminate IDOR |
+| **ADR-044** | Atomic Default Address Management & Auto-Reassignment | **Accepted** | Database/Logic | Prisma `$transaction`, automatic promotion of remaining address upon deletion |
+| **ADR-045** | Customer-Facing Basket Terminology Standardization | **Accepted** | Frontend/UX | 100% elimination of Cart in UI; `/cart` redirects to `/basket` |
+| **ADR-046** | Frontend Route Authorization & Reactive AuthGuard | **Accepted** | Frontend/Security | `<AuthGuard>`, reactive 401 token invalidation, dynamic Login/Account nav |
 
 ---
 

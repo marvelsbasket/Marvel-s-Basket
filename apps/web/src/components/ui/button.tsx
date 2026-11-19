@@ -10,13 +10,13 @@ export const buttonVariants = cva(
       variant: {
         primary:
           'bg-cta text-ink hover:bg-cta-hover shadow-cta font-bold rounded-full border border-yellow-400/20',
-        brand: 'bg-brand text-white hover:bg-forest shadow-sm font-semibold rounded-lg',
-        secondary: 'bg-surface text-ink hover:bg-gray-200 shadow-sm font-medium rounded-lg',
+        brand: 'bg-brand text-white hover:bg-forest shadow-soft font-bold rounded-xl',
+        secondary: 'bg-surface text-ink hover:bg-gray-200 shadow-sm font-semibold rounded-xl',
         outline:
-          'border border-border bg-white text-ink hover:bg-surface shadow-sm font-medium rounded-lg',
-        ghost: 'bg-transparent text-ink hover:bg-surface font-medium rounded-lg',
-        destructive: 'bg-red-600 text-white hover:bg-red-700 shadow-sm font-medium rounded-lg',
-        link: 'text-brand underline-offset-4 hover:underline p-0 h-auto font-medium',
+          'border border-border bg-white text-ink hover:bg-surface shadow-xs font-semibold rounded-xl',
+        ghost: 'bg-transparent text-ink hover:bg-surface font-semibold rounded-xl',
+        destructive: 'bg-red-600 text-white hover:bg-red-700 shadow-sm font-semibold rounded-xl',
+        link: 'text-brand underline-offset-4 hover:underline p-0 h-auto font-semibold',
       },
       size: {
         sm: 'h-8 px-3 text-xs rounded-md',
@@ -68,14 +68,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {isLoading && (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin text-current" aria-hidden="true" />
+          <Loader2 className="mr-2 h-4 w-4 animate-spin text-current shrink-0" aria-hidden="true" />
         )}
         {!isLoading && leftIcon && (
-          <span className="mr-2 inline-flex items-center">{leftIcon}</span>
+          <span className="mr-2 inline-flex items-center shrink-0">{leftIcon}</span>
         )}
-        <span>{children}</span>
+        <span className="inline-flex items-center justify-center gap-2">{children}</span>
         {!isLoading && rightIcon && (
-          <span className="ml-2 inline-flex items-center">{rightIcon}</span>
+          <span className="ml-2 inline-flex items-center shrink-0">{rightIcon}</span>
         )}
       </button>
     );

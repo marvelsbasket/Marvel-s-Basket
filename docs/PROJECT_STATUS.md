@@ -4,9 +4,9 @@
 
 **Project:** Marvel's Basket  
 **Organization:** Marvel's Techworks  
-**Document Version:** 2.4  
-**Current Phase:** Phase 05 — Frontend Foundation & Design System  
-**Phase Status:** Completed (Phase 05 Verified; Ready for Phase 06)  
+**Document Version:** 2.5  
+**Current Phase:** Phase 06 — Customer User & Profile Management  
+**Phase Status:** Completed (Phase 06 Verified; Ready for Phase 07)  
 **Last Updated:** 19 November 2026
 
 ---
@@ -103,25 +103,47 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 
 ---
 
-## 6. Documentation Status Matrix
+## 6. Phase 06 — Customer User & Profile Management Summary
 
-| # | Document | Version | Status | Key Updates in Phase 00, 01, 02, 03, 04 & 05 |
-|---|---|---|---|---|
-| 1 | `PROJECT_CONTEXT.md` | 1.1 | Updated | Aligned core business model to single-store checkout and hybrid catalog. |
-| 2 | `PROJECT_REQUIREMENTS.md` | 2.1 | Updated | Locked MVP scope, email OTP verification via Resend, mobile OTP excluded from Phase 04. |
-| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.4 | Updated | Section 2.3 & 16 updated with Next.js App Router architecture, design system, and typed API client. |
-| 4 | `DATABASE_SCHEMA.md` | 2.2 | Updated | Added `token_family_id` column to `sessions` table and migration `20261119081743_session_token_family`. |
-| 5 | `PROJECT_DECISIONS.md` | 2.5 | Updated | Added **ADR-040** (Tailwind Design Token Centralization) and **ADR-041** (Typed Next.js Fetch API Client). |
-| 6 | `IMPLEMENTATION_PHASES.md` | 2.5 | Updated | Phase 05 marked Completed with full task verification; Phase 06 unblocked. |
-| 7 | `PROJECT_STATUS.md` | 2.4 | Updated | Phase 05 completed; frontend foundation & design system verified; ready for Phase 06. |
-| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.1 | Updated | Section 16 added documenting Phase 05 design token implementations and component inventory. |
-| 9 | `README.md` | 2.4 | Updated | Added frontend scripts and architecture overview. |
-| 10 | `infrastructure/docker/README.md`| 1.0 | Created | Dedicated Docker architecture, volume lifecycle, health probes, and safety commands. |
-| 11 | `apps/api/README.md` | 1.2 | Updated | Added Auth module documentation, endpoints, and security testing guides. |
+**Phase Status:** **COMPLETED** (Verified on 19 November 2026)
+
+Phase 06 delivered the complete customer profile and delivery address management system across the backend and mobile-first frontend.
+
+### Verified Deliverables & Test Results
+
+| Area | Status | Verified Outcome |
+|---|---|---|
+| **Customer Profile APIs** | Verified | Authenticated endpoints: `GET /api/v1/users/me` (profile), `PATCH /api/v1/users/me` (name, avatar, DOB), `GET /api/v1/users/me/account` (status & overview), `GET/PATCH /api/v1/users/me/preferences` (communication/alerts), `PATCH /api/v1/users/me/deactivate` (soft deactivation with session revocation). |
+| **Address Management APIs** | Verified | Complete CRUD under `/api/v1/addresses`: list, create, detail, update, delete, and set default. Strictly validates 10-digit Indian phone numbers (`^[6-9]\d{9}$`) and 6-digit Indian PIN codes (`^\d{6}$`). |
+| **Atomic Single Default Address** | Verified | Database transactions guarantee at most one default address per customer. When a default address is deleted, the most recently updated remaining address is automatically promoted to default. |
+| **Customer Data Isolation (No IDOR)** | Verified | Server-side ownership derivation via `@CurrentUser('id')`. Customer A cannot read, modify, delete, or set default Customer B's addresses; queries return 404 to avoid leaking existence. Verified in live PostgreSQL E2E test suite. |
+| **Mobile-First Customer UI** | Verified | Intentional mobile-first design targeting >90% mobile audience. Touch targets >= 44x44px, safe area padding, and responsive sidebar on desktop. |
+| **Mobile Bottom Navigation** | Verified | Persistent sticky bottom navigation bar (`md:hidden`) with 5 tabs: Home, Categories, Basket (with item badge), Addresses, and Profile. Highlights active route. |
+| **Customer-Facing Basket Terminology** | Verified | All customer UI consistently uses **Basket** ("My Basket", "View Basket", "Your Basket is Empty", "Explore Groceries") instead of Cart. |
+| **Customer Frontend Pages** | Verified | Implemented `/profile`, `/profile/edit`, `/addresses`, `/account`, and `/basket` with complete loading, empty, error, and success states. |
+| **Automated Testing Suite** | Verified | 27 backend unit tests, 13 backend E2E customer isolation tests, and 24 frontend unit tests passing (107 total tests passing across monorepo). |
 
 ---
 
-## 7. Development Phase Roadmap Status
+## 7. Documentation Status Matrix
+
+| # | Document | Version | Status | Key Updates in Phase 00, 01, 02, 03, 04, 05 & 06 |
+|---|---|---|---|---|
+| 1 | `PROJECT_CONTEXT.md` | 1.1 | Updated | Aligned core business model to single-store checkout and hybrid catalog. |
+| 2 | `PROJECT_REQUIREMENTS.md` | 2.2 | Updated | Added Section 4.9 & 4.10 customer profile, address management, and Basket terminology. |
+| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.5 | Updated | Documented Users and Addresses modules, data isolation, and mobile bottom navigation. |
+| 4 | `DATABASE_SCHEMA.md` | 2.3 | Updated | Documented CustomerAddress constraints, single default address invariant, and preferences. |
+| 5 | `PROJECT_DECISIONS.md` | 2.6 | Updated | Added **ADR-042** (Mobile-First Bottom Navigation) and **ADR-043** (Atomic Default Address Promotion). |
+| 6 | `IMPLEMENTATION_PHASES.md` | 2.6 | Updated | Phase 06 marked Completed; Phase 07 (Seller Onboarding & KYC) unblocked. |
+| 7 | `PROJECT_STATUS.md` | 2.5 | Updated | Phase 06 completed; customer profile & address management verified; ready for Phase 07. |
+| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.2 | Updated | Section 17 added documenting mobile bottom navigation and customer profile patterns. |
+| 9 | `README.md` | 2.5 | Updated | Added Customer Profile & Address management architecture overview. |
+| 10 | `infrastructure/docker/README.md`| 1.0 | Created | Dedicated Docker architecture, volume lifecycle, health probes, and safety commands. |
+| 11 | `apps/api/README.md` | 1.3 | Updated | Added Users and Addresses module documentation and endpoints. |
+
+---
+
+## 8. Development Phase Roadmap Status
 
 | Phase | Name | Priority | Status | Blockers / Next Dependencies |
 |---|---|---|---|---|
@@ -131,8 +153,8 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 | **Phase 03** | Database Implementation | Critical | **Completed** | 54 tables, 21 enums, 3 migrations, seed data, 10/10 DB tests passing. |
 | **Phase 04** | Authentication & Authorization | Critical | **Completed** | Argon2id, Resend email OTP, dual-token rotation, reuse detection, RBAC. 77/77 tests passing. |
 | **Phase 05** | Frontend Foundation & Design System | High | **Completed** | Design tokens, official logos, dual-tier navbar, CVA UI library, API client. Build & checks passing. |
-| **Phase 06** | User & Profile Management | High | **Ready to Start** | Unblocked by Phase 04 & 05. |
-| **Phase 07** | Seller Onboarding & KYC | High | Not Started | Dependent on Phase 04. |
+| **Phase 06** | User & Profile Management | High | **Completed** | Customer profile, address CRUD, atomic default address, mobile nav, Basket terminology. 107/107 tests passing. |
+| **Phase 07** | Seller Onboarding & KYC | High | **Ready to Start** | Unblocked by Phase 04, 05 & 06. |
 | **Phase 08** | Product Catalog & Categories | High | Not Started | Dependent on Phase 07. |
 | **Phase 09** | Seller Listings & Inventory | High | Not Started | Dependent on Phase 08. |
 | **Phase 10** | Customer Shopping Experience | High | Not Started | Dependent on Phase 08 & 09. |

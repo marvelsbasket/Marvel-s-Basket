@@ -1236,6 +1236,33 @@ Next.js Server Components and Client Components should use the appropriate serve
 
 Business logic must remain in NestJS.
 
+## 8.6 Customer Profile & Address Management APIs (Phase 06)
+
+### 8.6.1 Customer Profile Endpoints
+| Method | Path | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/users/me` | Authenticated | Retrieves current customer profile (name, email, phone, avatar, date of birth, verification status). |
+| `PATCH` | `/api/v1/users/me` | Authenticated | Updates personal information (`name`, `avatarUrl`, `dateOfBirth`). Rejects role or status tampering. |
+| `GET` | `/api/v1/users/me/account` | Authenticated | Retrieves account overview, status, creation timestamp, and total saved addresses. |
+| `GET` | `/api/v1/users/me/preferences` | Authenticated | Retrieves communication and notification channel preferences (Email, Push, SMS, Promotions). |
+| `PATCH` | `/api/v1/users/me/preferences` | Authenticated | Updates customer notification and alert preferences. |
+| `PATCH` | `/api/v1/users/me/deactivate` | Authenticated | Soft-deactivates customer account (`INACTIVE`) and terminates all active sessions. |
+
+### 8.6.2 Delivery Address Management Endpoints
+| Method | Path | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/addresses` | Authenticated | Lists all saved delivery addresses for the customer (default address first). |
+| `POST` | `/api/v1/addresses` | Authenticated | Creates a new delivery address with 10-digit Indian phone and 6-digit PIN validation. |
+| `GET` | `/api/v1/addresses/:id` | Authenticated | Retrieves an address by ID, enforcing strict customer ownership (returns 404 if not owned). |
+| `PATCH` | `/api/v1/addresses/:id` | Authenticated | Updates an existing delivery address with atomic default address status. |
+| `DELETE` | `/api/v1/addresses/:id` | Authenticated | Deletes an address and automatically promotes the next available address to default if needed. |
+| `PATCH` | `/api/v1/addresses/:id/default` | Authenticated | Sets the specified address as default inside an atomic PostgreSQL transaction. |
+
+### 8.6.3 Security & IDOR Prevention Invariants
+1. **Server-Derived Identity:** Customer identity is derived exclusively from the verified JWT payload (`@CurrentUser('id')`). Request body or query parameters specifying `userId` are strictly forbidden.
+2. **404 Over 403 on Cross-Tenant Access:** Accessing or mutating another user's address throws `NotFoundException` (HTTP 404) rather than `ForbiddenException` (HTTP 403) to prevent resource ID enumeration.
+3. **Single Default Invariant:** Customer addresses are managed inside `$transaction` blocks ensuring at most one default address exists per customer at any point in time.
+
 ---
 
 # 9. SINGLE-STORE ORDER PROCESSING & CHECKOUT ARCHITECTURE

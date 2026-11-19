@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Metadata } from 'next';
+import { AuthProvider } from '@/features/auth';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen bg-white text-ink antialiased">{children}</body>
+      <body className="min-h-screen bg-white text-ink antialiased">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }
