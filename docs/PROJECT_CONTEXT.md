@@ -57,7 +57,7 @@ Marvel's Basket will operate as a marketplace connecting:
 
 Multiple sellers may operate within the same delivery area.
 
-A customer may purchase products from multiple sellers in a single shopping session. The system must support independent seller fulfilment workflows while maintaining a unified customer ordering experience.
+The platform follows a **Single-Seller / Single-Store Checkout Model** for the MVP: a customer purchases products from one chosen store per order. Store discovery allows customers to browse nearby serviceable stores, compare pricing, and place quick-commerce orders fulfilled directly from that single store's inventory, with delivery managed by the platform.
 
 ---
 
@@ -212,13 +212,13 @@ The platform must support:
 - Inventory is validated during checkout.
 - Overselling must be prevented.
 
-### 4.3 Multi-Vendor Operations
+### 4.3 Marketplace Store Operations
 
-- Multiple sellers can operate in the same delivery area.
-- Each seller receives relevant orders.
-- Each seller manages independent fulfilment.
-- Customer orders can contain products from multiple sellers.
-- Seller orders can be processed independently.
+- Multiple independent stores/sellers can operate within the same delivery area.
+- Customers discover nearby serviceable stores and can choose their preferred store.
+- Each store manages independent inventory, pricing (at or below MRP), and order packing.
+- Customers place orders with one store per checkout (single-store checkout for MVP).
+- The platform oversees operations, manages delivery, and reconciles financial settlements.
 
 ### 4.4 Delivery Management
 
@@ -499,36 +499,32 @@ The final models, fields, indexes and relationships will be defined in DATABASE_
 
 ---
 
-# 10. MULTI-VENDOR ORDER MODEL
+# 10. SINGLE-STORE CHECKOUT AND ORDER MODEL
 
-A customer may purchase products from multiple sellers in one shopping session.
+Marvel's Basket follows a **Single-Seller / Single-Store Checkout Model** for the MVP.
 
-The system must support:
+A customer adds products from exactly one store to their cart at a time. Every order belongs to exactly one store.
 
-- One parent customer order.
-- Multiple seller-specific orders.
-- Independent seller fulfilment.
-- Seller-specific inventory reservations.
-- Separate delivery workflows where required.
-- Individual seller order status.
-- Parent order status aggregation.
-- Partial cancellation.
-- Partial refunds where applicable.
+The system supports:
+
+- Platform master product catalog with store-specific listings, pricing, and inventory.
+- Single-store shopping cart validation.
+- Clear store-switch confirmation prompt if a customer attempts to add an item from another store (explaining that the existing cart will be cleared).
+- Direct store order creation (no parent/child split orders in MVP).
+- Store-specific inventory reservation and stock deduction.
+- Platform-managed delivery dispatch and tracking.
+- Independent order status transitions (`PENDING`, `CONFIRMED`, `PACKED`, `OUT_FOR_DELIVERY`, `DELIVERED`, `CANCELLED`).
+- Full and partial refund workflows associated directly with the order.
 
 ### Example
 
 Customer cart:
 
-| Seller | Products | Subtotal |
-|---|---|---:|
-| Seller A | Rice, Milk | ₹350 |
-| Seller B | Fruits, Vegetables | ₹250 |
-| Seller C | Snacks | ₹150 |
-| Total | | ₹750 |
+| Store | Products | Subtotal | Delivery Fee | Total |
+|---|---|---:|---:|---:|
+| Sharma Grocery (Azamgarh) | Rice (5kg), Milk (2L), Bread | ₹450 | ₹30 | ₹480 |
 
-The platform creates one customer-facing order with three seller-specific fulfilment records.
-
-The final checkout, pricing, discount allocation and delivery rules will be documented in PROJECT_REQUIREMENTS.md and PROJECT_DECISIONS.md.
+The platform creates one order directly associated with Sharma Grocery, verified payment, and platform-managed delivery. Multi-seller parent/sub-orders are explicitly deferred from the MVP scope.
 
 ---
 

@@ -72,7 +72,7 @@ The project will follow an incremental development approach. Each phase should e
 # 2. Phase 00 — Business Rules & Technical Finalization
 
 **Priority:** Critical  
-**Status:** Not Started
+**Status:** In Progress (Architecture & Baseline Documentation Finalized; Awaiting Owner Sign-Off on Pending Parameters)
 
 ### Objective
 
@@ -80,32 +80,33 @@ Finalize the business model and important technical decisions before implementin
 
 ### Tasks
 
-- [ ] Confirm marketplace product ownership model.
-- [ ] Confirm single-seller or multi-seller checkout.
-- [ ] Finalize delivery responsibility.
-- [ ] Finalize payment methods.
-- [ ] Select payment provider.
-- [ ] Define seller onboarding and approval.
-- [ ] Define commission and settlement rules.
-- [ ] Define cancellation and refund policies.
-- [ ] Define pricing and discount rules.
-- [ ] Finalize authentication methods.
-- [ ] Confirm deployment approach.
-- [ ] Review `DATABASE_SCHEMA.md`.
-- [ ] Update `PROJECT_REQUIREMENTS.md`.
-- [ ] Update `TECHNICAL_ARCHITECTURE.md`.
-- [ ] Update `PROJECT_DECISIONS.md`.
+- [x] Confirm marketplace product ownership model (Aggregator / Hybrid Model).
+- [x] Confirm single-seller or multi-seller checkout (Single-Store Checkout for MVP).
+- [x] Finalize delivery responsibility (Platform-Managed Delivery with modular provider abstraction).
+- [x] Finalize payment methods (Razorpay UPI/Cards/Netbanking + COD with risk controls).
+- [x] Select payment provider (Razorpay standard gateway; Route deferred).
+- [x] Define seller onboarding and approval (`DRAFT -> PENDING -> UNDER_REVIEW -> APPROVED / REJECTED` + `SUSPENDED`).
+- [x] Define commission and settlement rules (Category-based 10%–18% baseline; T+3 settlement cycle; double-entry ledger).
+- [x] Define cancellation and refund policies (Free pre-pack; restricted post-pack; locked in transit; source refunds).
+- [x] Define pricing and discount rules (Store selling price <= MRP; platform coupons vs store discounts).
+- [x] Finalize authentication methods (Phone OTP for Customers/Riders; Email/Password + JWT for Sellers/Admins).
+- [x] Confirm deployment approach (Containerized Modular Monolith on Render/AWS).
+- [x] Review and update `DATABASE_SCHEMA.md` (Single-store order, webhooks, seller ledger, delivery tracking).
+- [x] Update `PROJECT_REQUIREMENTS.md` (Locked MVP scope, business rules BR-001 to BR-022).
+- [x] Update `TECHNICAL_ARCHITECTURE.md` (System diagrams, atomic reservation, payment verification).
+- [x] Update `PROJECT_DECISIONS.md` (ADR-001 through ADR-016 recorded).
+- [ ] Receive project owner formal sign-off on outstanding commercial parameters.
 
 ### Deliverables
 
-- Approved business requirements.
-- Approved technical decisions.
-- Validated database design.
-- Confirmed implementation scope.
+- Validated business rules & MVP scope specification.
+- Approved technical baseline architecture.
+- Validated single-store relational database design.
+- Complete Architecture Decision Record (ADR) register.
 
 ### Completion Criteria
 
-No critical business rule should remain ambiguous when implementation of the dependent feature begins.
+No critical business rule should remain ambiguous when implementation of the dependent feature begins. Complete Phase 00 sign-off is achieved upon business owner confirmation of the remaining commercial parameters.
 
 ---
 
@@ -555,35 +556,32 @@ Customers must be able to discover products and view valid seller-specific offer
 
 ### Objective
 
-Implement cart management and checkout preparation.
+Implement single-store cart management, store-switch confirmation, and checkout preparation.
 
 ### Tasks
 
-- [ ] Implement add-to-cart.
-- [ ] Implement remove-from-cart.
-- [ ] Implement quantity updates.
-- [ ] Validate seller listing availability.
-- [ ] Validate inventory.
-- [ ] Calculate item totals.
-- [ ] Calculate applicable discounts.
-- [ ] Calculate delivery charges.
-- [ ] Validate customer addresses.
-- [ ] Implement checkout summary.
-- [ ] Implement checkout confirmation.
-- [ ] Handle unavailable products.
-- [ ] Handle changed prices and stock.
-- [ ] Implement stock reservation according to the approved model.
+- [ ] Implement single-store cart binding (cart bound to `sellerId`).
+- [ ] Implement store-switch confirmation modal when adding from a different store (clearing existing cart).
+- [ ] Implement add-to-cart, remove-from-cart, and quantity update APIs.
+- [ ] Validate store operational hours and open status.
+- [ ] Validate seller listing availability and price <= MRP.
+- [ ] Validate minimum order value (MOV).
+- [ ] Calculate distance-tiered delivery fee based on store radius.
+- [ ] Validate and apply platform coupons.
+- [ ] Implement atomic 15-minute inventory reservation (`StockReservation`).
+- [ ] Handle BullMQ auto-release for abandoned or expired checkout sessions.
+- [ ] Build cart and checkout summary interfaces.
 
 ### Deliverables
 
-- Cart APIs.
-- Cart interface.
-- Checkout summary.
-- Validated checkout workflow.
+- Cart APIs and single-store enforcement.
+- Store-switch UX modal.
+- Checkout summary with validated price breakdowns.
+- Atomic inventory reservation engine with TTL.
 
 ### Completion Criteria
 
-The backend must calculate and validate the final checkout amount. Client-provided prices and totals must never be trusted.
+The backend must strictly enforce single-store cart limits and atomic inventory reservations without trusting client-provided prices or quantities.
 
 ---
 
@@ -594,33 +592,31 @@ The backend must calculate and validate the final checkout amount. Client-provid
 
 ### Objective
 
-Implement order creation and order lifecycle management.
+Implement single-store order creation and end-to-end lifecycle management.
 
 ### Tasks
 
-- [ ] Implement order creation.
-- [ ] Implement parent order handling if multi-seller checkout is approved.
-- [ ] Implement seller order handling if required.
-- [ ] Implement order item snapshots.
-- [ ] Implement order status transitions.
-- [ ] Implement seller order acceptance.
-- [ ] Implement order cancellation.
-- [ ] Implement order history.
-- [ ] Implement customer order details.
-- [ ] Implement seller order management.
-- [ ] Implement order audit history.
-- [ ] Test transactional order creation.
+- [ ] Implement single-store order creation (direct mapping to `sellerId`).
+- [ ] Implement immutable `OrderItem` snapshots (product title, variant, SKU, price, MRP).
+- [ ] Implement immutable delivery address snapshot.
+- [ ] Implement order lifecycle state transitions (`PENDING -> CONFIRMED -> PACKED -> OUT_FOR_DELIVERY -> DELIVERED`).
+- [ ] Implement store order acceptance and packing workflow.
+- [ ] Implement lifecycle cancellation rules (free pre-pack, restricted post-pack, locked in transit).
+- [ ] Implement customer complaint workflows for perishables (3-4h) and packaged goods (24-48h).
+- [ ] Implement immutable `OrderStatusHistory` audit logs.
+- [ ] Build customer order details and tracking screens.
+- [ ] Build seller order packing screens.
 
 ### Deliverables
 
-- Order APIs.
-- Order lifecycle.
-- Customer order history.
-- Seller order management.
+- Single-store order management APIs.
+- Order lifecycle state engine.
+- Customer order history & milestone tracking UI.
+- Seller fulfillment & packing interface.
 
 ### Completion Criteria
 
-Order creation and status transitions must follow approved business rules and maintain consistent database records.
+Order creation and status transitions must strictly follow approved single-store business rules and maintain immutable database snapshots.
 
 ---
 

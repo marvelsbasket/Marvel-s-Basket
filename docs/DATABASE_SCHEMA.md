@@ -25,86 +25,73 @@ This document defines the database architecture and data model for Marvel's Bask
 
 The database must support:
 
-- Multi-vendor marketplace operations.
-- Customer and seller accounts.
-- Seller onboarding and verification.
-- Product catalog management.
-- Seller-specific product listings.
-- Inventory and stock reservations.
-- Shopping carts.
-- Multi-seller checkout.
-- Parent and seller orders.
-- Payment processing.
-- Refund management.
-- Commission calculations.
-- Seller settlements.
-- Delivery partner management.
-- Order tracking.
-- Coupons and promotions.
-- Customer reviews.
-- Notifications.
-- Administrative operations.
-- Audit logs.
+- Hybrid / Aggregator marketplace model with platform master catalog and store-specific listings.
+- Customer and seller accounts with role-based access control.
+- Admin-verified seller onboarding and KYC document tracking.
+- Product catalog and category hierarchy.
+- Store-specific product listings, inventory, and stock reservations.
+- Single-store shopping carts with store-switch confirmation support.
+- Single-store customer orders (eliminating multi-seller split order complexity for MVP).
+- Payment processing via Razorpay (UPI, Cards, Netbanking) and Cash on Delivery (COD).
+- Payment webhook idempotency and signature audit records.
+- Customer complaint, cancellation, and source refund workflows.
+- Category-based platform commission calculation.
+- Double-entry auditable seller financial ledger.
+- Seller batch settlements and payout holds.
+- Platform-managed delivery dispatch, rider assignment, and milestone tracking.
+- Coupons, promotions, and platform settings.
+- Comprehensive administrative and financial audit logs.
 
 ## 1.2 Database Technology
 
 | Component | Technology |
 |---|---|
-| Database | PostgreSQL |
-| ORM | Prisma |
-| Database Schema | Prisma Schema |
+| Database | PostgreSQL 16 |
+| ORM | Prisma ORM |
+| Database Schema | Prisma Schema (`packages/database/prisma/schema.prisma`) |
 | Migration Management | Prisma Migrate |
-| Primary Keys | UUID |
-| Monetary Values | Decimal |
-| Timestamp Standard | UTC |
-| Database Access | NestJS Backend Only |
-| Local Database | Docker PostgreSQL |
+| Primary Keys | UUID v4 (`@default(uuid()) @db.Uuid`) |
+| Monetary Values | Decimal (`@db.Decimal(12, 2)`) |
+| Timestamp Standard | UTC (`DateTime @default(now())`) |
+| Database Access | NestJS Backend (`apps/api`) Only |
+| Local Database | Dockerized PostgreSQL 16 |
 
 ## 1.3 Database Design Principles
 
-1. Use relational database design.
-2. Use UUID primary keys.
-3. Enforce referential integrity.
-4. Avoid unnecessary data duplication.
-5. Maintain independent seller inventory.
-6. Preserve historical order and payment information.
-7. Use transactions for critical operations.
-8. Maintain financial auditability.
-9. Use appropriate database indexes.
-10. Use soft deletion selectively.
-11. Store timestamps in UTC.
-12. Never use floating-point types for financial values.
-13. Avoid deleting records that participate in financial transactions.
-14. Validate all ownership relationships on the backend.
+1. Relational Integrity: Enforce strict foreign key constraints across all models.
+2. Store Isolation: Guarantee store-level data isolation for listings, stock, and orders.
+3. Single-Store Order Boundary: Every order maps to exactly one store, eliminating parent/sub-order coordination bugs in the MVP.
+4. Monetary Precision: All currency values use `Decimal(12, 2)`—never use floating-point types.
+5. Immutability of Records: Order item snapshots, address snapshots, and ledger entries are append-only and immutable.
+6. Webhook Idempotency: All payment and refund webhook events are deduplicated via unique event IDs.
+7. Concurrency Control: Inventory reservation uses atomic conditional updates or row-level locking with strict 15-minute TTL.
+8. Audit Trail: Every administrative and financial mutation produces a traceable `AuditLog` or `SellerLedgerEntry`.
 
 ---
 
 # 2. DATABASE ENTITY OVERVIEW
 
-The database is divided into the following domains.
+The database is divided into the following operational domains:
 
 | Domain | Main Entities |
 |---|---|
-| Identity | User, Role, Permission, UserRole |
-| Authentication | Session, VerificationToken |
-| Customer | CustomerProfile, CustomerAddress, Wishlist |
-| Seller | Seller, SellerProfile, SellerDocument |
-| Catalog | Category, Product, ProductImage, ProductVariant |
-| Seller Listings | SellerProduct |
-| Inventory | Inventory, InventoryTransaction, StockReservation |
-| Shopping | Cart, CartItem |
-| Orders | Order, SellerOrder, OrderItem |
-| Order History | OrderStatusHistory |
-| Payments | Payment, PaymentTransaction |
-| Refunds | Refund, RefundTransaction |
-| Finance | CommissionRule, CommissionRecord, SellerEarning |
-| Settlements | Settlement, SettlementItem |
-| Delivery | DeliveryPartner, Delivery, DeliveryAssignment |
-| Marketing | Coupon, CouponUsage, Banner |
-| Engagement | Review, WishlistItem |
-| Notifications | Notification, NotificationPreference |
-| Administration | AuditLog, AdminActivityLog |
-| Configuration | PlatformSetting |
+| Identity & Auth | `User`, `Role`, `Permission`, `UserRole`, `Session`, `VerificationToken` |
+| Customer | `CustomerProfile`, `CustomerAddress`, `Wishlist`, `WishlistItem` |
+| Seller / Store | `Seller`, `SellerProfile`, `SellerKYC`, `SellerDocument`, `SellerBusinessHours`, `SellerServiceArea` |
+| Catalog | `Category`, `Product`, `ProductImage`, `ProductVariant` |
+| Store Listings | `SellerProduct` (Store Product Listing) |
+| Inventory | `Inventory`, `InventoryTransaction`, `StockReservation` |
+| Shopping Cart | `Cart`, `CartItem` (Bound to single store) |
+| Orders | `Order`, `OrderItem`, `OrderStatusHistory` |
+| Payments | `Payment`, `PaymentTransaction`, `PaymentWebhookEvent` |
+| Refunds | `Refund`, `RefundTransaction` |
+| Finance & Ledger | `CommissionRule`, `CommissionRecord`, `SellerLedgerEntry` |
+| Settlements | `Settlement`, `SettlementItem` |
+| Delivery | `DeliveryPartner`, `Delivery`, `DeliveryAssignment`, `DeliveryStatusHistory` |
+| Marketing | `Coupon`, `CouponUsage`, `Banner` |
+| Engagement | `Review` |
+| Notifications | `Notification`, `NotificationPreference` |
+| Administration | `AuditLog`, `AdminActivityLog`, `PlatformSetting` |
 
 ---
 
@@ -118,11 +105,12 @@ erDiagram
     USER ||--o| SELLER_PROFILE : has
     USER ||--o| DELIVERY_PARTNER : has
     USER ||--o{ USER_ROLE : assigned
-
     USER ||--o{ CUSTOMER_ADDRESS : owns
 
     SELLER_PROFILE ||--|| SELLER : manages
     SELLER ||--o{ SELLER_PRODUCT : lists
+    SELLER ||--o{ SELLER_SERVICE_AREA : defines
+    SELLER ||--o{ SELLER_BUSINESS_HOURS : operates
 
     PRODUCT ||--o{ SELLER_PRODUCT : offered_by
     CATEGORY ||--o{ PRODUCT : contains
@@ -134,33 +122,31 @@ erDiagram
     INVENTORY ||--o{ STOCK_RESERVATION : reserves
 
     USER ||--o| CART : owns
+    SELLER ||--o{ CART : locked_to
     CART ||--o{ CART_ITEM : contains
     SELLER_PRODUCT ||--o{ CART_ITEM : selected
 
     USER ||--o{ ORDER : places
-    ORDER ||--o{ SELLER_ORDER : contains
-    SELLER ||--o{ SELLER_ORDER : fulfills
-    SELLER_ORDER ||--o{ ORDER_ITEM : contains
+    SELLER ||--o{ ORDER : fulfills
+    ORDER ||--o{ ORDER_ITEM : contains
     SELLER_PRODUCT ||--o{ ORDER_ITEM : references
+    ORDER ||--o{ ORDER_STATUS_HISTORY : logs
 
-    ORDER ||--o{ PAYMENT : has
-    PAYMENT ||--o{ PAYMENT_TRANSACTION : records
-
-    ORDER ||--o{ REFUND : has
-    REFUND ||--o{ REFUND_TRANSACTION : records
-
-    SELLER ||--o{ COMMISSION_RECORD : generates
-    SELLER ||--o{ SELLER_EARNING : receives
-    SELLER ||--o{ SETTLEMENT : receives
-    SETTLEMENT ||--o{ SETTLEMENT_ITEM : contains
-
-    SELLER_ORDER ||--o{ DELIVERY : requires
+    ORDER ||--|| DELIVERY : requires
     DELIVERY_PARTNER ||--o{ DELIVERY_ASSIGNMENT : receives
     DELIVERY ||--o{ DELIVERY_ASSIGNMENT : assigned
 
+    ORDER ||--o{ PAYMENT : has
+    PAYMENT ||--o{ PAYMENT_TRANSACTION : records
+    ORDER ||--o{ REFUND : has
+
+    ORDER ||--o| COMMISSION_RECORD : generates
+    SELLER ||--o{ SELLER_LEDGER_ENTRY : tracks
+    SELLER ||--o{ SETTLEMENT : receives
+    SETTLEMENT ||--o{ SETTLEMENT_ITEM : bundles
+
     USER ||--o{ REVIEW : writes
     PRODUCT ||--o{ REVIEW : receives
-
     USER ||--o{ NOTIFICATION : receives
     USER ||--o{ AUDIT_LOG : generates
 ```
@@ -169,12 +155,7 @@ erDiagram
 
 # 4. ENUM DEFINITIONS
 
-Enums provide consistent values for application states.
-
-The following enums are the initial proposed database enums.
-
 ## 4.1 UserRoleType
-
 ```prisma
 enum UserRoleType {
   CUSTOMER
@@ -186,7 +167,6 @@ enum UserRoleType {
 ```
 
 ## 4.2 UserStatus
-
 ```prisma
 enum UserStatus {
   ACTIVE
@@ -198,9 +178,9 @@ enum UserStatus {
 ```
 
 ## 4.3 SellerStatus
-
 ```prisma
 enum SellerStatus {
+  DRAFT
   PENDING
   UNDER_REVIEW
   APPROVED
@@ -211,7 +191,6 @@ enum SellerStatus {
 ```
 
 ## 4.4 ProductStatus
-
 ```prisma
 enum ProductStatus {
   DRAFT
@@ -222,7 +201,6 @@ enum ProductStatus {
 ```
 
 ## 4.5 SellerProductStatus
-
 ```prisma
 enum SellerProductStatus {
   PENDING
@@ -234,55 +212,36 @@ enum SellerProductStatus {
 ```
 
 ## 4.6 OrderStatus
-
 ```prisma
 enum OrderStatus {
-  PENDING_PAYMENT
-  CONFIRMED
-  PROCESSING
-  PARTIALLY_FULFILLED
-  FULFILLED
-  PARTIALLY_CANCELLED
-  CANCELLED
-  COMPLETED
-  REFUNDED
-  PARTIALLY_REFUNDED
-  FAILED
-}
-```
-
-## 4.7 SellerOrderStatus
-
-```prisma
-enum SellerOrderStatus {
   PENDING
-  ACCEPTED
-  REJECTED
-  PREPARING
-  READY_FOR_PICKUP
+  CONFIRMED
+  PACKED
   OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
-  COMPLETED
+  REJECTED
+  FAILED
+  RETURN_REQUESTED
+  REFUNDED
 }
 ```
 
-## 4.8 PaymentStatus
-
+## 4.7 PaymentStatus
 ```prisma
 enum PaymentStatus {
   PENDING
   PROCESSING
-  AUTHORIZED
-  CAPTURED
+  SUCCESS
   FAILED
+  CANCELLED
+  REFUND_PENDING
   PARTIALLY_REFUNDED
   REFUNDED
 }
 ```
 
-## 4.9 PaymentMethod
-
+## 4.8 PaymentMethod
 ```prisma
 enum PaymentMethod {
   RAZORPAY
@@ -290,8 +249,7 @@ enum PaymentMethod {
 }
 ```
 
-## 4.10 RefundStatus
-
+## 4.9 RefundStatus
 ```prisma
 enum RefundStatus {
   PENDING
@@ -302,8 +260,7 @@ enum RefundStatus {
 }
 ```
 
-## 4.11 DeliveryStatus
-
+## 4.10 DeliveryStatus
 ```prisma
 enum DeliveryStatus {
   PENDING
@@ -317,8 +274,18 @@ enum DeliveryStatus {
 }
 ```
 
-## 4.12 SettlementStatus
+## 4.11 DeliveryAssignmentStatus
+```prisma
+enum DeliveryAssignmentStatus {
+  OFFERED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+```
 
+## 4.12 SettlementStatus
 ```prisma
 enum SettlementStatus {
   PENDING
@@ -329,22 +296,18 @@ enum SettlementStatus {
 }
 ```
 
-## 4.13 InventoryTransactionType
-
+## 4.13 LedgerEntryType
 ```prisma
-enum InventoryTransactionType {
-  STOCK_ADDED
-  STOCK_REMOVED
-  STOCK_RESERVED
-  STOCK_RELEASED
-  STOCK_SOLD
-  STOCK_ADJUSTED
-  STOCK_RETURNED
+enum LedgerEntryType {
+  ORDER_CREDIT
+  COMMISSION_DEBIT
+  REFUND_DEBIT
+  SETTLEMENT_PAYOUT
+  ADJUSTMENT
 }
 ```
 
 ## 4.14 StockReservationStatus
-
 ```prisma
 enum StockReservationStatus {
   ACTIVE
@@ -904,140 +867,123 @@ The checkout implementation must ensure the reservation is durably associated wi
 
 # 11. CART MODELS
 
+# 11. CART MODELS
+
 ## 11.1 Cart
+
+Represents an active shopping cart for an authenticated customer, strictly bound to a single store for the MVP.
 
 Fields:
 
-- id
-- userId
-- createdAt
-- updatedAt
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| userId | UUID | Unique customer owner reference |
+| sellerId | UUID? | Active store constraint (locks cart to this store) |
+| createdAt | DateTime | Cart creation timestamp |
+| updatedAt | DateTime | Last update timestamp |
 
-One active cart per customer.
+Constraints & Rules:
+- Unique constraint: `userId` (one active cart per customer).
+- When the first item is added, `sellerId` is set to that item's store.
+- Attempting to add an item from a different `sellerId` triggers a client confirmation prompt to clear the existing cart.
+- When all items are removed, `sellerId` becomes null.
 
 ## 11.2 CartItem
 
 Fields:
 
-- id
-- cartId
-- sellerProductId
-- quantity
-- createdAt
-- updatedAt
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| cartId | UUID | Foreign key to `Cart` |
+| sellerProductId | UUID | Foreign key to `SellerProduct` |
+| quantity | Int | Selected quantity (must be >= 1) |
+| createdAt | DateTime | Creation timestamp |
+| updatedAt | DateTime | Update timestamp |
 
-Unique constraint:
-
-`cartId + sellerProductId`
-
-Important:
-
-- The cart stores selected listings and quantities.
-- The backend recalculates prices.
-- The cart does not reserve inventory permanently.
-- Unavailable listings must be validated before checkout.
+Constraints:
+- Unique constraint: `cartId + sellerProductId`.
+- Prices are never stored in `CartItem`; the backend recalculates prices dynamically against `SellerProduct.sellingPrice`.
 
 ---
 
 # 12. ORDER MODELS
 
-## 12.1 Order
+## 12.1 Order (Single-Store Order)
 
-Represents the customer's complete checkout transaction.
-
-Fields:
-
-| Field | Type |
-|---|---|
-| id | UUID |
-| orderNumber | String |
-| customerId | UUID |
-| addressSnapshot | JSON |
-| subtotal | Decimal |
-| discountAmount | Decimal |
-| deliveryCharge | Decimal |
-| taxAmount | Decimal |
-| totalAmount | Decimal |
-| status | OrderStatus |
-| notes | String? |
-| placedAt | DateTime? |
-| createdAt | DateTime |
-| updatedAt | DateTime |
-
-The address snapshot preserves the original delivery address.
-
-Order number must be unique.
-
-## 12.2 SellerOrder
-
-Represents an individual seller's fulfilment responsibility.
+Represents the complete customer purchase, directly fulfilled by exactly one store.
 
 Fields:
 
-- id
-- orderId
-- sellerId
-- sellerOrderNumber
-- subtotal
-- discountAmount
-- deliveryCharge
-- taxAmount
-- totalAmount
-- status
-- acceptedAt
-- rejectedAt
-- completedAt
-- cancellationReason
-- createdAt
-- updatedAt
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| orderNumber | String | Unique human-readable identifier (e.g. `MB-2026-00001`) |
+| customerId | UUID | Foreign key to `User` (Customer) |
+| sellerId | UUID | Foreign key to `Seller` (Fulfilling Store) |
+| addressSnapshot | JSON | Frozen delivery address, landmark, PIN, phone, and GPS coordinates |
+| subtotal | Decimal(12, 2) | Gross item total at store selling prices |
+| deliveryFee | Decimal(12, 2) | Platform delivery charge |
+| discountAmount | Decimal(12, 2) | Platform coupon discount |
+| taxAmount | Decimal(12, 2) | Applicable regulatory taxes |
+| totalAmount | Decimal(12, 2) | Final payable total (`subtotal + deliveryFee - discountAmount`) |
+| status | OrderStatus | Operational status (`PENDING`, `CONFIRMED`, `PACKED`, `OUT_FOR_DELIVERY`, `DELIVERED`, `CANCELLED`, `REJECTED`, `FAILED`, `RETURN_REQUESTED`, `REFUNDED`) |
+| paymentStatus | PaymentStatus | Financial status (`PENDING`, `PROCESSING`, `SUCCESS`, `FAILED`, `REFUNDED`, `PARTIALLY_REFUNDED`) |
+| deliveryStatus | DeliveryStatus | Transit status (`PENDING`, `ASSIGNED`, `ACCEPTED`, `PICKED_UP`, `IN_TRANSIT`, `DELIVERED`, `FAILED`) |
+| notes | String? | Customer delivery instructions |
+| cancellationReason | String? | Reason if cancelled or rejected |
+| cancelledAt | DateTime? | Cancellation timestamp |
+| packedAt | DateTime? | Timestamp when store finished packing |
+| deliveredAt | DateTime? | Timestamp when customer received delivery |
+| createdAt | DateTime | Order placement timestamp |
+| updatedAt | DateTime | Last modification timestamp |
 
-Unique constraints:
+Constraints:
+- Unique constraint: `orderNumber`.
+- Foreign key: `sellerId` references `Seller.id` (ON DELETE RESTRICT).
+- Foreign key: `customerId` references `User.id` (ON DELETE RESTRICT).
+- Eliminates `SellerOrder` intermediate child records for MVP.
 
-- orderId + sellerId
-- sellerOrderNumber
+## 12.2 OrderItem
 
-A parent order can contain multiple seller orders.
-
-## 12.3 OrderItem
-
-Fields:
-
-- id
-- sellerOrderId
-- sellerProductId (historical reference)
-- productNameSnapshot
-- variantNameSnapshot
-- SKU
-- quantity
-- unitPrice
-- mrp
-- discountAmount
-- taxAmount
-- totalAmount
-- createdAt
-
-Important:
-
-Product name, SKU, price and other order-relevant information must be snapshotted.
-
-Changes to the original product listing must never modify historical order details.
-
-## 12.4 OrderStatusHistory
+Stores individual item lines with frozen snapshots.
 
 Fields:
 
-- id
-- orderId (optional)
-- sellerOrderId (optional)
-- previousStatus
-- newStatus
-- note
-- changedBy
-- createdAt
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| orderId | UUID | Foreign key to `Order` |
+| sellerProductId | UUID | Reference to original listing |
+| productNameSnapshot | String | Master catalog product title at checkout |
+| variantNameSnapshot | String? | Variant specification at checkout |
+| skuSnapshot | String? | SKU at checkout |
+| unitPrice | Decimal(12, 2) | Store selling price snapshot at checkout |
+| mrp | Decimal(12, 2) | Maximum Retail Price snapshot at checkout |
+| quantity | Int | Purchased quantity (>= 1) |
+| totalAmount | Decimal(12, 2) | `unitPrice * quantity` |
+| createdAt | DateTime | Creation timestamp |
 
-This table preserves the order lifecycle.
+Rules:
+- Order items are immutable once written.
+- Later changes to `SellerProduct` prices or titles must never mutate `OrderItem`.
 
-A history record must reference the relevant parent or seller order.
+## 12.3 OrderStatusHistory
+
+Maintains an immutable audit log of order state transitions.
+
+Fields:
+
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| orderId | UUID | Foreign key to `Order` |
+| previousStatus | OrderStatus | Status before transition |
+| newStatus | OrderStatus | Status after transition |
+| note | String? | Transition reason or note |
+| changedBy | UUID? | Actor who initiated change (User / System) |
+| createdAt | DateTime | Timestamp of transition |
 
 ---
 
@@ -1045,49 +991,59 @@ A history record must reference the relevant parent or seller order.
 
 ## 13.1 Payment
 
-Represents the payment associated with a parent order.
+Represents payment attempts and records for an order.
 
 Fields:
 
-- id
-- orderId
-- provider
-- method
-- providerOrderId
-- amount
-- currency
-- status
-- paidAt
-- createdAt
-- updatedAt
-
-An order may have multiple payment attempts.
-
-Payment records must not be overwritten to conceal failed or previous attempts.
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| orderId | UUID | Foreign key to `Order` |
+| provider | String | Provider identifier (`RAZORPAY`, `COD`) |
+| method | String | Payment method (`UPI`, `CARD`, `NETBANKING`, `CASH`) |
+| providerOrderId | String? | Razorpay Order ID (`order_xxxx`) |
+| providerPaymentId | String? | Razorpay Payment ID (`pay_xxxx`) |
+| amount | Decimal(12, 2) | Transaction amount in INR |
+| currency | String | Currency code (default: `INR`) |
+| status | PaymentStatus | Payment transaction status |
+| paidAt | DateTime? | Timestamp when payment was verified |
+| createdAt | DateTime | Initiation timestamp |
+| updatedAt | DateTime | Update timestamp |
 
 ## 13.2 PaymentTransaction
 
-Records individual payment events.
+Records discrete gateway interactions and signature verifications.
 
 Fields:
 
-- id
-- paymentId
-- providerTransactionId
-- eventType
-- amount
-- status
-- providerPayload (JSON)
-- processedAt
-- createdAt
+- `id`: UUID (PK)
+- `paymentId`: UUID (FK to `Payment`)
+- `providerTransactionId`: String?
+- `eventType`: String (`ORDER_CREATED`, `SIGNATURE_VERIFIED`, `WEBHOOK_CONFIRMED`, `PAYMENT_FAILED`)
+- `amount`: Decimal(12, 2)
+- `status`: String
+- `providerPayload`: JSON (Raw gateway payload for auditing)
+- `processedAt`: DateTime
+- `createdAt`: DateTime
+
+## 13.3 PaymentWebhookEvent (Webhook Idempotency)
+
+Guarantees exactly-once processing of asynchronous provider webhooks.
+
+Fields:
+
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| provider | String | Gateway identifier (`RAZORPAY`) |
+| eventId | String | Gateway event identifier (e.g. `evt_xxxx`) |
+| eventType | String | Webhook event name (`order.paid`, `payment.failed`, `refund.processed`) |
+| payload | JSON | Full webhook request body |
+| status | String | `PROCESSED`, `FAILED`, `IGNORED_DUPLICATE` |
+| processedAt | DateTime | Execution timestamp |
 
 Constraints:
-
-- Provider transaction references must be unique where available.
-- Webhook events must be idempotently processed.
-- Sensitive payment information must not be stored.
-
-A separate webhook event identifier or processing record should be maintained for provider event deduplication.
+- Unique constraint: `provider + eventId` (prevents replay attacks and duplicate processing).
 
 ---
 
@@ -1095,148 +1051,154 @@ A separate webhook event identifier or processing record should be maintained fo
 
 ## 14.1 Refund
 
-Represents a refund request.
+Represents customer refund requests and processing.
 
 Fields:
 
-- id
-- orderId
-- sellerOrderId (optional)
-- paymentId
-- refundNumber
-- amount
-- reason
-- status
-- providerRefundId
-- requestedBy
-- processedAt
-- createdAt
-- updatedAt
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| orderId | UUID | Foreign key to `Order` |
+| paymentId | UUID | Foreign key to `Payment` |
+| refundNumber | String | Unique human-readable refund identifier (e.g. `RFND-2026-0001`) |
+| amount | Decimal(12, 2) | Refunded amount |
+| reason | String | Customer or admin complaint reason |
+| status | RefundStatus | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `REJECTED` |
+| providerRefundId | String? | Razorpay Refund ID (`rfnd_xxxx`) |
+| requestedBy | UUID | User ID who lodged complaint |
+| approvedBy | UUID? | Super Admin who authorized refund |
+| processedAt | DateTime? | Gateway confirmation timestamp |
+| createdAt | DateTime | Request creation timestamp |
+| updatedAt | DateTime | Last status update timestamp |
 
-Refunds must support both complete and partial refunds.
+Constraints:
+- Total refunded amount across all refunds for an order must not exceed `Order.totalAmount`.
+- Refunds are issued to the original source (5–7 business days).
 
 ## 14.2 RefundTransaction
 
-Fields:
-
-- id
-- refundId
-- providerTransactionId
-- amount
-- status
-- providerPayload (JSON)
-- processedAt
-- createdAt
-
-Refund processing must be idempotent.
-
-A refund request must never automatically be considered successful merely because it was submitted to the payment provider.
+Audit records of gateway refund calls:
+- `id`: UUID (PK)
+- `refundId`: UUID (FK to `Refund`)
+- `providerTransactionId`: String?
+- `amount`: Decimal(12, 2)
+- `status`: String
+- `providerPayload`: JSON
+- `processedAt`: DateTime
+- `createdAt`: DateTime
 
 ---
 
-# 15. COMMISSION AND FINANCIAL MODELS
+# 15. COMMISSION AND FINANCIAL LEDGER MODELS
 
 ## 15.1 CommissionRule
 
-Defines marketplace commission policies.
+Defines category-based platform commission rates.
 
 Fields:
 
-- id
-- name
-- commissionType
-- commissionValue
-- categoryId (optional)
-- sellerId (optional)
-- isActive
-- effectiveFrom
-- effectiveUntil
-- createdAt
-- updatedAt
-
-Possible commission types:
-
-- FIXED.
-- PERCENTAGE.
-
-The commission priority and applicability rules must be defined in business logic.
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| name | String | Descriptive name (e.g., "Dairy & Bakery Standard 12%") |
+| commissionType | String | `PERCENTAGE` |
+| commissionRate | Decimal(5, 2) | Percentage value (e.g. `12.00` for 12%) |
+| categoryId | UUID? | Foreign key to `Category` |
+| sellerId | UUID? | Optional override for specific merchant |
+| isActive | Boolean | Active policy toggle |
+| effectiveFrom | DateTime | Validity start date |
+| effectiveUntil | DateTime? | Optional expiration date |
+| createdAt | DateTime | Creation timestamp |
+| updatedAt | DateTime | Update timestamp |
 
 ## 15.2 CommissionRecord
 
-Stores the actual commission calculated for a transaction.
+Immutable snapshot of calculated commission for a delivered order.
 
 Fields:
 
-- id
-- sellerOrderId
-- sellerId
-- commissionRuleId (optional)
-- grossAmount
-- commissionAmount
-- taxAmount
-- netAmount
-- createdAt
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| orderId | UUID | Unique foreign key to `Order` |
+| sellerId | UUID | Foreign key to `Seller` |
+| commissionRuleId | UUID? | Reference to applied rule |
+| grossItemAmount | Decimal(12, 2) | Net item subtotal (excluding delivery fees) |
+| commissionRate | Decimal(5, 2) | Applied rate snapshot |
+| commissionAmount | Decimal(12, 2) | Platform fee deducted (`grossItemAmount * commissionRate`) |
+| taxOnCommission | Decimal(12, 2) | 18% GST on platform service fee |
+| netSellerPayable | Decimal(12, 2) | Amount credited to seller ledger |
+| createdAt | DateTime | Calculation timestamp |
 
-Commission calculations must be preserved historically.
+Constraints:
+- Unique constraint: `orderId` (one commission record per order).
 
-Changing a commission rule must not modify previously calculated commissions.
+## 15.3 SellerLedgerEntry (Double-Entry Financial Ledger)
 
-## 15.3 SellerEarning
-
-Tracks seller financial credits and adjustments.
+Maintains an immutable, append-only record of all seller credits, debits, adjustments, and payouts.
 
 Fields:
 
-- id
-- sellerId
-- sellerOrderId (optional)
-- type
-- amount
-- referenceType
-- referenceId
-- description
-- createdAt
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| sellerId | UUID | Foreign key to `Seller` |
+| orderId | UUID? | Foreign key to `Order` (if tied to an order) |
+| entryType | LedgerEntryType | `ORDER_CREDIT`, `COMMISSION_DEBIT`, `REFUND_DEBIT`, `SETTLEMENT_PAYOUT`, `ADJUSTMENT` |
+| amount | Decimal(12, 2) | Transaction amount |
+| balanceAfter | Decimal(12, 2) | Running ledger balance after entry |
+| description | String | Audit description |
+| referenceId | String? | External reference (e.g. UTR / Order ID / Refund ID) |
+| createdAt | DateTime | Entry timestamp |
 
-Financial adjustments must have explicit references and reasons.
+Rules:
+- Append-only. Rows must never be updated or deleted.
+- Guarantees complete auditability and reconciliation.
 
 ---
 
 # 16. SETTLEMENT MODELS
 
-## 16.1 Settlement
+## 16.1 Settlement (Batch Payout)
 
-Represents a seller payout.
+Represents periodic batch disbursements to sellers after the T+3 day holding period.
 
 Fields:
 
-- id
-- settlementNumber
-- sellerId
-- grossAmount
-- commissionAmount
-- refundAdjustment
-- otherAdjustment
-- netAmount
-- status
-- paymentReference
-- initiatedAt
-- completedAt
-- createdAt
-- updatedAt
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| settlementNumber | String | Unique payout identifier (e.g. `SETTL-2026-0001`) |
+| sellerId | UUID | Foreign key to `Seller` |
+| grossAmount | Decimal(12, 2) | Gross product sales in settlement period |
+| commissionAmount | Decimal(12, 2) | Total platform commission deducted |
+| refundDeductions | Decimal(12, 2) | Total product returns debited |
+| otherAdjustments | Decimal(12, 2) | Miscellaneous adjustments |
+| netAmount | Decimal(12, 2) | Net disbursed payout |
+| status | SettlementStatus | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `ON_HOLD` |
+| holdReason | String? | Mandatory reason if payout is held |
+| payoutMethod | String? | `BANK_TRANSFER`, `UPI`, `MANUAL` |
+| utrNumber | String? | Bank Unique Transaction Reference |
+| periodStart | DateTime | Settlement window start date |
+| periodEnd | DateTime | Settlement window end date |
+| initiatedAt | DateTime? | Payout initiation timestamp |
+| completedAt | DateTime? | Payout completion timestamp |
+| createdAt | DateTime | Creation timestamp |
+| updatedAt | DateTime | Update timestamp |
+
+Constraints:
+- Unique constraint: `settlementNumber`.
 
 ## 16.2 SettlementItem
 
-Fields:
+Links settlement batches to discrete financial ledger records:
+- `id`: UUID (PK)
+- `settlementId`: UUID (FK to `Settlement`)
+- `sellerLedgerEntryId`: UUID (FK to `SellerLedgerEntry`)
+- `amount`: Decimal(12, 2)
+- `createdAt`: DateTime
 
-- id
-- settlementId
-- sellerEarningId
-- amount
-- createdAt
-
-A seller earning must not be settled more than once.
-
-Settlements must be auditable and traceable to underlying seller earnings.
+Constraint: A `SellerLedgerEntry` can only be linked to one completed `SettlementItem` (prevents double payout).
 
 ---
 
@@ -1244,68 +1206,68 @@ Settlements must be auditable and traceable to underlying seller earnings.
 
 ## 17.1 DeliveryPartner
 
-Fields:
+Represents an onboarded delivery rider.
 
-- id
-- userId
-- vehicleType
-- vehicleNumber
-- verificationStatus
-- availabilityStatus
-- rating
-- createdAt
-- updatedAt
+Fields:
+- `id`: UUID (PK)
+- `userId`: UUID (FK to `User`)
+- `vehicleType`: String (`BICYCLE`, `MOTORCYCLE`, `SCOOTER`)
+- `vehicleNumber`: String?
+- `verificationStatus`: String (`PENDING`, `VERIFIED`, `REJECTED`)
+- `availabilityStatus`: String (`ONLINE`, `OFFLINE`, `ON_DELIVERY`)
+- `currentLatitude`: Decimal(10, 8)?
+- `currentLongitude`: Decimal(11, 8)?
+- `rating`: Decimal(3, 2)
+- `createdAt`: DateTime
+- `updatedAt`: DateTime
 
 ## 17.2 Delivery
 
-Represents delivery for an individual seller order.
+Directly associated with exactly one single-store `Order`.
 
 Fields:
 
-- id
-- sellerOrderId
-- status
-- pickupAddressSnapshot
-- deliveryAddressSnapshot
-- estimatedDeliveryAt
-- deliveredAt
-- deliveryInstructions
-- createdAt
-- updatedAt
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| orderId | UUID | Unique foreign key to `Order` |
+| deliveryPartnerId | UUID? | Assigned rider reference |
+| status | DeliveryStatus | `PENDING`, `ASSIGNED`, `ACCEPTED`, `PICKED_UP`, `IN_TRANSIT`, `DELIVERED`, `FAILED`, `CANCELLED` |
+| pickupAddressSnapshot | JSON | Store address, contact, and coordinates |
+| deliveryAddressSnapshot | JSON | Customer address, contact, and coordinates |
+| deliveryInstructions | String? | Customer instructions |
+| estimatedDeliveryAt | DateTime? | ETA timestamp |
+| pickedUpAt | DateTime? | Store pickup timestamp |
+| deliveredAt | DateTime? | Handover timestamp |
+| failureReason | String? | Reason if delivery failed |
+| proofOfDeliveryOtp | String? | 4-digit verification code |
+| createdAt | DateTime | Creation timestamp |
+| updatedAt | DateTime | Update timestamp |
 
-Initially, one seller order should correspond to one delivery record.
+Constraints:
+- Unique constraint: `orderId` (one delivery per order).
 
 ## 17.3 DeliveryAssignment
 
-Tracks delivery partner allocation and reassignment.
-
-Fields:
-
-- id
-- deliveryId
-- deliveryPartnerId
-- status
-- assignedAt
-- acceptedAt
-- rejectedAt
-- completedAt
-- createdAt
-
-Multiple assignment records preserve assignment history.
+Tracks rider assignment offers, timeouts, and acceptances:
+- `id`: UUID (PK)
+- `deliveryId`: UUID (FK to `Delivery`)
+- `deliveryPartnerId`: UUID (FK to `DeliveryPartner`)
+- `status`: DeliveryAssignmentStatus (`OFFERED`, `ACCEPTED`, `REJECTED`, `EXPIRED`, `CANCELLED`)
+- `assignedAt`: DateTime
+- `respondedAt`: DateTime?
+- `createdAt`: DateTime
 
 ## 17.4 DeliveryStatusHistory
 
-Fields:
-
-- id
-- deliveryId
-- previousStatus
-- newStatus
-- latitude
-- longitude
-- note
-- updatedBy
-- createdAt
+Immutable audit log of delivery status milestones:
+- `id`: UUID (PK)
+- `deliveryId`: UUID (FK to `Delivery`)
+- `previousStatus`: DeliveryStatus
+- `newStatus`: DeliveryStatus
+- `note`: String?
+- `updatedBy`: UUID?
+- `createdAt`: DateTime
 
 ---
 
@@ -1803,78 +1765,79 @@ The database follows this hierarchy:
 
 ```text
 IDENTITY
-  |
-  +-- User
-  |    +-- Role
-  |    +-- CustomerProfile
-  |    +-- SellerProfile
-  |    +-- DeliveryPartner
-  |
-  +-- SELLER
-  |    +-- SellerProfile
-  |    +-- SellerDocument
-  |    +-- SellerServiceArea
-  |
-  +-- PRODUCT CATALOG
-  |    +-- Category
-  |    +-- Product
-  |    +-- ProductVariant
-  |    +-- ProductImage
-  |    +-- SellerProduct
-  |
-  +-- INVENTORY
-  |    +-- Inventory
-  |    +-- InventoryTransaction
-  |    +-- StockReservation
-  |
-  +-- SHOPPING
-  |    +-- Cart
-  |    +-- CartItem
-  |
-  +-- ORDERS
-  |    +-- Order
-  |    +-- SellerOrder
-  |    +-- OrderItem
-  |    +-- OrderStatusHistory
-  |
-  +-- PAYMENTS
-  |    +-- Payment
-  |    +-- PaymentTransaction
-  |    +-- Refund
-  |    +-- RefundTransaction
-  |
-  +-- FINANCE
-  |    +-- CommissionRule
-  |    +-- CommissionRecord
-  |    +-- SellerEarning
-  |    +-- Settlement
-  |    +-- SettlementItem
-  |
-  +-- DELIVERY
-  |    +-- Delivery
-  |    +-- DeliveryAssignment
-  |    +-- DeliveryStatusHistory
-  |
-  +-- PLATFORM
-       +-- Notifications
-       +-- Reviews
-       +-- Coupons
-       +-- AuditLogs
-       +-- PlatformSettings
+  │
+  ├── User
+  │    ├── Role (UserRole)
+  │    ├── CustomerProfile
+  │    ├── SellerProfile
+  │    └── DeliveryPartner
+  │
+  ├── SELLER / STORE
+  │    ├── SellerProfile
+  │    ├── SellerKYC & SellerDocument
+  │    ├── SellerBusinessHours
+  │    └── SellerServiceArea
+  │
+  ├── PRODUCT CATALOG
+  │    ├── Category
+  │    ├── Product (Master Catalog)
+  │    ├── ProductVariant
+  │    ├── ProductImage
+  │    └── SellerProduct (Store Listing & Pricing <= MRP)
+  │
+  ├── INVENTORY
+  │    ├── Inventory (availableQuantity, reservedQuantity)
+  │    ├── InventoryTransaction
+  │    └── StockReservation (15-min TTL)
+  │
+  ├── SHOPPING CART (Single Store)
+  │    ├── Cart (userId, sellerId constraint)
+  │    └── CartItem
+  │
+  ├── ORDERS (Single Store)
+  │    ├── Order (customerId, sellerId, addressSnapshot, totalAmount, status)
+  │    ├── OrderItem (snapshots of productName, SKU, price, MRP, quantity)
+  │    └── OrderStatusHistory
+  │
+  ├── PAYMENTS
+  │    ├── Payment (providerOrderId, providerPaymentId, status, method)
+  │    ├── PaymentTransaction
+  │    ├── PaymentWebhookEvent (Idempotency deduplication)
+  │    ├── Refund (providerRefundId, source refund)
+  │    └── RefundTransaction
+  │
+  ├── FINANCE & AUDITABLE LEDGER
+  │    ├── CommissionRule (Category-based percentage)
+  │    ├── CommissionRecord (per delivered order)
+  │    ├── SellerLedgerEntry (Double-entry append-only credit/debit)
+  │    ├── Settlement (T+3 batch payout)
+  │    └── SettlementItem
+  │
+  ├── DELIVERY (Platform-Managed)
+  │    ├── Delivery (orderId, pickup/delivery address snapshot, status)
+  │    ├── DeliveryAssignment (dispatch offers & rider responses)
+  │    └── DeliveryStatusHistory
+  │
+  └── PLATFORM GOVERNANCE
+       ├── Notifications & NotificationPreferences
+       ├── Reviews
+       ├── Coupons & CouponUsages
+       ├── AuditLogs
+       └── PlatformSettings
 ```
 
 ## PRIMARY DESIGN PRINCIPLES
 
-1. Shared catalog, independent seller listings.
-2. Independent inventory per seller.
-3. One parent order, multiple seller orders.
-4. Transaction-safe checkout.
-5. Reliable payment and refund processing.
-6. Traceable seller earnings and settlements.
-7. Strict user and seller data isolation.
-8. Historical financial data preservation.
-9. Scalable relational database architecture.
-10. Prisma-managed schema migrations.
+1. Platform Master Catalog with independent store listings and store inventory.
+2. Store-specific inventory with atomic 15-minute stock reservations.
+3. Single-store cart and single-store order fulfillment (MVP baseline).
+4. Transaction-safe checkout and price/MRP validation.
+5. Reliable Razorpay payment verification and idempotent webhook processing.
+6. Traceable, append-only seller ledger entries and batched settlements (T+3).
+7. Strict tenant isolation between independent merchants.
+8. Complete historical immutability of addresses, items, and financial records.
+9. Platform-managed delivery lifecycle with audit milestones.
+10. Version-controlled, production-safe Prisma migrations.
 
 ---
 
