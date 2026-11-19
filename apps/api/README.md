@@ -137,6 +137,46 @@ npm run test --workspace=@marvels-basket/api
 # Run E2E tests
 npm run test:e2e --workspace=@marvels-basket/api
 
+# Run database integrity and marketplace invariant tests
+npm run test:db --workspace=@marvels-basket/api
+
 # Run tests with coverage
 npm run test:cov --workspace=@marvels-basket/api
+```
+
+---
+
+## 6. Database Schema & Migration Workflow
+
+The database is built on **PostgreSQL 16** and **Prisma ORM 5.22**, implementing 54 relational domain models, 21 enums, and comprehensive business constraints.
+
+- **Schema definition:** `prisma/schema.prisma`
+- **Migrations directory:** `prisma/migrations/`
+- **Seed script:** `prisma/seed.ts`
+- **Integrity test suite:** `test/database-integrity.db-spec.ts`
+
+### Database Scripts:
+
+```bash
+# Generate Prisma Client
+npm run db:generate
+
+# Validate and format schema
+npm run db:validate
+npm run db:format
+
+# Run development migrations
+npm run db:migrate
+
+# Apply migrations in CI / production
+npm run db:migrate:deploy
+
+# Run deterministic development seed
+npm run db:seed
+
+# Inspect migration status
+npm run db:status
+
+# Run database integrity test suite
+npm run test:db
 ```

@@ -238,21 +238,75 @@ npm run clean
 
 ---
 
-## 9. Database Workflow
+## 9. Database Management & Prisma Tooling
 
-Database migrations and schema definitions are managed using **Prisma ORM**:
+The PostgreSQL database (v16) and Prisma ORM (v5.22) are centrally manageable through root npm scripts:
 
-- Prisma schema file: `apps/api/prisma/schema.prisma`
-- Database URL: Configured via `DATABASE_URL` in `.env`
+- **Prisma Schema:** `apps/api/prisma/schema.prisma`
+- **Database URL:** Configured via `DATABASE_URL` in `.env` (default: `postgresql://marvel:marvel_dev_secure_password_2026@localhost:5433/marvels_basket_dev?schema=public`)
+- **Seeding Script:** `apps/api/prisma/seed.ts` (deterministic, idempotent seed data)
+- **Integrity Tests:** `apps/api/test/database-integrity.db-spec.ts`
+
+### Centralized Root Database Commands:
 
 ```bash
-# Generate Prisma Client after schema changes
-npm run --workspace=@marvels-basket/api prisma:generate
+# Validate Prisma schema syntax and relationship integrity
+npm run db:validate
+
+# Format Prisma schema with standard indentation
+npm run db:format
+
+# Generate typed Prisma Client into node_modules/@prisma/client
+npm run db:generate
+
+# Run development migrations (prisma migrate dev)
+npm run db:migrate
+
+# Apply migrations in deployment/production environments (prisma migrate deploy)
+npm run db:migrate:deploy
+
+# Execute deterministic development database seed
+npm run db:seed
+
+# Inspect migration synchronization status
+npm run db:status
+
+# Run database integrity and marketplace invariant test suite
+npm run db:test
+
+# Launch visual web-based Prisma Studio (http://localhost:5555)
+npm run db:studio
+```
+
+### Initial Local Database Setup Workflow:
+
+```bash
+# 1. Start Docker containers
+npm run docker:up
+
+# 2. Check health of PostgreSQL and Redis
+npm run docker:health
+
+# 3. Apply versioned migrations to local PostgreSQL
+npm run db:migrate:deploy
+
+# 4. Generate Prisma Client
+npm run db:generate
+
+# 5. Seed development data (Admin, customer, sellers, catalog, listings, coupons)
+npm run db:seed
+
+# 6. Verify database integrity
+npm run db:test
+```
 
 # Future Phase 02 Workflow:
+
 # Create a migration from schema changes
+
 # npx --workspace=@marvels-basket/api prisma migrate dev --name <migration_name>
-```
+
+````
 
 ---
 
@@ -267,7 +321,8 @@ If port `5432` or `6379` is already occupied by a native PostgreSQL or Redis ser
    POSTGRES_PORT=5433
    REDIS_PORT=6380
    DATABASE_URL="postgresql://marvel:marvel_dev_secure_password_2026@localhost:5433/marvels_basket_dev?schema=public"
-   ```
+````
+
 2. Restart Docker containers: `npm run docker:restart`
 
 ### Docker Daemon Connectivity

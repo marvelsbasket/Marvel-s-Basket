@@ -691,6 +691,127 @@ Encapsulate PostgreSQL in a `@Global()` `PrismaModule` (`PrismaService` extendin
 
 ---
 
+## ADR-029: Database Identifier & UUID v4 Strategy
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Using sequential integer primary keys exposes business volume to competitors (e.g. order ID enumeration, user ID enumeration) and creates vulnerability to IDOR attacks. In a distributed multi-entity marketplace, globally unique identifiers are required across all relational tables.
+
+### Decision
+1. All database primary keys use PostgreSQL UUID v4 (`@id @default(uuid()) @db.Uuid`).
+2. Foreign key columns use `@db.Uuid` with explicit naming (`*_id`).
+3. User-facing identifiers (e.g. Order Numbers `MB-2026-XXXXX`, Settlement Numbers `SETTL-2026-XXXXX`, Refund Numbers `RFND-2026-XXXXX`) are stored as separate unique strings.
+
+---
+
+## ADR-030: Decimal Monetary Precision Standard
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Floating-point arithmetic (`FLOAT`, `DOUBLE`) in IEEE 754 suffers from binary representation rounding errors (e.g. `0.1 + 0.2 = 0.30000000000000004`), which is unacceptable for financial balances, taxes, commissions, and customer billing.
+
+### Decision
+1. All monetary fields in the PostgreSQL database use `Decimal(12, 2)` (supporting values up to ₹9,999,999,999.99 with exact 2-decimal-place precision).
+2. Commission rates use `Decimal(5, 2)` (supporting percentages up to `100.00%`).
+3. Geographic coordinates use `Decimal(10, 8)` for latitude and `Decimal(11, 8)` for longitude.
+4. Float and Double types are strictly prohibited for financial or accounting values.
+
+---
+
+## ADR-031: Nullable Composite Listing Uniqueness via Partial Unique Index
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+In the hybrid catalog model, a `SellerProduct` represents an offer by a store for a master `Product`, with an optional `variantId` (nullable when the product has no variant). Under standard SQL and PostgreSQL defaults, `NULL != NULL`, meaning a composite unique constraint `@@unique([sellerId, productId, variantId])` does not prevent duplicate rows where `variantId IS NULL`.
+
+### Decision
+1. In addition to the Prisma composite unique constraint `@@unique([sellerId, productId, variantId])` for non-null variants, apply a PostgreSQL partial unique index via migration:
+   ```sql
+   CREATE UNIQUE INDEX "seller_products_seller_id_product_id_null_variant_key"
+   ON "seller_products"("seller_id", "product_id")
+   WHERE "variant_id" IS NULL;
+   ```
+2. This guarantees that no store can list the same master product twice without a variant, preventing duplicate catalog offers and inventory fragmentation.
+
+---
+
+## ADR-032: Single-Store Shopping Cart & Order Relational Boundary
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+To support the approved single-store checkout model (ADR-007), the database schema must strictly enforce store boundaries on customer carts and orders, eliminating multi-seller parent/sub-order split complexity for the MVP.
+
+### Decision
+1. `Cart` maintains a foreign key `sellerId` referencing `Seller(id)` (nullable only when the cart is completely empty).
+2. `CartItem` unique constraint `@@unique([cartId, sellerProductId])` guarantees a listing is not duplicated in a cart.
+3. `Order` maintains `sellerId` referencing `Seller(id)` with `onDelete: Restrict`, ensuring every order maps directly to exactly one store.
+4. Intermediate `SellerOrder` child tables are eliminated for the MVP.
+
+---
+
+## ADR-033: Immutable Historical Order Item & Address Snapshots
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Merchants frequently update store selling prices, MRPs, or titles. Customers may also update or delete their saved delivery addresses. If orders rely solely on mutable foreign-key lookups, historical invoices, audit trails, and financial reconciliation will become corrupted.
+
+### Decision
+1. `OrderItem` freezes immutable snapshots at the moment of checkout:
+   - `productNameSnapshot`: Master product title.
+   - `variantNameSnapshot`: Variant specification.
+   - `skuSnapshot`: SKU.
+   - `unitPrice`: Frozen store selling price (`Decimal(12, 2)`).
+   - `mrp`: Frozen MRP (`Decimal(12, 2)`).
+   - `totalAmount`: Frozen line total (`unitPrice * quantity`).
+2. `Order` stores `addressSnapshot` as frozen JSON containing the exact recipient name, phone, full address, city, PIN code, and GPS coordinates.
+3. `OrderItem` and `Order` foreign keys use `onDelete: Restrict` to prevent deletion of customer or product references from destroying order history.
+
+---
+
+## ADR-034: Double-Entry Append-Only Financial Ledger & Double-Settlement Guard
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Auditable merchant payouts require an immutable financial trail. Relying on mutable order totals for merchant payouts risks duplicate disbursements, race conditions, or unrecorded dispute deductions.
+
+### Decision
+1. `SellerLedgerEntry` is strictly append-only. Rows are never modified or deleted.
+2. Every financial event generates a ledger entry:
+   - `ORDER_CREDIT`: Store item revenue credited upon delivery.
+   - `COMMISSION_DEBIT`: Platform commission and GST deducted.
+   - `REFUND_DEBIT`: Customer refund deducted from merchant.
+   - `SETTLEMENT_PAYOUT`: Disbursement to merchant bank account.
+3. `SettlementItem` maintains a unique constraint `@@unique([sellerLedgerEntryId])`. This database-level invariant strictly prevents any ledger credit from being bundled into more than one settlement batch.
+
+---
+
+## ADR-035: Asynchronous Payment Webhook Idempotency Architecture
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Payment gateways (e.g. Razorpay) send asynchronous webhooks for payment capture, failure, and refunds. Under network retries or gateway replays, the webhook endpoint may receive identical events multiple times, risking duplicate order confirmation or duplicate financial ledger credits.
+
+### Decision
+1. `PaymentWebhookEvent` stores incoming webhook events with a composite unique constraint:
+   `@@unique([provider, eventId])`
+2. Every incoming webhook handler queries or attempts an insert before processing. If a duplicate `(provider, eventId)` is detected, the transaction terminates idempotently with HTTP 200 without re-executing order or financial mutations.
+
+---
+
 # Part C — Complete Decision Register Summary
 
 | ADR # | Decision Topic | Status | Category | Key Implementation Invariant |
@@ -723,6 +844,13 @@ Encapsulate PostgreSQL in a `@Global()` `PrismaModule` (`PrismaService` extendin
 | **ADR-026** | Typed Configuration Validation | **Accepted** | Configuration | Joi schema validation with fail-fast bootstrap guarantee |
 | **ADR-027** | Dual-Probe Health System | **Accepted** | Monitoring | `/health/live` process probe & `/health/ready` DB/Redis probe |
 | **ADR-028** | Infrastructure Encapsulation | **Accepted** | Database/Cache | Global PrismaService and RedisService with lifecycle hooks |
+| **ADR-029** | Database Primary Key Strategy | **Accepted** | Database | PostgreSQL UUID v4 (`@default(uuid()) @db.Uuid`) |
+| **ADR-030** | Monetary Precision Standard | **Accepted** | Database/Finance | PostgreSQL `Decimal(12, 2)` for all monetary fields |
+| **ADR-031** | Nullable Composite Listing Uniqueness | **Accepted** | Database | Partial unique index for null variants on `seller_products` |
+| **ADR-032** | Single-Store Cart & Order Boundary | **Accepted** | Database/Business | Store foreign key on Cart & Order; no split sub-orders |
+| **ADR-033** | Immutable Order Snapshots | **Accepted** | Database/Audit | Frozen price, SKU, product title, and address snapshots |
+| **ADR-034** | Double-Entry Financial Ledger | **Accepted** | Database/Finance | Append-only SellerLedgerEntry; unique `sellerLedgerEntryId` on SettlementItem |
+| **ADR-035** | Payment Webhook Idempotency | **Accepted** | Database/Payments | Unique constraint on `PaymentWebhookEvent(provider, eventId)` |
 
 ---
 

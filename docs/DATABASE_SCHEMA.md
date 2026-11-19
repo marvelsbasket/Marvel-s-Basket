@@ -778,7 +778,15 @@ Recommended unique constraint:
 
 `sellerId + productId + variantId`
 
-For reliable nullable uniqueness, use an appropriate PostgreSQL partial unique index or a non-null canonical listing key.
+For reliable nullable uniqueness, the following PostgreSQL partial unique index is implemented and applied via migration (`20261119075000_seller_product_null_variant_unique`):
+
+```sql
+CREATE UNIQUE INDEX "seller_products_seller_id_product_id_null_variant_key"
+ON "seller_products"("seller_id", "product_id")
+WHERE "variant_id" IS NULL;
+```
+
+This guarantees that a seller cannot list the same master product twice when `variant_id` is null.
 
 ## 9.2 Why SellerProduct Is Separate
 
