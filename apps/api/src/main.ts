@@ -3,6 +3,7 @@ import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import * as express from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -30,9 +31,10 @@ async function bootstrap() {
     }),
   );
 
-  // 2. Request body limits
+  // 2. Request body limits & Cookie Parser
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
+  app.use(cookieParser());
 
   // 3. Global Route Prefix and URI Versioning
   const normalizedPrefix = apiPrefix.replace(/\/v\d+$/, '');
@@ -90,7 +92,14 @@ async function bootstrap() {
         },
         'JWT-auth',
       )
+      .addCookieAuth('refreshToken', {
+        type: 'apiKey',
+        in: 'cookie',
+        name: 'refreshToken',
+        description: 'HTTP-only refresh token cookie for session renewal',
+      })
       .addTag('Health', 'System health and infrastructure readiness monitoring')
+      .addTag('Authentication', 'User authentication, registration, session management, and RBAC')
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);

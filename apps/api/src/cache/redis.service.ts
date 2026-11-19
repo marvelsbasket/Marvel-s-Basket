@@ -137,6 +137,37 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Increment value of a key.
+   */
+  async incr(key: string): Promise<number> {
+    if (!this.client) {
+      return 0;
+    }
+    return this.client.incr(key);
+  }
+
+  /**
+   * Set a timeout on key in seconds.
+   */
+  async expire(key: string, seconds: number): Promise<boolean> {
+    if (!this.client) {
+      return false;
+    }
+    const result = await this.client.expire(key, seconds);
+    return result === 1;
+  }
+
+  /**
+   * Returns the remaining time to live of a key that has a timeout, in seconds.
+   */
+  async ttl(key: string): Promise<number> {
+    if (!this.client) {
+      return -2;
+    }
+    return this.client.ttl(key);
+  }
+
+  /**
    * Access raw ioredis instance if specialized operations are required.
    */
   getClient(): Redis | null {

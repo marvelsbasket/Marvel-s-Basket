@@ -8,6 +8,8 @@ export const REQUEST_ID_HEADER = 'x-request-id';
 export const BYPASS_TRANSFORM_KEY = 'custom:bypass_transform';
 export const RESPONSE_MESSAGE_KEY = 'custom:response_message';
 export const IS_PUBLIC_KEY = 'custom:is_public';
+export const ROLES_KEY = 'custom:roles';
+export const PERMISSIONS_KEY = 'custom:permissions';
 
 export enum ErrorCode {
   VALIDATION_ERROR = 'VALIDATION_ERROR',
