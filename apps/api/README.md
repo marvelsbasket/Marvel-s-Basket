@@ -209,3 +209,63 @@ The backend provides a complete, production-ready authentication and authorizati
 | `POST` | `/api/v1/auth/forgot-password`         | Public        | Request single-use password reset link        |
 | `POST` | `/api/v1/auth/reset-password`          | Public        | Reset password using verified crypto token    |
 | `GET`  | `/api/v1/auth/me`                      | Authenticated | Retrieve profile, roles, and permissions      |
+
+---
+
+## 8. Customer Profile & Address Management (Phase 06)
+
+The backend provides complete customer profile management and delivery address CRUD under `/api/v1/users/*` and `/api/v1/addresses/*`:
+
+### Features:
+
+- **Server-Derived Identity:** Customer identity is derived exclusively from validated JWT sessions via `@CurrentUser('id')`.
+- **Strict Data Isolation (No IDOR):** Cross-customer address access and modifications are strictly rejected with HTTP 404 to prevent resource enumeration.
+- **Single Default Address Invariant:** Guaranteed via PostgreSQL `$transaction` operations. When a default address is deleted, the most recently updated remaining address is automatically promoted.
+- **Indian Market Validations:** Delivery contacts require 10-digit mobile numbers (`^[6-9]\d{9}$`) and 6-digit PIN codes (`^\d{6}$`).
+
+### Endpoints:
+
+| Method   | Endpoint                        | Access        | Description                                     |
+| -------- | ------------------------------- | ------------- | ----------------------------------------------- |
+| `GET`    | `/api/v1/users/me`              | Authenticated | Retrieve customer profile                       |
+| `PATCH`  | `/api/v1/users/me`              | Authenticated | Update name, avatar URL, and date of birth      |
+| `GET`    | `/api/v1/users/me/account`      | Authenticated | Retrieve account status and total addresses     |
+| `GET`    | `/api/v1/users/me/preferences`  | Authenticated | Retrieve notification and channel preferences   |
+| `PATCH`  | `/api/v1/users/me/preferences`  | Authenticated | Update notification channel preferences         |
+| `PATCH`  | `/api/v1/users/me/deactivate`   | Authenticated | Soft-deactivate customer account                |
+| `GET`    | `/api/v1/addresses`             | Authenticated | List customer saved addresses (default first)   |
+| `POST`   | `/api/v1/addresses`             | Authenticated | Add a new delivery address                      |
+| `GET`    | `/api/v1/addresses/:id`         | Authenticated | Retrieve single address (ownership verified)    |
+| `PATCH`  | `/api/v1/addresses/:id`         | Authenticated | Update delivery address                         |
+| `DELETE` | `/api/v1/addresses/:id`         | Authenticated | Delete address with automatic default promotion |
+| `PATCH`  | `/api/v1/addresses/:id/default` | Authenticated | Set address as customer default address         |
+
+---
+
+## 8. Customer Profile & Address Management (Phase 06)
+
+The backend provides complete customer profile management and delivery address CRUD under `/api/v1/users/*` and `/api/v1/addresses/*`:
+
+### Features:
+
+- **Server-Derived Identity:** Customer identity is derived exclusively from validated JWT sessions via `@CurrentUser('id')`.
+- **Strict Data Isolation (No IDOR):** Cross-customer address access and modifications are strictly rejected with HTTP 404 to prevent resource enumeration.
+- **Single Default Address Invariant:** Guaranteed via PostgreSQL `$transaction` operations. When a default address is deleted, the most recently updated remaining address is automatically promoted.
+- **Indian Market Validations:** Delivery contacts require 10-digit mobile numbers (`^[6-9]\d{9}$`) and 6-digit PIN codes (`^\d{6}$`).
+
+### Endpoints:
+
+| Method   | Endpoint                        | Access        | Description                                     |
+| -------- | ------------------------------- | ------------- | ----------------------------------------------- |
+| `GET`    | `/api/v1/users/me`              | Authenticated | Retrieve customer profile                       |
+| `PATCH`  | `/api/v1/users/me`              | Authenticated | Update name, avatar URL, and date of birth      |
+| `GET`    | `/api/v1/users/me/account`      | Authenticated | Retrieve account status and total addresses     |
+| `GET`    | `/api/v1/users/me/preferences`  | Authenticated | Retrieve notification and channel preferences   |
+| `PATCH`  | `/api/v1/users/me/preferences`  | Authenticated | Update notification channel preferences         |
+| `PATCH`  | `/api/v1/users/me/deactivate`   | Authenticated | Soft-deactivate customer account                |
+| `GET`    | `/api/v1/addresses`             | Authenticated | List customer saved addresses (default first)   |
+| `POST`   | `/api/v1/addresses`             | Authenticated | Add a new delivery address                      |
+| `GET`    | `/api/v1/addresses/:id`         | Authenticated | Retrieve single address (ownership verified)    |
+| `PATCH`  | `/api/v1/addresses/:id`         | Authenticated | Update delivery address                         |
+| `DELETE` | `/api/v1/addresses/:id`         | Authenticated | Delete address with automatic default promotion |
+| `PATCH`  | `/api/v1/addresses/:id/default` | Authenticated | Set address as customer default address         |

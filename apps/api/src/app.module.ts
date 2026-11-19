@@ -8,6 +8,8 @@ import { RedisModule } from './cache/redis.module';
 import { HealthModule } from './health/health.module';
 import { EmailModule } from './modules/email/email.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
+import { AddressesModule } from './modules/addresses/addresses.module';
 import { JwtAuthGuard, RolesGuard, PermissionsGuard } from './modules/auth/guards';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
@@ -27,6 +29,8 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     RedisModule,
     EmailModule,
     AuthModule,
+    UsersModule,
+    AddressesModule,
     HealthModule,
   ],
   providers: [

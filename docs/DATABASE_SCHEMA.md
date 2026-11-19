@@ -539,6 +539,13 @@ A customer can maintain multiple delivery addresses.
 
 Historical orders must retain address snapshots rather than depending exclusively on the current address record.
 
+### Business & Data Invariants (Phase 06)
+1. **At Most One Default Address:** At any point in time, a customer must have at most one address where `isDefault = true`.
+2. **First Address Policy:** The first address created by a customer is automatically designated as `isDefault = true`.
+3. **Atomic Replacement:** Designating an address as default atomically sets all other addresses for that customer to `isDefault = false` inside a PostgreSQL transaction.
+4. **Promotion Upon Deletion:** When a default address is deleted, the transaction automatically designates the most recently updated remaining address as `isDefault = true`.
+5. **Indexes:** `customer_addresses` is indexed on `userId` (for fast customer lookups) and `postalCode` (for hyperlocal serviceability checks).
+
 ---
 
 # 7. SELLER MODELS

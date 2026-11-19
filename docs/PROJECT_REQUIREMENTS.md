@@ -404,32 +404,33 @@ Requirements:
 
 Wishlist functionality must be linked to the authenticated customer.
 
-## 4.9 Customer Profile
+## 4.9 Customer Profile & Account Management (Phase 06)
 
 Customers must be able to:
 
-- View profile.
-- Update name.
-- Update email where permitted.
-- Update mobile number through verification.
-- Change password.
-- Manage saved addresses.
-- View order history.
-- View account status.
+- View personal profile (name, email, verification status, avatar, date of birth, member since).
+- Update name, avatar photo, and date of birth.
+- Prevent unauthorized modifications to sensitive security fields (roles, account status, email verification).
+- View account overview, status, creation date, and total saved addresses.
+- Manage communication and alert preferences across Email, SMS, Push, and Promotional channels.
+- Soft-deactivate their customer account with automatic revocation of active sessions.
+- Enjoy an intentional mobile-first experience (>90% mobile audience) with persistent bottom navigation.
+- Consistent customer-facing **Basket** terminology ("My Basket", "View Basket", "Your Basket is Empty").
 
-## 4.10 Address Management
+## 4.10 Address Management (Phase 06)
 
 Requirements:
 
-- Add delivery address.
-- Edit delivery address.
-- Delete address.
-- Set default address.
-- Save recipient name and phone.
-- Save complete address.
-- Save landmark.
-- Save PIN code.
-- Save latitude and longitude where available.
+- Add delivery address with category labels (`Home`, `Work`, `Other`).
+- Edit delivery address with pre-filled inputs.
+- Delete address with confirmation dialog.
+- Enforce single default address invariant per customer.
+- Automatically promote next available address to default if the default address is deleted.
+- Save recipient name and 10-digit Indian delivery contact phone (`^[6-9]\d{9}$`).
+- Save complete address lines, locality, and nearby landmark.
+- Validate 6-digit Indian PIN code (`^\d{6}$`).
+- Save latitude and longitude coordinates where available.
+- Strict customer data isolation: server-side ownership derivation prevents IDOR vulnerabilities (cross-customer queries return 404).
 
 The platform must validate whether the selected address is serviceable before checkout.
 

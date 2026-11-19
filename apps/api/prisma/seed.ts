@@ -9,19 +9,23 @@ import {
   CommissionType,
   DiscountType,
 } from '@prisma/client';
-import * as crypto from 'crypto';
+import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
-const hashPassword = (password: string): string => {
-  const salt = 'marvels_basket_dev_salt_2026';
-  return crypto.scryptSync(password, salt, 64).toString('hex');
+const hashPassword = async (password: string): Promise<string> => {
+  return argon2.hash(password, {
+    type: argon2.argon2id,
+    memoryCost: 65536,
+    timeCost: 3,
+    parallelism: 4,
+  });
 };
 
 async function main() {
   console.log('🌱 Starting Marvel’s Basket Development Database Seed...');
 
-  const devPasswordHash = hashPassword('MarvelDevPassword2026!');
+  const devPasswordHash = await hashPassword('MarvelDevPassword2026!');
 
   // ============================================================================
   // 1. Roles & Permissions
@@ -109,7 +113,7 @@ async function main() {
   // 2.1 Super Admin User
   const superAdminUser = await prisma.user.upsert({
     where: { email: 'admin@marvelsbasket.com' },
-    update: { status: UserStatus.ACTIVE },
+    update: { status: UserStatus.ACTIVE, passwordHash: devPasswordHash },
     create: {
       name: 'Marvel SuperAdmin',
       email: 'admin@marvelsbasket.com',
@@ -138,7 +142,7 @@ async function main() {
   // 2.2 Sample Customer
   const customerUser = await prisma.user.upsert({
     where: { email: 'customer.dev@marvelsbasket.com' },
-    update: { status: UserStatus.ACTIVE },
+    update: { status: UserStatus.ACTIVE, passwordHash: devPasswordHash },
     create: {
       name: 'Rohan Sharma',
       email: 'customer.dev@marvelsbasket.com',
@@ -201,7 +205,7 @@ async function main() {
   // 2.3 Store 1 Owner & Seller Entity
   const seller1User = await prisma.user.upsert({
     where: { email: 'seller1@marvelsbasket.com' },
-    update: { status: UserStatus.ACTIVE },
+    update: { status: UserStatus.ACTIVE, passwordHash: devPasswordHash },
     create: {
       name: 'Anand Verma',
       email: 'seller1@marvelsbasket.com',
@@ -297,7 +301,7 @@ async function main() {
   // 2.4 Store 2 Owner & Seller Entity (To demonstrate multi-store listings)
   const seller2User = await prisma.user.upsert({
     where: { email: 'seller2@marvelsbasket.com' },
-    update: { status: UserStatus.ACTIVE },
+    update: { status: UserStatus.ACTIVE, passwordHash: devPasswordHash },
     create: {
       name: 'Pooja Patel',
       email: 'seller2@marvelsbasket.com',
@@ -364,7 +368,7 @@ async function main() {
   // 2.5 Delivery Rider
   const riderUser = await prisma.user.upsert({
     where: { email: 'rider1@marvelsbasket.com' },
-    update: { status: UserStatus.ACTIVE },
+    update: { status: UserStatus.ACTIVE, passwordHash: devPasswordHash },
     create: {
       name: 'Vikram Singh',
       email: 'rider1@marvelsbasket.com',

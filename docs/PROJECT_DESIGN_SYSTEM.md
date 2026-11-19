@@ -1278,4 +1278,40 @@ The intended experience is:
 
 ---
 
+# 17. Phase 06 — Mobile-First Customer Navigation & Account Patterns
+
+### 17.1 Mobile-First Viewport Priority
+Marvel's Basket is targeted at an audience where more than 90% of user sessions occur on mobile smartphones. The UI architecture enforces an uncompromising mobile-first hierarchy:
+1. **Mobile Smartphones (Highest Priority):** Full-bleed responsive cards, touch targets with minimum dimensions of 44x44px, bottom sheets / modal dialogues rather than cramped multi-column forms, sticky navigation bars, and native safe area insets (`env(safe-area-inset-bottom)`).
+2. **Tablets (Second Priority):** Two-column card grids, comfortable touch targets, and balanced content containers.
+3. **Desktop (Third Priority):** 4-column responsive grid with a sticky account navigation sidebar (`lg:col-span-1`) and main content area (`lg:col-span-3`).
+
+### 17.2 Persistent Mobile Bottom Navigation
+- Component: `apps/web/src/components/layout/mobile-bottom-nav.tsx`
+- Visibility: Mobile only (`md:hidden`), sticky at viewport bottom with `z-40` elevation and subtle backdrop blur.
+- Destinations:
+  1. **Home (`/`):** Quick return to main storefront.
+  2. **Categories (`/categories`):** Explore grocery aisles.
+  3. **Basket (`/basket`):** Active shopping basket with dynamic item count badge.
+  4. **Addresses (`/addresses`):** Direct access to saved delivery addresses.
+  5. **Profile (`/profile`):** Customer profile, account preferences, and orders.
+- Active Indicator: Highlights active tab with primary brand green (`#00873D`, `stroke-[2.2]`, font-bold).
+- Safe Area Offset: Content wrappers incorporate `pb-16 md:pb-0` to eliminate content clipping behind the navigation bar.
+
+### 17.3 Basket Terminology Standard
+In accordance with brand identity and market conventions, all customer-facing touchpoints strictly utilize **Basket** rather than Cart:
+- Navigation: "Basket", "My Basket", "View Basket".
+- Empty State: "Your Basket is Empty".
+- Call to Action: "Explore Groceries", "Add to Basket".
+- Accessibility: `aria-label="Shopping basket with {n} items"`.
+
+### 17.4 Customer Profile & Address Design Components
+- **`ProfileHeader`:** Organic gradient brand accent bar, avatar with fallback uppercase initials, customer name, verified email status badge, and member since date.
+- **`ProfileForm`:** Clean card layout with name, avatar URL, date of birth, and non-editable protected identity blocks.
+- **`AccountSettingsCard`:** Granular switch toggles for notification channels (Email, Push, SMS, Promotions), security overview, session sign out, and account deactivation modal.
+- **`AddressCard`:** Badge category pills (`Home`, `Work`, `Other`), default address indicator, formatted recipient contact and address details, "Set as Default" button, edit action, and delete confirmation.
+- **`AddressFormModal`:** Accessible dialog/bottom sheet with category selector pills, Indian PIN code validation, 10-digit mobile number validation, and default address checkbox.
+
+---
+
 **Document End — PROJECT_DESIGN_SYSTEM.md**

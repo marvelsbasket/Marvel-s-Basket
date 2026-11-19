@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
 export interface DropdownMenuProps {
@@ -84,28 +85,42 @@ export function DropdownMenu({ trigger, children, align = 'left', className }: D
 export interface DropdownItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.ReactNode;
   destructive?: boolean;
+  href?: string;
 }
 
 export function DropdownItem({
   className,
   icon,
   destructive = false,
+  href,
   children,
+  onClick,
   ...props
 }: DropdownItemProps) {
+  const classes = cn(
+    'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors duration-100 text-left',
+    destructive
+      ? 'text-red-600 hover:bg-red-50 focus-visible:bg-red-50'
+      : 'text-ink hover:bg-surface focus-visible:bg-surface hover:text-brand',
+    className,
+  );
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        role="menuitem"
+        className={classes}
+        onClick={onClick as unknown as React.MouseEventHandler<HTMLAnchorElement>}
+      >
+        {icon && <span className="h-4 w-4 shrink-0 text-current">{icon}</span>}
+        <span className="truncate">{children}</span>
+      </Link>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      role="menuitem"
-      className={cn(
-        'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors duration-100 text-left',
-        destructive
-          ? 'text-red-600 hover:bg-red-50 focus-visible:bg-red-50'
-          : 'text-ink hover:bg-surface focus-visible:bg-surface hover:text-brand',
-        className,
-      )}
-      {...props}
-    >
+    <button type="button" role="menuitem" className={classes} onClick={onClick} {...props}>
       {icon && <span className="h-4 w-4 shrink-0 text-current">{icon}</span>}
       <span className="truncate">{children}</span>
     </button>

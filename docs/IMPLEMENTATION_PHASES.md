@@ -410,33 +410,39 @@ The Next.js frontend builds without errors (`npm run build:web`), passes strict 
 # 8. Phase 06 — User & Profile Management
 
 **Priority:** High  
-**Status:** Not Started
+**Status:** **Completed** (Verified on 19 November 2026)
 
 ### Objective
 
-Implement customer accounts and profile management.
+Implement customer accounts and profile management across backend APIs and mobile-first responsive frontend.
 
 ### Tasks
 
-- [ ] Build customer profile APIs.
-- [ ] Build profile update functionality.
-- [ ] Implement address management.
-- [ ] Implement account settings.
-- [ ] Implement account status handling.
-- [ ] Build customer profile screens.
-- [ ] Build address management screens.
-- [ ] Integrate frontend with backend.
-- [ ] Test customer data isolation.
+- [x] Build customer profile APIs (`GET /api/v1/users/me`, `PATCH /api/v1/users/me`, `GET /api/v1/users/me/account`, `GET/PATCH /api/v1/users/me/preferences`, `PATCH /api/v1/users/me/deactivate`).
+- [x] Build profile update functionality (name, avatar URL, date of birth; strict protection against role/email modification).
+- [x] Implement address management CRUD (`/api/v1/addresses` list, create, detail, update, delete, set default).
+- [x] Implement atomic single default address invariant and promotion upon deletion in PostgreSQL transactions.
+- [x] Implement account settings and channel preferences (email, SMS, push, promotional notifications).
+- [x] Implement account status handling and soft deactivation with active session revocation.
+- [x] Build mobile-first customer profile screens (`/profile`, `/profile/edit`, `/account`).
+- [x] Build mobile-first address management screens (`/addresses` list, add/edit modal, delete confirmation dialog).
+- [x] Implement persistent mobile bottom navigation bar (`md:hidden`) with 5 tabs.
+- [x] Standardize customer-facing Basket terminology throughout UI, navigation, and empty states.
+- [x] Integrate frontend with actual backend APIs via typed `ApiClient`.
+- [x] Test customer data isolation and IDOR prevention with dedicated E2E test suite (13 passing tests).
 
 ### Deliverables
 
-- Customer profile management.
-- Address management.
-- Account settings.
+- `apps/api/src/modules/users/` (Profile, account overview, preferences, and deactivation).
+- `apps/api/src/modules/addresses/` (Complete delivery address CRUD with default management).
+- `apps/api/test/customer-isolation.e2e-spec.ts` (13 E2E security & data-isolation tests).
+- `apps/web/src/features/profile/` & `apps/web/src/features/addresses/` (Frontend services and components).
+- `apps/web/src/app/(customer)/` (`layout.tsx`, `profile/page.tsx`, `profile/edit/page.tsx`, `addresses/page.tsx`, `account/page.tsx`).
+- `apps/web/src/app/basket/page.tsx` & `apps/web/src/components/layout/mobile-bottom-nav.tsx`.
 
 ### Completion Criteria
 
-Customers must be able to manage their own profiles and addresses securely.
+Customers are able to view and manage their own profiles, delivery addresses, and communication preferences securely with complete mobile-first responsiveness, strict data isolation, zero IDOR vulnerabilities, and 100% test passage.
 
 ---
 
