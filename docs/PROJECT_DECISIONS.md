@@ -582,6 +582,115 @@ Different applications and services require distinct environment variables, whil
 
 ---
 
+## ADR-023: URI-Based API Versioning & Route Prefixing
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Client applications (web storefront, seller portal, mobile apps) require predictable API contracts that can evolve over time without breaking backwards compatibility.
+
+### Decision
+Implement explicit URI versioning (`VersioningType.URI`) with a global prefix `api` and default version `1`, yielding all REST endpoints under `/api/v1/*`.
+
+### Consequences
+- Uniform endpoint structure across all controllers (e.g. `/api/v1/health`, `/api/v1/orders`).
+- Seamless migration path for future `v2` endpoints without disruptive breaking changes.
+- Swagger documentation cleanly groups versioned routes.
+
+---
+
+## ADR-024: Standardized API Response & Centralized Error Envelope
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Clients need consistent response shapes for both successful operations and error states. Inconsistent payload formats force clients to write brittle error-checking logic.
+
+### Decision
+1. Implement a global `TransformInterceptor` that wraps all successful controller responses in a standard `{ success: true, statusCode, message, data, meta?, timestamp, path, correlationId }` envelope.
+2. Implement an `@BypassTransform()` decorator to bypass wrapping when returning raw file streams or downloads.
+3. Implement a global `AllExceptionsFilter` that catches all exceptions (NestJS HttpExceptions, class-validator errors, Prisma client errors, and runtime failures), mapping them into a uniform `{ success: false, statusCode, code, message, errors?, timestamp, path, correlationId }` structure.
+
+### Consequences
+- Frontend and mobile clients consume a 100% predictable response contract.
+- Internal database details, SQL queries, and stack traces are suppressed in production.
+- Validation failures produce structured field-level error arrays (`[{ field, message }]`).
+
+---
+
+## ADR-025: Request Correlation Tracking & Structured Audit Logging
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+In distributed or high-throughput marketplace operations, diagnosing customer complaints or tracking order failures across logs requires end-to-end request traceability.
+
+### Decision
+Implement `CorrelationIdMiddleware` to extract or generate a UUID v4 correlation ID (`x-correlation-id`) on every incoming request. Set this header on the HTTP response, attach it to request context, and include it in all structured `LoggingInterceptor` log entries and error envelopes.
+
+### Consequences
+- Unambiguous correlation of client-reported errors to server logs.
+- Sensitive values (passwords, tokens, payment secrets) are strictly masked from logs.
+
+---
+
+## ADR-026: Typed Configuration & Strict Schema Validation
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Misconfigured environment variables (missing secrets, invalid ports, malformed database URLs) can cause silent failures or security vulnerabilities in production.
+
+### Decision
+Use NestJS `ConfigModule` coupled with a strict **Joi validation schema** and typed configuration factory (`RootConfig`). Validate all environment variables on application bootstrap and terminate startup with clear diagnostic errors if validation fails.
+
+### Consequences
+- Fail-fast guarantee: the backend will never run in a partially configured or unsafe state.
+- Enforced minimum secret lengths (e.g. `JWT_SECRET` >= 32 characters) and typed port numbers.
+
+---
+
+## ADR-027: Dual-Probe Health Check Architecture (Liveness & Readiness)
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Container orchestrators and uptime monitoring tools require distinct probes: one to check if the Node.js process is alive, and another to verify if the application is ready to accept user traffic.
+
+### Decision
+Implement two dedicated health probes under `/api/v1/health`:
+1. **Liveness (`/health/live`):** Verifies the process is responsive without querying dependencies.
+2. **Readiness (`/health/ready`):** Actively checks PostgreSQL via `prisma.$queryRaw` and Redis via `redis.ping()`. If either dependency is unavailable, returns HTTP 503 (`ServiceUnavailableException`) with component-level statuses.
+
+### Consequences
+- Container orchestrators can restart stalled processes without prematurely killing healthy instances during dependency initialization.
+- No sensitive database URLs or credentials are leaked in health responses.
+
+---
+
+## ADR-028: Global Infrastructure Encapsulation (Prisma & Redis Services)
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Direct, uncontrolled database or cache connections from controllers lead to connection leaks, lack of graceful shutdown, and scattered error handling.
+
+### Decision
+Encapsulate PostgreSQL in a `@Global()` `PrismaModule` (`PrismaService` extending `PrismaClient`) and Redis in a `@Global()` `RedisModule` (`RedisService` wrapping `ioredis`). Manage connection lifecycle via `onModuleInit` and graceful disconnection via `onModuleDestroy`. Controllers are strictly forbidden from direct database/cache access.
+
+### Consequences
+- Centralized connection pooling and lifecycle hooks.
+- Graceful shutdown handles in-flight transactions on `SIGTERM` / `SIGINT`.
+- Reusable, testable cache and database abstractions available across all future feature modules.
+
+---
+
 # Part C — Complete Decision Register Summary
 
 | ADR # | Decision Topic | Status | Category | Key Implementation Invariant |
@@ -608,6 +717,12 @@ Different applications and services require distinct environment variables, whil
 | **ADR-020** | Persistent Volumes & Reset Guard | **Accepted** | Infrastructure | Named volumes preserved on down; reset requires typed confirmation |
 | **ADR-021** | Shared Code Boundaries | **Accepted** | Architecture | `@marvels-basket/shared` holds domain enums & constants only |
 | **ADR-022** | Environment Config Strategy | **Accepted** | Configuration | Multi-tier `.env.example` templates; root `.env` orchestration |
+| **ADR-023** | URI API Versioning | **Accepted** | Backend Architecture | `/api/v1/*` routes using NestJS VersioningType.URI |
+| **ADR-024** | Standard API Response Envelope | **Accepted** | Backend Architecture | TransformInterceptor & AllExceptionsFilter contracts |
+| **ADR-025** | Request Correlation Tracking | **Accepted** | Observability | UUID v4 `x-correlation-id` in logs, headers, and responses |
+| **ADR-026** | Typed Configuration Validation | **Accepted** | Configuration | Joi schema validation with fail-fast bootstrap guarantee |
+| **ADR-027** | Dual-Probe Health System | **Accepted** | Monitoring | `/health/live` process probe & `/health/ready` DB/Redis probe |
+| **ADR-028** | Infrastructure Encapsulation | **Accepted** | Database/Cache | Global PrismaService and RedisService with lifecycle hooks |
 
 ---
 

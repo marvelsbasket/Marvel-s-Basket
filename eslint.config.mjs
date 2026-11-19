@@ -55,5 +55,24 @@ export default [
       'no-console': ['warn', { allow: ['warn', 'error', 'info', 'log'] }],
     },
   },
+  {
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts', '**/test/**/*.ts'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        jest: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
   prettierConfig,
 ];

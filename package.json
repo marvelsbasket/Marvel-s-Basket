@@ -23,6 +23,8 @@
     "format:check": "prettier --check .",
     "typecheck": "npm run typecheck --workspace=@marvels-basket/shared && npm run typecheck --workspace=@marvels-basket/api && npm run typecheck --workspace=@marvels-basket/web",
     "test": "npm run test --workspaces --if-present",
+    "test:api": "npm run test --workspace=@marvels-basket/api",
+    "test:api:e2e": "npm run test:e2e --workspace=@marvels-basket/api",
     "clean": "node scripts/development/clean.js",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run build",
     "docker:up": "node scripts/docker/manage.js up",

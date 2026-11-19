@@ -53,8 +53,8 @@ The following stack is selected as the initial project baseline.
 | ORM | Prisma |
 | Architecture | Monorepo |
 | Monorepo Structure | apps/web + apps/api |
-| Package Manager | pnpm |
-| Monorepo Build System | Turborepo |
+| Package Manager | npm |
+| Monorepo Build System | npm Workspaces |
 | API Documentation | Swagger / OpenAPI |
 | Authentication | JWT + Secure HTTP-only Cookies |
 | Validation | NestJS DTOs + class-validator |
@@ -736,6 +736,42 @@ For example:
 - Commissions calculate financial deductions based on approved transaction data.
 
 Module interactions should use clearly defined service interfaces and events where appropriate.
+
+## 5.5 Backend Foundation & Global Infrastructure Standards (Phase 02)
+
+### 1. Application Bootstrap & Routing
+- **Base Route Prefix:** `/api`
+- **URI Versioning:** `VersioningType.URI` with default version `1` producing `/api/v1/*`.
+- **Security:** Helmet HTTP security headers (CSP, HSTS, X-Content-Type-Options, Frameguard), express body limits (`10mb`).
+- **CORS:** Configurable allowed origins, strict HTTP methods (`GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS`), credentials enabled.
+- **Graceful Shutdown:** `enableShutdownHooks()` ensuring active database connections and Redis sockets close cleanly upon `SIGINT`/`SIGTERM`.
+
+### 2. Request Correlation & Observability
+- **Correlation ID Middleware:** Extracts incoming `x-correlation-id` or `x-request-id` header (sanitized via regex `^[a-zA-Z0-9_-]{8,64}$`) or generates a UUID v4. Sets response header and attaches to request context.
+- **Structured Request Logging:** `LoggingInterceptor` captures execution latency, HTTP method, URL, status code, and correlation ID. Sensitive parameters (passwords, tokens, payment secrets) are masked.
+
+### 3. API Response & Error Standards
+- **Standard Success Envelope (`TransformInterceptor`):**
+  Wraps controller returns in `{ success: true, statusCode, message, data, meta?, timestamp, path, correlationId }`. Supports `@ResponseMessage('Custom message')` and `@BypassTransform()` for streaming/raw payloads.
+- **Centralized Exception Handling (`AllExceptionsFilter`):**
+  Intercepts NestJS `HttpException`, class-validator `BadRequestException`, Prisma `PrismaClientKnownRequestError` (P2002, P2025, P2003), and unhandled runtime errors into `{ success: false, statusCode, code, message, errors?, timestamp, path, correlationId }`.
+
+### 4. Typed Configuration & Fail-Fast Validation
+- Coupled with **Joi validation schema** enforcing required environment variables (`DATABASE_URL`, `JWT_SECRET` min 32 chars, valid ports, enums).
+- Application halts bootstrap with explicit diagnostic errors if configuration is invalid.
+
+### 5. Database & Cache Services
+- **`PrismaService` (`@Global()` in `PrismaModule`):** Extends `PrismaClient` with `onModuleInit` connection lifecycle, `onModuleDestroy` disconnection, and `isHealthy()` raw SQL query probe.
+- **`RedisService` (`@Global()` in `RedisModule`):** Wraps `ioredis` with automatic exponential retry strategy, connection listeners, graceful `quit()`, and `ping()` health probe.
+
+### 6. Dual-Probe Health Monitoring System
+- `GET /api/v1/health`: Overall health summary, uptime, version, and memory usage.
+- `GET /api/v1/health/live`: Liveness probe for process supervisors.
+- `GET /api/v1/health/ready`: Readiness probe actively querying PostgreSQL (`SELECT 1`) and Redis (`PING`). Returns HTTP 200 when all healthy; throws HTTP 503 (`ServiceUnavailableException`) with component breakdown if degraded.
+
+### 7. OpenAPI / Swagger Documentation
+- Accessible at `/api/docs` (Swagger UI) and `/api/docs-json` (OpenAPI 3.0 specification).
+- Controlled by `SWAGGER_ENABLED` environment variable. Includes Bearer JWT auth definitions and tagged endpoints.
 
 ---
 

@@ -190,9 +190,13 @@ npm run dev:api
 
 - **Web Storefront:** `http://localhost:3000`
 - **Backend API:** `http://localhost:4000/api/v1`
-- **API Health Endpoint:** `http://localhost:4000/api/v1/health`
-- **PostgreSQL Database:** `localhost:5432` (`marvels_basket_dev`)
-- **Redis Cache:** `localhost:6379`
+- **API Health Summary:** `http://localhost:4000/api/v1/health`
+- **Liveness Probe:** `http://localhost:4000/api/v1/health/live`
+- **Readiness Probe:** `http://localhost:4000/api/v1/health/ready`
+- **Swagger Documentation:** `http://localhost:4000/api/docs`
+- **OpenAPI Specification:** `http://localhost:4000/api/docs-json`
+- **PostgreSQL Database:** `localhost:5433` (`marvels_basket_dev`)
+- **Redis Cache:** `localhost:6380`
 
 ---
 
@@ -214,6 +218,11 @@ npm run lint:fix
 
 # Run TypeScript compilation checks across all workspaces
 npm run typecheck
+
+# Run test suites
+npm run test
+npm run test:api
+npm run test:api:e2e
 
 # Build all packages and applications in topological order
 npm run build
