@@ -906,65 +906,68 @@ SellerProduct represents a seller's independent offer, price and inventory.
 
 This separation is essential for multi-vendor operations.
 
-## 6.6 Parent Order and Seller Order
+## 6.6 Single-Store Order Architecture
 
-A single customer checkout must support multiple sellers.
+In the MVP, every checkout and order is strictly single-store. A customer selects products from exactly one store at a time.
 
-Example:
+Structure:
 
 ```text
 Customer
-   |
-   v
-Parent Order
-   |
-   |--- Seller Order A
-   |       |--- Product 1
-   |       |--- Product 2
-   |
-   |--- Seller Order B
-   |       |--- Product 3
-   |
-   |--- Seller Order C
-           |--- Product 4
+   │
+   └── Cart (Single Store: Store A)
+         │
+         └── Checkout
+               │
+               └── Order (Store A)
+                     ├── OrderItem 1 (Basmati Rice - Price Snapshot)
+                     ├── OrderItem 2 (Milk 1L - Price Snapshot)
+                     ├── Payment (Razorpay / COD)
+                     └── Delivery (Platform-Managed Delivery)
 ```
 
-The parent order represents the overall customer transaction.
+The `Order` entity maps directly to that store (`sellerId`), customer, frozen delivery address snapshot, items (`OrderItem`), payment record, and platform-managed delivery record.
 
-Each seller order represents an independent fulfilment responsibility.
+This eliminates parent/child order orchestration bugs, atomic multi-order status aggregation overhead, and complex multi-seller split liabilities during the MVP launch. Multi-seller split orders are deferred to a post-MVP architecture if ever required.
 
 ---
 
 # 7. AUTHENTICATION AND AUTHORIZATION ARCHITECTURE
 
-## 7.1 Authentication Strategy
+## 7.1 Differentiated Authentication Strategy
 
-The platform will use JWT-based authentication with secure HTTP-only cookies.
+The platform implements differentiated authentication architectures based on user role and UX convenience:
 
-Initial authentication methods:
+1. **Customers & Delivery Partners: Mobile Phone Number + OTP**
+   - High-conversion, friction-free login without passwords.
+   - 6-digit numeric OTP delivered via SMS gateway (Fast2SMS / MSG91).
+   - OTP stored in Redis with 5-minute TTL (300 seconds).
+   - Rate limiting: max 5 requests/hour per phone, 60-second cooldown between requests.
+   - Brute-force protection: max 3 verification attempts per OTP; account locked for 15 minutes after 5 failed attempts.
+   - Auto-creates `CustomerProfile` on first verified login.
 
-- Email and password.
-- Google authentication, subject to integration approval.
-- Mobile verification where required by the approved policy.
+2. **Sellers & Administrators: Email + Password Authentication**
+   - Traditional credential authentication for desktop dashboard users.
+   - Passwords hashed using Argon2id (memory cost 64MB, 3 iterations, parallelism 1).
+   - Administrative login enforces role-level security with future MFA readiness.
 
-## 7.2 Token Strategy
+## 7.2 Token & Session Architecture
 
-Proposed approach:
+The API uses stateless JWT access tokens combined with stateful rotating refresh tokens:
 
 ### Access Token
+- Short-lived JWT (15 minutes).
+- Payload: `{ sub: userId, role: UserRoleType, sellerId?: string, sessionVersion: number }`.
+- Verified statelessly in NestJS `JwtAuthGuard` using public key / secret.
+- Delivered in `Authorization: Bearer <token>` or secure cookie.
 
-- Short-lived JWT.
-- Used for authenticated API requests.
-- Contains user identity and necessary authorization context.
-- Must not contain unnecessary sensitive information.
-
-### Refresh Token
-
-- Longer-lived.
-- Stored securely using HTTP-only cookies.
-- Stored in hashed form in the database.
-- Rotated during refresh.
-- Revocable on logout or security events.
+### Refresh Token & Session Management
+- Long-lived token (7 days).
+- Stored as a cryptographic SHA-256 hash in the database `Session` table.
+- Delivered exclusively via `HttpOnly`, `Secure`, `SameSite=Strict` cookies to mitigate XSS attacks.
+- **Refresh Token Rotation:** On every token refresh, the used refresh token is invalidated, and a new refresh token + access token pair is issued.
+- **Reuse Detection:** If an already-revoked refresh token hash is presented, the system immediately revokes all active sessions for that user (mitigating token theft).
+- Explicit logout destroys the session record in PostgreSQL and clears the cookie.
 
 ## 7.3 Cookie Security
 
@@ -1125,143 +1128,125 @@ Business logic must remain in NestJS.
 
 ---
 
-# 9. MULTI-VENDOR ORDER PROCESSING ARCHITECTURE
+# 9. SINGLE-STORE ORDER PROCESSING & CHECKOUT ARCHITECTURE
 
-This is one of the most critical parts of Marvel's Basket.
+Order processing and checkout are designed around a single-store transaction boundary.
 
 ## 9.1 Checkout Flow
 
 ```mermaid
 flowchart TD
-    A[Customer Checkout] --> B[Validate Cart]
-    B --> C[Validate Customer Address]
-    C --> D[Check Seller Availability]
-    D --> E[Validate Product Prices]
-    E --> F[Validate Inventory]
-    F --> G[Calculate Discounts and Charges]
-    G --> H[Create Order and Seller Orders]
-    H --> I[Reserve Inventory]
-    I --> J[Initiate Payment]
-    J --> K{Payment Result}
-    K -->|Success| L[Verify Payment]
-    K -->|Failure| M[Mark Payment Failed]
-    L --> N[Confirm Order]
-    N --> O[Notify Sellers]
-    M --> P[Release Inventory Reservation]
+    A[Customer Checkout] --> B[Validate Single-Store Cart]
+    B --> C[Validate Delivery Address & Store Radius]
+    C --> D[Check Store Operational Status & Hours]
+    D --> E[Validate Product Prices vs MRP]
+    E --> F[Check Inventory Availability]
+    F --> G[Calculate MOV, Platform Coupons & Delivery Fee]
+    G --> H[Create Atomic Inventory Reservation (15 min TTL)]
+    H --> I[Create Order (PENDING) & Payment Record]
+    I --> J{Payment Method}
+    J -->|Online: Razorpay| K[Create Razorpay Order]
+    J -->|COD| L[Validate COD Limits & Confirm Order]
+    K --> M[Customer Completes Payment]
+    M --> N[Cryptographic Signature / Webhook Verification]
+    N -->|Valid| O[Commit Stock Reservation & Mark Order CONFIRMED]
+    N -->|Invalid / Failed| P[Release Stock Reservation & Mark Order FAILED]
+    O --> Q[Notify Store to Begin Packing]
+    L --> Q
 ```
 
-The exact payment and order persistence sequence must be implemented with durable transaction records and idempotent processing.
+## 9.2 Atomic Inventory Reservation
 
-## 9.2 Inventory Reservation
+To prevent race conditions, overselling, or ghost locks:
+- Reservation occurs during the checkout transition (`Proceed to Payment`).
+- Execution uses an atomic PostgreSQL transaction with row-level locks (`SELECT FOR UPDATE`) or atomic conditional update:
+  ```sql
+  UPDATE "Inventory"
+  SET "availableQuantity" = "availableQuantity" - :qty,
+      "reservedQuantity" = "reservedQuantity" + :qty
+  WHERE "sellerProductId" = :id AND "availableQuantity" >= :qty;
+  ```
+- Creates a `StockReservation` record with `expiresAt = NOW() + INTERVAL '15 minutes'`.
+- A BullMQ delayed job schedules a sweep at `expiresAt`. If `status == 'ACTIVE'`, the worker automatically releases the reserved stock and marks the reservation `EXPIRED`.
+- On verified payment success, `StockReservation` is updated to `COMMITTED`, and `reservedQuantity` is permanently decremented.
 
-Inventory must not be oversold.
+## 9.3 Payment & Webhook Processing
 
-Recommended approach:
+- Backend calls Razorpay Orders API:
+  - Amount in paise (integer precision).
+  - Currency: `INR`.
+  - Receipt ID: internal `orderId`.
+- Response returns `razorpay_order_id` to client checkout modal.
+- Client completion returns `razorpay_payment_id` and `razorpay_signature`.
+- Server Verification:
+  - Backend verifies HMAC-SHA256 signature against `RAZORPAY_KEY_SECRET`.
+  - Upon valid signature, updates `Payment` to `SUCCESS` and `Order` to `CONFIRMED`.
+- Webhook Fail-Safe:
+  - Razorpay webhooks (`order.paid`, `payment.failed`, `refund.processed`) deliver asynchronous confirmation.
+  - Raw body signature checked against `RAZORPAY_WEBHOOK_SECRET`.
+  - Idempotency check against `PaymentWebhookEvent`: duplicate webhook events are logged and ignored with HTTP 200.
 
-- Validate stock during checkout.
-- Reserve stock transactionally.
-- Associate reservations with checkout/order records.
-- Expire abandoned reservations.
-- Convert reservations into committed stock deductions after successful payment.
-- Release reservations after payment failure or expiration.
+## 9.4 Store Fulfillment & Delivery Handoff
 
-Use appropriate database transactions and row-level locking or atomic conditional updates.
+1. Order Confirmed: Store receives audio/visual alert on seller dashboard.
+2. Order Packing: Store prepares goods, prints receipt, and clicks "Mark Packed".
+3. State Transition: Order moves to `PACKED` (`READY_FOR_PICKUP`).
+   - Customer self-service cancellation is locked.
+   - Dispatch event emitted to `DeliveryModule`.
+4. Platform Delivery Dispatch: System identifies available platform delivery partner and assigns delivery task.
+5. Store Handover: Delivery partner arrives, inspects package, verifies order number snapshot, and marks `PICKED_UP`. Order moves to `OUT_FOR_DELIVERY`.
 
-## 9.3 Payment Processing
+## 9.5 Store Fulfillment Exceptions
 
-The payment gateway must be integrated through the backend.
-
-The backend must:
-
-1. Calculate the payable amount.
-2. Create a payment record.
-3. Initiate the Razorpay payment order.
-4. Return the required checkout information.
-5. Verify payment signatures.
-6. Process verified webhooks.
-7. Prevent duplicate payment processing.
-8. Update order and payment status.
-
-Webhook processing must be idempotent and must verify the provider's signature against the raw request body.
-
-## 9.4 Seller Fulfilment
-
-After order confirmation:
-
-- Each seller receives their relevant seller order.
-- Sellers independently accept or reject eligible orders.
-- Sellers update preparation status.
-- Completed preparation triggers delivery allocation.
-- Delivery progress is tracked independently.
-- Parent order status is updated based on seller-order states.
-
-## 9.5 Partial Order Handling
-
-The architecture must support:
-
-- One seller accepting an order.
-- Another seller rejecting it.
-- Partial cancellation.
-- Partial delivery.
-- Partial refund.
-- Independent seller settlement calculations.
-
-The parent order must remain consistent throughout these operations.
+- Store Rejection: If merchant is unable to fulfill (e.g., unexpected physical inventory damage), store rejects order within acceptance SLA. Order moves to `REJECTED`, 100% full source refund is initiated, and stock reservations are released.
+- Out of Stock during Packing: If an item is missing, store flags item before packing. System offers customer:
+  1. Accept partial shipment (order total recalculated, partial source refund initiated).
+  2. Cancel entire order with full source refund.
+- Delivery Failure: If customer is unreachable, parcel returns to store (RTO). Store acknowledges return of items; customer service assesses redelivery or cancellation.
 
 ---
 
 # 10. PAYMENT AND FINANCIAL ARCHITECTURE
 
-## 10.1 Payment Provider
+## 10.1 Payment Provider & Modular Abstraction
 
-Initial provider: Razorpay.
+Initial provider: **Razorpay**  
+All payment interactions are abstracted behind an `IPaymentService` interface:
+```typescript
+export interface IPaymentService {
+  createPaymentOrder(order: Order): Promise<PaymentOrderResult>;
+  verifyPaymentSignature(payload: PaymentVerificationDto): Promise<boolean>;
+  verifyWebhookSignature(rawBody: Buffer, signature: string): Promise<boolean>;
+  initiateRefund(paymentId: string, amount: Decimal, reason: string): Promise<RefundResult>;
+}
+```
 
-Integration responsibilities:
+### Marketplace Settlement & Route Capabilities
+- **Important Constraint:** Do NOT assume Razorpay Route (automated split settlements) is active or available. Route requires separate merchant agreements, compliance scrutiny, and operational overhead.
+- **MVP Settlement Strategy:**
+  1. All customer online payments are captured centrally into Marvel's Basket primary business account via Razorpay standard gateway.
+  2. The backend financial module maintains an internal double-entry financial ledger (`SellerLedgerEntry`).
+  3. Seller earnings are calculated per delivered order after deducting category commission.
+  4. Payouts are aggregated into batch settlements (`SettlementBatch`) after a T+3 business day retention period.
+  5. Payout disbursement is executed via automated bank transfer (Razorpay Payouts API / NEFT / IMPS batch upload) once commercial arrangements are authorized.
 
-- Payment order creation.
-- Payment verification.
-- Webhook handling.
-- Refund initiation.
-- Refund status synchronization.
-- Transaction history.
+## 10.2 Financial Separation & Cost Allocation
 
-## 10.2 Financial Record Separation
+The financial engine cleanly isolates:
+1. `grossAmount`: Total item value at store selling price (`SUM(quantity * sellingPrice)`).
+2. `commissionAmount`: Platform earnings (`grossAmount * categoryCommissionRate`).
+3. `deliveryFee`: Paid by customer, allocated to delivery fleet / provider operations.
+4. `couponDiscount`: Platform-funded promotional discounts; does not reduce seller earnings.
+5. `storeDiscount`: Seller-funded difference between MRP and selling price.
+6. `refundDeductions`: Product quality returns debited 100% from seller ledger; transit damages absorbed by platform.
+7. `netSellerPayable`: `grossAmount - commissionAmount - refundDeductions`.
 
-The system must distinguish:
+## 10.3 Financial Ledger Integrity
 
-- Customer payment.
-- Seller gross earnings.
-- Platform commission.
-- Delivery charges.
-- Taxes.
-- Refunds.
-- Seller settlement.
-- Platform revenue.
-
-These values must not be treated as interchangeable.
-
-## 10.3 Financial Integrity
-
-- Use Decimal database types.
-- Never use JavaScript floating-point arithmetic for authoritative financial calculations.
-- Preserve original transaction records.
-- Record financial adjustments separately.
-- Maintain references to gateway transactions.
-- Make financial operations idempotent.
-- Audit manual adjustments.
-
-## 10.4 Settlement Architecture
-
-Seller settlements will initially be managed through an administrative workflow.
-
-Automated payout integration may be introduced after the business approves:
-
-- Settlement frequency.
-- Payout provider.
-- Commission policy.
-- Refund adjustments.
-- Tax handling.
-- Seller verification requirements.
+- Storage: All monetary amounts stored using PostgreSQL `DECIMAL(12, 2)` (never JavaScript `Number` or Float).
+- Immutability: Once an order reaches `DELIVERED`, financial records are posted as immutable `SellerLedgerEntry` rows.
+- Reconcilable: Every settlement batch links directly to discrete ledger entries via `SettlementItem`. Historical order changes cannot alter settled ledger entries.
+- Holds: Automated payout holds enforced for open customer disputes, unverified bank accounts, or negative ledger balances.
 
 ---
 
@@ -1557,21 +1542,27 @@ marvelsbasket.com/delivery
 
 The final domain names are subject to domain availability and client approval.
 
-## 16.2 Infrastructure Components
+## 16.2 Hosting & Infrastructure Evaluation
 
-| Component | Responsibility |
-|---|---|
-| Frontend Hosting | Next.js deployment |
-| Backend Hosting | NestJS deployment |
-| PostgreSQL Hosting | Production database |
-| Object Storage | Media and documents |
-| Redis | Optional caching and queues |
-| CDN | Static asset delivery |
-| DNS | Domain management |
-| Monitoring | Application health |
-| GitHub Actions | CI/CD |
+The platform will be deployed as a **Containerized Modular Monolith** inside a unified monorepo.
 
-The hosting provider is not finalized.
+### Deployment Options Evaluation
+
+| Provider / Setup | Reliability & SLA | Cost Efficiency | Database & Backups | Background Jobs & Redis | Production Assessment |
+|---|---|---|---|---|---|
+| **Render** (Recommended for MVP) | High (automated health checks, zero-downtime deploys) | High (predictable monthly compute tiers, low entry barrier) | Managed PostgreSQL with automated daily backups & point-in-time recovery | Managed Redis + Webhook background workers | **Strong Candidate for MVP:** Low operational overhead, native Docker support, easy secrets management, fast rollback. |
+| **AWS (ECS / RDS)** | Enterprise-grade (multi-AZ availability) | Moderate to High (higher minimum baseline costs, egress fees) | AWS RDS PostgreSQL with automated snapshots & read replicas | ElastiCache Redis | **Target for Scaled Stage:** Ideal when order volume exceeds 5,000/day and dedicated DevOps engineering is available. |
+| **Railway** | High for developer velocity | High for early testing | Managed PostgreSQL | Managed Redis | **Alternative for MVP:** Excellent staging and preview environment support. |
+
+### Containerization Strategy
+
+- Dockerfile for `apps/api` (Multi-stage build: base, dependencies, build, production runner).
+- Dockerfile for `apps/web` (Next.js standalone output mode with runner user).
+- `docker-compose.yml` for local development orchestrating:
+  - PostgreSQL 16
+  - Redis 7
+  - MinIO / Local storage emulator
+  - API & Web containers
 
 ## 16.3 Docker
 
@@ -1904,10 +1895,10 @@ The following decisions establish the initial architecture baseline.
 | ADR-009 | Use OpenAPI for API documentation. |
 | ADR-010 | Use role-based access control. |
 | ADR-011 | Use shared catalog products and seller-specific listings. |
-| ADR-012 | Separate parent orders from seller orders. |
-| ADR-013 | Use transactional inventory management. |
-| ADR-014 | Integrate Razorpay for payments. |
-| ADR-015 | Keep media outside the relational database. |
+| ADR-012 | Enforce Single-Seller / Single-Store Checkout and Order model (no parent/child split orders in MVP). |
+| ADR-013 | Use transactional inventory management and atomic 15-minute stock reservations. |
+| ADR-014 | Integrate Razorpay for payments behind modular interface (Route deferred). |
+| ADR-015 | Keep media outside the relational database with secure private storage for KYC. |
 | ADR-016 | Design backend APIs for future mobile applications. |
 | ADR-017 | Use Docker for environment consistency. |
 | ADR-018 | Use automated CI validation. |

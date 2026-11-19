@@ -43,24 +43,30 @@ The platform will initially be delivered as a responsive website with backend AP
 
 ## 1.3 Project Scope
 
-The current development scope includes:
+The MVP development scope includes:
 
-1. Customer Website.
-2. Multi-Vendor Seller Dashboard.
-3. Super Admin Dashboard.
-4. Delivery Partner Dashboard.
-5. NestJS REST API.
-6. PostgreSQL Database.
-7. Prisma ORM Integration.
-8. Payment Gateway Integration.
-9. Location-Based Seller Discovery.
-10. Multi-Vendor Order Management.
-11. Delivery Management.
-12. Testing and Quality Assurance.
-13. Production Deployment.
-14. Technical Documentation and Handover.
+1. Customer Website (Next.js responsive web application).
+2. Multi-Vendor Seller Dashboard (Store management, listings, inventory, and order fulfillment).
+3. Super Admin Dashboard (Platform governance, seller KYC approvals, catalog, commission, delivery rules, and audit logs).
+4. Delivery Partner Interface (Assigned delivery management, status updates, and proof of delivery).
+5. Modular Monolith NestJS REST API.
+6. PostgreSQL Database with Prisma ORM.
+7. Payment Gateway Integration (Razorpay for Cards, UPI, Net Banking + Cash on Delivery with configurable limits).
+8. Location-Based Store and Product Discovery.
+9. Single-Seller / Single-Store Cart and Checkout with atomic inventory reservation.
+10. Platform-Managed Delivery Operations with modular provider abstraction.
+11. Financial Management (Category-based commissions, seller ledgers, payout holds, and auditable settlement batches).
+12. Customer Complaints, Cancellation & Source Refund Workflows.
+13. Complete Automated Testing and Security Hardening.
+14. Containerized Production Deployment (Docker, GitHub Actions CI/CD).
+15. Technical Documentation and Handover.
 
-Native mobile applications are reserved for future development unless separately approved.
+Explicitly Out of Scope for MVP:
+- Multi-seller combined cart and checkout (parent orders with seller sub-orders).
+- Customer stored-value internal wallet or credit system.
+- Live GPS location streaming/tracking of delivery riders.
+- Automated instant marketplace split payouts (e.g. Razorpay Route before operational eligibility confirmation).
+- Native mobile applications (iOS/Android).
 
 ---
 
@@ -164,54 +170,52 @@ Delivery partners must only access information necessary for their assigned deli
 
 Module ID: AUTH
 
-## 3.1 Registration
+## 3.1 Authentication Strategy by Role
 
-The system must support customer registration.
+The platform implements differentiated, role-specific authentication strategies aligned with operational ergonomics and security requirements:
 
-Requirements:
+| Role | Primary Authentication Method | Credential Type | Verification Requirement |
+|---|---|---|---|
+| Customer | Phone Number + OTP | 6-digit numeric OTP | Verified SMS OTP (5 min expiry) |
+| Delivery Partner | Phone Number + OTP | 6-digit numeric OTP | Verified SMS OTP (5 min expiry) |
+| Seller | Business Email + Password | Argon2id Hash | Email verification + Admin Approval |
+| Admin / Super Admin | Email + Strong Password | Argon2id Hash | Role permission verification (MFA-ready) |
 
-- Registration using name, email and mobile number.
-- Secure password creation.
-- Email and/or mobile verification according to configured authentication policy.
-- Duplicate account prevention.
-- Terms and privacy policy acceptance.
-- Account activation after required verification.
-
-Seller registration must follow a separate onboarding workflow.
-
-## 3.2 Login
-
-The system must support:
-
-- Customer login.
-- Seller login.
-- Admin login.
-- Delivery partner login.
+## 3.2 Customer & Delivery Partner Phone OTP Workflow
 
 Requirements:
+- Request OTP with a valid 10-digit Indian mobile number (+91).
+- Automatic customer profile creation upon first successful OTP verification.
+- OTP expiry fixed at 5 minutes (300 seconds).
+- Resend cooldown: minimum 60 seconds before requesting a new OTP.
+- Maximum attempts: 3 incorrect OTP entries before invalidation.
+- Rate limiting / Abuse prevention:
+  - Maximum 5 OTP requests per phone number per hour.
+  - Maximum 10 OTP requests per IP address per hour.
+  - Temporary lock (15 minutes) upon 5 consecutive failed attempts.
+- Redis-backed ephemeral OTP cache with strict TTL and atomic verification.
 
-- Secure authentication.
-- Password verification.
-- Session/token management.
-- Account status validation.
-- Role-based redirection.
-- Secure logout.
-- Protection against brute-force attempts.
+## 3.3 Seller & Administrator Authentication Workflow
 
-## 3.3 Password Management
+Requirements:
+- Registration / Login with business email and strong password (minimum 8 characters, requiring uppercase, lowercase, number, and special character).
+- Password hashing using Argon2id with recommended memory and iteration cost parameters.
+- JWT Access Token (short-lived, 15 minutes) issued in authorization headers or secure cookies.
+- Refresh Token (long-lived, 7 days) stored hashed in the database and delivered via secure `HttpOnly`, `SameSite=Strict`, `Secure` cookies.
+- Refresh token rotation upon every refresh request: issuing a new refresh token and revoking the old token.
+- Reuse detection: If a revoked refresh token is presented, all sessions for that user must be invalidated immediately.
+- Explicit logout revokes the current session and refresh token in the database.
+- Password reset via cryptographically secure single-use token sent to verified email (15-minute expiry).
 
-- Forgot password.
-- Password reset through a verified channel.
-- Password change from account settings.
-- Password strength validation.
-- Secure password hashing.
-- Invalidation of relevant sessions after security-sensitive changes.
+## 3.4 Authorization & RBAC
 
-## 3.4 Authorization
+The system must implement strict backend Role-Based Access Control (RBAC):
 
-The system must implement Role-Based Access Control (RBAC).
-
-A user must not gain permissions by changing frontend URLs, request payloads or API parameters.
+- Available Roles: `CUSTOMER`, `SELLER`, `DELIVERY_PARTNER`, `ADMIN`, `SUPER_ADMIN`.
+- Authorization must be enforced exclusively by NestJS guards (`JwtAuthGuard`, `RolesGuard`) and policies on the server side.
+- Frontend route guards are purely user-experience aids and must never be relied upon for security.
+- Seller Isolation: Every query and mutation executed by a seller must filter strictly by the authenticated seller's verified `sellerId`.
+- Customer Isolation: Customers can only query or mutate orders, addresses, and profiles belonging to their own `userId`.
 
 All authorization checks must be performed on the backend.
 
@@ -357,40 +361,37 @@ Requirements:
 - View applicable discounts.
 - View estimated delivery charges.
 - View estimated total.
-- Validate inventory.
+- Validate inventory and stock limits.
 - Validate product status.
-- Validate seller availability.
+- Validate store operational availability.
 
-### Multi-Vendor Cart
+### Single-Store Cart Model (MVP)
 
-A single customer cart must support products from multiple sellers.
+A customer can add products from only **one store** to their cart at a time. Every order belongs to exactly one store.
 
-The cart must maintain seller-specific product groupings.
+Products from different stores must NOT be combined into one cart or checkout.
 
-Example:
-
-| Seller | Products | Amount |
-|---|---|---:|
-| Seller A | Rice, Milk | ₹350 |
-| Seller B | Fruits | ₹150 |
-| Seller C | Snacks | ₹100 |
-| Total | | ₹600 |
-
-The checkout process must create independent seller fulfilment records under one customer-facing order.
+#### Store-Switch Confirmation Rule
+If a customer already has items in their cart from Store A and attempts to add an item from Store B:
+1. The system must display a clear store-switch confirmation dialog:
+   > *"Replace cart items? Your cart contains items from **[Store A]**. Do you want to discard your existing cart and add items from **[Store B]**?"*
+2. If confirmed by the customer, the existing cart contents are cleared completely, and the new item from Store B is added.
+3. If dismissed or cancelled, the existing cart remains untouched and no new item is added.
 
 ### Cart Validation
 
 Before checkout:
 
-- Validate product availability.
-- Validate seller status.
-- Validate stock.
-- Recalculate current product prices.
-- Validate coupon eligibility.
-- Recalculate delivery charges.
-- Prevent checkout with invalid cart items.
+- Validate store operating hours and operational status (store must be open).
+- Validate product listing status (must be active and published).
+- Validate stock availability in the store's inventory.
+- Recalculate current store selling prices (never trust cached frontend prices).
+- Validate minimum order value (MOV) compliance.
+- Validate coupon eligibility against cart subtotal.
+- Calculate distance-based delivery charges.
+- Block checkout if any cart item is invalid, prompting the user with an actionable message.
 
-The customer must be informed when cart contents change.
+The customer must be notified immediately if any prices, stock, or charges have changed since cart addition.
 
 ## 4.8 Wishlist
 
@@ -463,115 +464,83 @@ Requirements:
 
 Module ID: SELLER
 
-## 5.1 Seller Registration
+## 5.1 Seller Registration & KYC Submission
 
-The system must allow individuals or businesses to apply as sellers.
+The platform supports admin-verified seller onboarding for independent grocery stores and supermarkets.
 
-Required information may include:
+Required registration information:
+- Business & Shop Name (Store trade name).
+- Owner Details (Full name, phone, email).
+- Physical Shop Address (Address line, landmark, city, state, postal PIN code, and geographic coordinates).
+- Permanent Account Number (PAN) of business / proprietor.
+- Goods and Services Tax Identification Number (GSTIN) where legally applicable (with threshold/exemption declaration where exempt).
+- Food Safety and Standards Authority of India (FSSAI) registration/license (mandatory for food and grocery sellers under Indian food safety regulations).
+- Bank Account Details for settlements (Bank name, account number, IFSC code, account holder name, and verification proof such as cancelled cheque or bank statement).
+- Supporting Business Documents (ID proof, address proof, trade license).
 
-- Owner name.
-- Business name.
-- Email.
-- Mobile number.
-- Shop address.
-- PIN code.
-- Business type.
-- Business registration information where applicable.
-- KYC documents.
-- Bank or payout details where required.
+Security & Compliance:
+- Document access and sensitive bank account details must be encrypted and restricted to authorized Super Admins.
+- Unapproved sellers must not publish product listings or accept customer orders.
 
-The final KYC document requirements are subject to client approval and applicable legal requirements.
+## 5.2 Seller Onboarding Lifecycle & Approval
 
-## 5.2 Seller Approval
+Seller onboarding must strictly enforce the following administrative state machine:
 
-Seller applications must support the following states:
+```text
+DRAFT ──> PENDING ──> UNDER_REVIEW ──┬──> APPROVED (Active) ──> SUSPENDED
+                                     └──> REJECTED
+```
 
-- Draft.
-- Submitted.
-- Under Review.
-- Approved.
-- Rejected.
-- Suspended.
+- `DRAFT`: Seller has registered and is completing their profile and document uploads.
+- `PENDING`: Seller has submitted application for admin review.
+- `UNDER_REVIEW`: Admin is actively evaluating KYC documents and verifying store details.
+- `APPROVED`: Admin has verified credentials and approved the seller; store is active and can publish listings.
+- `REJECTED`: Application rejected with mandatory administrative reason; seller may correct and resubmit.
+- `SUSPENDED`: Temporarily deactivated by Admin due to compliance, non-performance, or dispute issues. While suspended, listings are hidden and order placement is disabled.
 
-Requirements:
-
-- Admin can review applications.
-- Admin can approve applications.
-- Admin can reject applications with reasons.
-- Admin can request additional information.
-- Seller can view application status.
-- Seller receives status notifications.
-
-Only approved and active sellers may operate on the marketplace.
+Rules:
+- Super Admin possesses final approval authority.
+- Every state change, rejection reason, and approval action must be recorded in an immutable audit log.
 
 ## 5.3 Shop Management
 
 Sellers must be able to:
+- Manage store profile (shop banner, logo, display name, contact phone).
+- Configure weekly business hours (opening time, closing time per day, and a manual emergency "Store Closed" toggle).
+- Manage store delivery radius (e.g., 3–5 km) and serviceable PIN codes.
+- View real-time operational status (Open / Closed / Busy).
 
-- Create shop profile.
-- Update shop name.
-- Update shop description.
-- Upload shop logo.
-- Upload shop banner.
-- Manage contact details.
-- Manage shop address.
-- Configure operating hours.
-- Configure delivery availability.
-- Manage shop status.
+## 5.4 Hybrid Product Catalog Management
 
-Any sensitive business changes may require administrator approval.
-
-## 5.4 Product Management
-
-Sellers must be able to:
-
-- Create products.
-- Edit products.
-- Update descriptions.
-- Upload product images.
-- Select categories.
-- Configure product variants.
-- Set selling prices.
-- Set original prices.
-- Configure discounts where permitted.
-- Activate/deactivate listings.
-- View product status.
-
-Products must follow administrator-defined listing rules.
+The platform operates on an **Aggregator / Hybrid Marketplace Catalog Model**:
+- Master Catalog Authority: The platform maintains the central product catalog (standardized brand, name, category, description, high-res images, barcode/EAN, and standard attributes).
+- Store Listings: Approved sellers search the platform master catalog and create store-specific listings (`SellerProduct`).
+- Store Controls: Each store independently manages:
+  - Store Selling Price (Server-validated: MUST NOT exceed Maximum Retail Price - MRP).
+  - Discount from MRP.
+  - Initial and ongoing stock quantity.
+  - Listing status (Active / Inactive / Out of Stock).
+- New Product Requests: If an item is absent from the master catalog, sellers may submit a "Catalog Addition Request" to Super Admin with barcode, photos, and MRP. Once verified and approved by admin, it becomes part of the master catalog and available for all stores to list.
 
 ## 5.5 Inventory Management
 
 Requirements:
+- Store-specific inventory ledger tracking `availableQuantity` and `reservedQuantity`.
+- Transaction-safe inventory reservation upon checkout initiation (10–15 min TTL).
+- Real-time stock decrement upon confirmed payment.
+- Automatic reservation release upon checkout failure or TTL expiry.
+- Manual inventory adjustments (stock additions, damages, returns) recorded in `InventoryTransaction` ledger.
+- Strict constraint: Available stock must never become negative.
 
-- Add stock.
-- Remove stock.
-- Update available quantity.
-- View current stock.
-- View low-stock products.
-- View out-of-stock products.
-- Maintain inventory history.
-- Record stock adjustments.
-- Prevent negative inventory.
+## 5.6 Store Order Fulfillment
 
-Inventory must be seller-specific.
-
-A product sold by multiple sellers must maintain independent stock records for each seller listing.
-
-## 5.6 Seller Order Management
-
-Requirements:
-
-- View new orders.
-- View order details.
-- Accept orders.
-- Reject eligible orders.
-- Update preparation status.
-- Mark orders ready for pickup.
-- View completed orders.
-- View cancelled orders.
-- View order history.
-
-Seller order status changes must follow an approved state-transition workflow.
+Sellers receive orders placed exclusively with their store.
+Fulfillment steps:
+1. Receive incoming order alert (`PENDING` / `CONFIRMED`).
+2. Accept order within configured SLA (e.g. 5 minutes).
+3. Pack order items, generate packing slip / invoice snapshot.
+4. Mark order `PACKED` (`READY_FOR_PICKUP`). This locks the order against customer cancellation and triggers delivery partner dispatch.
+5. Hand over packed parcel to the assigned delivery partner and verify rider handover.
 
 ## 5.7 Seller Reports
 
@@ -769,75 +738,60 @@ The system must prevent unauthorized privilege escalation.
 
 ---
 
-# 7. DELIVERY PARTNER REQUIREMENTS
+# 7. DELIVERY MANAGEMENT REQUIREMENTS
 
 Module ID: DELIVERY
 
-## 7.1 Registration and Verification
+## 7.1 Delivery Model: Platform-Managed Delivery
+
+The platform operates on a **Platform-Managed Delivery Model**:
+- The platform retains full responsibility for delivery partner onboarding, order assignment, tracking, and customer communication.
+- The delivery architecture must be designed behind a modular provider abstraction (`IDeliveryProvider` / `DeliveryService`) so that the platform can dispatch orders to either:
+  1. Internal platform delivery partners (in-house rider fleet managed via the Delivery Partner interface).
+  2. External 3PL hyperlocal delivery providers (e.g., Porter, Shadowfax) in future operational phases without refactoring core order logic.
+- Live GPS streaming tracking is explicitly deferred from the MVP; the system tracks key milestone transitions with timestamps, rider name/phone, and status notes.
+
+## 7.2 Delivery Partner Registration & Verification
 
 Requirements:
+- Partner registration via Phone Number + OTP.
+- Identity & Verification documents (Aadhaar / Driving License, vehicle registration / RC).
+- Admin approval required before receiving delivery assignments.
+- Availability toggle (Online / Offline) in the partner interface.
 
-- Delivery partner registration.
-- Personal details.
-- Contact information.
-- Address.
-- Verification documents.
-- Vehicle information where required.
-- Approval workflow.
+## 7.3 Delivery Assignment & Dispatch Lifecycle
 
-## 7.2 Delivery Assignment
+When an order is marked `PACKED` by the store, the system automatically creates a `Delivery` record and initiates assignment:
 
-The system must support:
+```text
+PENDING_ASSIGNMENT ──> ASSIGNED ──> ACCEPTED ──> PICKED_UP ──> IN_TRANSIT ──┬──> DELIVERED
+                            │            │                                   └──> FAILED (RTO)
+                            └──REJECTED──┘
+```
 
-- Assigning delivery tasks.
-- Viewing assigned orders.
-- Accepting assignments.
-- Rejecting eligible assignments.
-- Reassigning delivery tasks.
-- Monitoring assignment status.
+1. **Auto-Assignment:** System identifies nearby active, online delivery partners within the store's zone.
+2. **Acceptance Window:** Partner has a configurable window (e.g. 60–90 seconds) to accept the assignment.
+3. **Reassignment:** If rejected or timed out, the system reassigns to the next available partner. If no partners are available, alert is escalated to Super Admin dispatch dashboard.
+4. **Pickup:** Delivery partner arrives at store, inspects parcel, verifies order number snapshot, and marks `PICKED_UP`.
+5. **In Transit:** Partner navigates to customer address. Order status reflects `OUT_FOR_DELIVERY`.
+6. **Delivery Confirmation:** Partner delivers to customer. For COD orders, partner collects exact cash, enters amount collected, and completes delivery with customer confirmation (e.g., Delivery OTP).
+7. **Failed Delivery:** If customer is unreachable, address is incorrect, or customer refuses delivery, partner records failure with reason and photo proof. Order moves to `DELIVERY_FAILED`, package is returned to store (RTO), and inventory is reconciled.
 
-The assignment model must support configurable manual or automated allocation.
-
-## 7.3 Delivery Workflow
-
-Initial proposed workflow:
-
-1. Order confirmed.
-2. Seller accepts order.
-3. Seller prepares order.
-4. Order becomes ready for pickup.
-5. Delivery partner is assigned.
-6. Delivery partner accepts assignment.
-7. Delivery partner collects order.
-8. Order is marked out for delivery.
-9. Order is delivered.
-10. Delivery is completed.
-
-The exact state transitions and exceptions must be defined in the technical architecture.
-
-## 7.4 Delivery Tracking
+## 7.4 Milestone Tracking & Notifications
 
 Requirements:
+- Real-time order tracking displays milestone progress to customer:
+  - `Order Placed` -> `Store Preparing` -> `Packed & Ready` -> `Out for Delivery` (with Rider name & contact) -> `Delivered`.
+- In-app and SMS status notifications triggered at each milestone.
+- Proof of Delivery: Delivery timestamp, recipient confirmation, and optional delivery OTP.
 
-- Track delivery status.
-- Display status updates to customers.
-- Display assigned delivery partner information where appropriate.
-- Record pickup time.
-- Record delivery completion time.
-- Record delivery confirmation.
+## 7.5 Delivery Partner History & Payout Records
 
-Real-time GPS tracking is a proposed enhancement and requires separate infrastructure and operational approval.
-
-## 7.5 Delivery History and Earnings
-
-Delivery partners must be able to:
-
-- View completed deliveries.
-- View cancelled assignments.
-- View delivery history.
-- View earnings.
-- View applicable incentives.
-- View payment or settlement status.
+Delivery partners can view:
+- Completed deliveries and trip summaries.
+- Daily and weekly delivery earnings (fixed per-order payout + distance incentive).
+- Cash collected on COD orders and required reconciliation balance with platform.
+- Settlement status.
 
 ---
 
@@ -914,74 +868,51 @@ The system must remain configurable as delivery operations expand.
 
 ---
 
-# 10. MULTI-VENDOR CART AND CHECKOUT
+# 10. SINGLE-STORE CART AND CHECKOUT
 
 Module ID: CHECKOUT
 
-## 10.1 Cart Structure
+## 10.1 Cart Structure & Single-Store Enforcement
 
-A customer cart may contain items from multiple sellers.
+In accordance with the finalized MVP baseline, Marvel's Basket strictly implements **Single-Seller / Single-Store Cart and Checkout**:
 
-Each item must be associated with:
+- A customer cart belongs to a single authenticated customer and is bound to a single store (`sellerId`).
+- All items in the cart must belong to the active store's listings (`SellerProduct`).
+- Items from different stores cannot be combined into one cart or checkout.
+- If a customer attempts to add an item from Store B while their cart contains items from Store A, the UI presents a mandatory confirmation modal explaining that the existing cart will be cleared.
+- Upon confirmation, the cart is purged and the new store's item is added.
 
-- Product.
-- Seller listing.
-- Seller.
-- Selected variant.
-- Quantity.
-- Current price.
+## 10.2 Server-Side Checkout Validation
 
-## 10.2 Checkout Validation
+When the customer initiates checkout, the backend must execute an atomic validation pipeline:
+1. Customer Authentication: Verify authenticated customer session.
+2. Store Operational Status: Verify the selected store is currently `APPROVED`, active, open for business, and within daily operating hours.
+3. Delivery Serviceability: Verify customer delivery address coordinates and postal PIN code fall within the store's configured delivery radius and service zone.
+4. Product & Pricing Validation:
+   - Verify all products in the cart are active and not archived.
+   - Recalculate prices from the database. Frontend-provided prices must never be accepted.
+   - Enforce that store selling price does not exceed product MRP.
+5. Inventory Availability: Check that each item's requested quantity is less than or equal to current `availableQuantity`.
+6. Minimum Order Value (MOV): Verify cart subtotal satisfies the store's or platform's configured MOV.
+7. Promotional Validation: Verify coupon code validity, usage limits, minimum spend, and calculate platform-funded discount.
+8. Delivery Fee Calculation: Calculate distance-tiered delivery fee based on store-to-customer distance.
 
-Before order creation, the backend must validate:
+## 10.3 Atomic Inventory Reservation
 
-- Customer authentication.
-- Address validity.
-- Address serviceability.
-- Seller status.
-- Seller operating availability.
-- Product status.
-- Inventory.
-- Price.
-- Discounts.
-- Coupon eligibility.
-- Delivery charges.
-- Final payable amount.
+To prevent race conditions and overselling:
+- When the customer clicks "Proceed to Payment", the backend executes an atomic database transaction that decrements `availableQuantity` and increments `reservedQuantity` in the store's inventory.
+- A `StockReservation` record is created with an explicit Time-To-Live (TTL) of 10–15 minutes.
+- If payment succeeds, the reservation is marked `COMMITTED` and stock is permanently deducted.
+- If payment fails, is aborted, or the TTL expires, a scheduled BullMQ background worker marks the reservation `RELEASED` and restores the inventory.
 
-## 10.3 Order Creation
+## 10.4 Order Creation & Immutability
 
-A successful checkout must create:
-
-- One parent customer order.
-- One or more seller-specific orders.
-- Corresponding order items.
-- Appropriate payment records.
-- Inventory reservation or deduction records.
-- Delivery records where applicable.
-
-## 10.4 Pricing
-
-The final order amount may contain:
-
-- Product subtotal.
-- Product discounts.
-- Coupon discount.
-- Delivery charges.
-- Applicable platform fees.
-- Applicable taxes.
-- Other approved charges.
-
-Every charge must be clearly communicated before payment.
-
-## 10.5 Atomicity
-
-Order creation and inventory reservation must be designed to avoid partial or inconsistent transactions.
-
-Concurrent checkouts must not cause overselling.
-
-Payment processing must be idempotent.
-
-The system must handle failed payments without creating incorrectly confirmed orders.
+Upon successful checkout validation, a single `Order` record is created directly for the store:
+- Associated with `customerId`, `sellerId`, and `storeId`.
+- Preserves an immutable JSON snapshot of the delivery address.
+- Creates `OrderItem` records containing immutable snapshots of product name, variant, SKU, unit price, MRP, quantity, and item total.
+- Records subtotal, delivery fee, coupon discount, tax, and final payable amount.
+- Multi-seller parent/sub-orders are explicitly excluded from the MVP.
 
 ---
 
@@ -989,79 +920,60 @@ The system must handle failed payments without creating incorrectly confirmed or
 
 Module ID: ORDER
 
-## 11.1 Parent Order
+## 11.1 Single-Store Order Structure
 
-The parent order represents the customer's complete shopping transaction.
+Every order placed on Marvel's Basket belongs to exactly one store:
 
-It must maintain:
+| Field | Description |
+|---|---|
+| `orderNumber` | Human-readable unique identifier (e.g., `MB-2026-XXXXX`) |
+| `customerId` | References the ordering customer |
+| `sellerId` | References the fulfilling store / seller |
+| `addressSnapshot` | Frozen recipient name, phone, address, coordinates, and delivery instructions |
+| `subtotal` | Sum of item totals at store selling price |
+| `deliveryFee` | Calculated platform-managed delivery charge |
+| `discountAmount` | Applied promotional discount |
+| `totalAmount` | Final payable total (`subtotal + deliveryFee - discountAmount`) |
+| `status` | Current operational order status |
+| `paymentStatus` | Current financial transaction status |
+| `deliveryStatus` | Current dispatch and delivery progress status |
 
-- Order ID.
-- Customer ID.
-- Delivery address snapshot.
-- Order amount.
-- Payment status.
-- Overall order status.
-- Creation timestamp.
-- Associated seller orders.
+## 11.2 Order Lifecycle & State Machine
 
-## 11.2 Seller Order
+The order lifecycle strictly separates operational fulfillment from payment and delivery:
 
-Each seller order represents a seller's independent fulfilment responsibility.
+```text
+PENDING ──> CONFIRMED ──> PACKED ──> OUT_FOR_DELIVERY ──> DELIVERED
+   │            │           │                                  │
+   ├──FAILED    └──CANCELLED└──(Admin only)                    └──RETURN_REQUESTED
+   └──REJECTED                                                        │
+                                                                      ├──COMPLAINT_APPROVED (Refund)
+                                                                      └──COMPLAINT_REJECTED
+```
 
-It must maintain:
+- `PENDING`: Order created, awaiting online payment confirmation or COD verification.
+- `CONFIRMED`: Payment verified or COD confirmed. Store receives new order alert.
+- `PACKED` (`READY_FOR_PICKUP`): Store has prepared and packed the parcel. Order is locked against customer cancellation. Delivery partner assignment begins.
+- `OUT_FOR_DELIVERY`: Delivery partner has collected the order and is en route.
+- `DELIVERED`: Parcel delivered to customer, confirmed by OTP or rider confirmation.
+- `CANCELLED`: Order cancelled by customer (pre-packing) or admin.
+- `REJECTED`: Store rejected order within acceptance window (e.g. unexpected stock damage). Triggers auto-refund.
+- `FAILED`: Payment failed or checkout expired.
 
-- Seller order ID.
-- Parent order reference.
-- Seller reference.
-- Order items.
-- Seller-specific amount.
-- Fulfilment status.
-- Delivery information.
-- Cancellation information.
+## 11.3 Cancellation Policy by Order State
 
-## 11.3 Order Statuses
+Permissions and rules governing order cancellation:
+- Pre-Packing (`PENDING`, `CONFIRMED`): Customer has unconditional free cancellation rights directly from the web interface. Full source refund is initiated immediately for online payments; reserved stock is released.
+- Post-Packing (`PACKED`): Customer self-service cancellation is disabled. Store has expended labor and packing materials. Cancellation requires contacting customer support; permitted only under exceptional circumstances.
+- In Transit (`OUT_FOR_DELIVERY`): Cancellation is strictly prohibited. Customer must accept delivery or raise a delivery dispute.
+- Store Cancellation / Rejection: Permitted only before packing with a mandatory reason. Triggers immediate customer notification, full refund, and administrative monitoring for merchant non-performance.
 
-Proposed seller order statuses:
+## 11.4 Customer Complaints & Return Windows
 
-- PENDING.
-- ACCEPTED.
-- REJECTED.
-- PROCESSING.
-- READY_FOR_PICKUP.
-- PICKED_UP.
-- OUT_FOR_DELIVERY.
-- DELIVERED.
-- CANCELLED.
-
-Additional exception statuses may be introduced where required.
-
-## 11.4 Parent Order Status
-
-The parent order status must be derived or maintained consistently from its associated seller orders.
-
-It must support:
-
-- Pending.
-- Confirmed.
-- Partially fulfilled.
-- Partially delivered.
-- Completed.
-- Partially cancelled.
-- Cancelled.
-
-## 11.5 Cancellation
-
-Requirements:
-
-- Customer cancellation within configured eligibility rules.
-- Seller rejection where permitted.
-- Admin cancellation.
-- Cancellation reason.
-- Inventory restoration where applicable.
-- Payment refund initiation where applicable.
-- Order cancellation history.
-
-Cancellation of one seller order must not automatically cancel all other seller orders unless the business rules require it.
+Grocery products cannot support traditional non-food e-commerce returns. The platform implements a structured complaint and refund workflow:
+- Perishable Items (Fruits, Vegetables, Dairy, Bakery): Complaints (damaged, spoiled, missing) must be lodged within 3–4 hours of delivery with mandatory clear photo evidence.
+- Packaged Non-Perishables (Staples, Canned goods, Personal care): Complaints (expired, damaged seal, wrong item) must be lodged within 24–48 hours of delivery with photo evidence.
+- Resolution: Admins evaluate evidence and issue full or partial source refunds. No reverse physical pickup is conducted for perishable items.
 
 ---
 
@@ -1069,123 +981,87 @@ Cancellation of one seller order must not automatically cancel all other seller 
 
 Module ID: PAYMENT
 
-## 12.1 Payment Gateway
+## 12.1 Supported Payment Methods
 
-Initial proposed gateway: Razorpay.
+The platform supports the following payment methods:
+- Unified Payments Interface (UPI): Instant mobile payment via Google Pay, PhonePe, Paytm, BHIM, and UPI Intent.
+- Debit & Credit Cards: Visa, MasterCard, RuPay, and American Express.
+- Net Banking: Major Indian retail and corporate banking institutions.
+- Cash on Delivery (COD): Available subject to strict configurable risk rules.
 
-Supported payment methods:
+## 12.2 Payment Gateway Provider: Razorpay
 
-- UPI.
-- Debit Card.
-- Credit Card.
-- Net Banking.
-- Cash on Delivery, where enabled.
+Razorpay is evaluated and selected as the primary payment gateway provider behind a modular interface (`IPaymentService`):
+- Features utilized: Razorpay Orders API, Payment Verification, Webhook Notifications, and Refunds API.
+- Modular Provider Abstraction: Payment gateway logic must reside strictly behind an interface so another provider (e.g. Cashfree, PhonePe PG) can be integrated without modifying order business logic.
+- Commercial & Route Dependencies:
+  - Do NOT assume Razorpay Route (marketplace split settlement) is automatically available, eligible, or active.
+  - Razorpay standard gateway will collect payments centrally into Marvel's Basket nodal/escrow account.
+  - Seller payouts will be calculated internally and disbursed through standard bank payout mechanisms / batch transfers until Route compliance is formally contracted.
 
-## 12.2 Payment Workflow
+## 12.3 Payment Workflow & Verification Security
 
-1. Customer confirms checkout.
-2. Backend calculates the final payable amount.
-3. Backend creates the payment transaction.
-4. Customer completes payment.
-5. Payment gateway returns payment information.
-6. Backend verifies payment.
-7. Verified webhook or server-side verification confirms the result.
-8. Order payment status is updated.
-9. Customer receives confirmation.
+1. Customer reaches checkout and confirms the order amount.
+2. Backend creates an internal `Payment` record and requests a `razorpay_order_id` via the Razorpay Orders API with the exact atomic amount.
+3. Customer completes the transaction in the Razorpay checkout modal.
+4. **Strict Security Rule:** An online payment must NEVER be marked as successful based on a frontend client response alone.
+5. Server Verification: Backend verifies the cryptographic HMAC-SHA256 signature (`razorpay_order_id` + `|` + `razorpay_payment_id` against `RAZORPAY_KEY_SECRET`).
+6. Webhook Idempotency: Verified Razorpay webhooks (`order.paid`, `payment.failed`, `refund.processed`) are verified against the raw request body using `RAZORPAY_WEBHOOK_SECRET`. Webhook event IDs are stored in `PaymentWebhookEvent` to guarantee idempotent processing and prevent duplicate ledger updates.
+7. Separation of Concerns: `PaymentStatus` and `OrderStatus` remain strictly decoupled.
 
-The frontend must never be trusted as the sole source of payment confirmation.
+## 12.4 Cash on Delivery (COD) Governance
 
-## 12.3 Payment Statuses
+COD carries inherent cash handling and Return-To-Origin (RTO) risks:
+- Configurable Order Limits: Maximum order value capped (proposed baseline: ₹1,500; configurable in admin settings). Minimum order value applies.
+- Location Eligibility: COD can be disabled for specific high-risk PIN codes.
+- Customer Eligibility: Customers with 2 or more consecutive RTO/refused deliveries will have COD automatically disabled.
+- Cash Collection: Delivery partner collects cash upon delivery, records collected amount in the delivery partner interface, and platform reconciles cash collection against rider account balances.
 
-Proposed statuses:
+## 12.5 Refund Processing & Policies
 
-- PENDING.
-- PROCESSING.
-- SUCCESS.
-- FAILED.
-- CANCELLED.
-- REFUND_PENDING.
-- PARTIALLY_REFUNDED.
-- REFUNDED.
-
-## 12.4 Cash on Delivery
-
-COD must support:
-
-- Configurable availability.
-- COD eligibility validation.
-- Order confirmation.
-- Collection status.
-- Cash collection records.
-- Reconciliation records.
-
-## 12.5 Refund Management
-
-The platform must support:
-
-- Full refunds.
-- Partial refunds.
-- Refund reasons.
-- Refund status.
-- Refund transaction references.
-- Refund history.
-- Administrative authorization.
-
-The actual refund execution must be integrated with the payment provider.
+- Source Refunds: Refunds for online payments are issued directly to the original payment source (bank account / UPI / card via Razorpay Refunds API).
+- Processing Window: 5–7 business days depending on customer's issuing bank.
+- Partial Refunds: Fully supported (e.g., when 1 of 5 items is damaged or out of stock).
+- COD Refunds: For approved COD complaints, refunds are issued via direct bank transfer / UPI payout upon admin authorization.
+- Customer Wallet: Stored-value internal wallet/credit is explicitly excluded from the MVP.
 
 ---
 
-# 13. COMMISSION AND SETTLEMENT REQUIREMENTS
+# 13. COMMISSION AND FINANCIAL SETTLEMENT REQUIREMENTS
 
 Module ID: FINANCE
 
-## 13.1 Commission Calculation
+## 13.1 Commission Architecture
 
-The system must calculate platform commission according to approved business rules.
+The platform operates on a **Category-Based Commission Model**:
+- Commission percentages are configurable by product category in Super Admin settings (proposed baseline range: 10%–18%).
+- Commission percentages must NEVER be hardcoded in application logic.
+- Commission Calculation Base: Commission is calculated strictly on the net store item selling price (`quantity * sellingPrice`) of delivered items. Delivery fees and regulatory taxes do not form part of the commission base.
 
-Commission may be based on:
+## 13.2 Financial Allocation & Responsibility Matrix
 
-- Order item value.
-- Seller-specific commission.
-- Category-specific commission.
-- Approved promotional arrangements.
+To maintain financial integrity and clear auditability, cost responsibilities are explicitly defined:
 
-The commission base, tax treatment and discount allocation must be finalized before financial implementation.
+| Financial Element | Bearer / Allocation Rule |
+|---|---|
+| Platform Commission | Deducted by Marvel's Basket from seller gross sales |
+| Payment Gateway Fees (~2%) | Borne by platform operations (absorbed from commission) |
+| Platform Coupon Discounts | Funded 100% by Marvel's Basket; seller receives full item selling price |
+| Store-Level Discounts (< MRP) | Funded 100% by the seller (reflected in lower item price) |
+| Delivery Charges | Paid by customer to fund platform delivery fleet operations |
+| Merchant Product Quality Refunds | Deducted 100% from seller earnings |
+| Transit Damage / RTO Loss | Borne by platform operations / delivery provider |
 
-## 13.2 Seller Earnings
+## 13.3 Settlement Cycle & Payout Workflow
 
-Seller financial records must distinguish:
-
-- Gross product sales.
-- Discounts.
-- Platform commission.
-- Refund deductions.
-- Other approved deductions.
-- Net seller earnings.
-
-## 13.3 Settlements
-
-The platform must maintain:
-
-- Settlement records.
-- Seller references.
-- Settlement period.
-- Gross amount.
-- Deductions.
-- Net amount.
-- Payout reference.
-- Settlement status.
-- Settlement history.
-
-Proposed settlement statuses:
-
-- PENDING.
-- PROCESSING.
-- PAID.
-- FAILED.
-- ON_HOLD.
-
-## 13.4 Financial Integrity
+- Proposed Settlement Cycle: T+3 business days following verified order delivery (`DELIVERED` status).
+- The settlement cycle must remain configurable in platform settings.
+- Payout Holds: Order earnings are placed on hold if:
+  1. An open customer complaint or dispute is active on the order.
+  2. The seller's bank details or KYC verification are incomplete or suspended.
+  3. The seller's cumulative ledger balance is negative due to refunds or penalty deductions.
+- Auditable Ledger Entries: Every financial event creates an immutable, append-only `SellerLedgerEntry` recording debit/credit, transaction type, reference order ID, and updated balance.
+- Settlement Batches: Payouts are aggregated into `Settlement` batches with UTR/bank reference numbers recorded upon completion. Mutable order totals must never be used to recalculate historical settlements.
 
 - Financial amounts must use precise decimal arithmetic.
 - Completed transactions must not be silently modified.
@@ -1389,149 +1265,101 @@ Support current stable versions of:
 The following rules govern core marketplace behaviour.
 
 ## BR-001: Seller Approval
-
-Only approved and active sellers can list and sell products.
+Only approved and active sellers (`status = APPROVED`) can list products, set prices, maintain stock, and receive orders.
 
 ## BR-002: Seller Isolation
-
-Sellers can only manage their own shop, listings, inventory, orders and financial information.
+Sellers can only manage and view their own shop, listings, inventory, orders, and financial ledger. Cross-tenant access is strictly blocked at the backend.
 
 ## BR-003: Inventory Ownership
-
-Every seller listing maintains its own inventory.
+Every store listing maintains its own inventory. The same catalog product listed by multiple stores maintains independent stock records per store.
 
 ## BR-004: Product Availability
+A product is purchasable only when its catalog status is active, the store listing is active, the store is currently open, and sufficient stock is available.
 
-A product is purchasable only when its listing is active, the seller is eligible and sufficient stock is available.
+## BR-005: Single-Store Cart (MVP)
+A customer cart may only contain products from one store at a time. Attempting to add an item from another store prompts a clear store-switch confirmation dialog that clears the existing cart upon approval.
 
-## BR-005: Multi-Vendor Cart
+## BR-006: Single-Store Order Fulfillment (MVP)
+Every customer order belongs to exactly one store. Multi-seller parent/child split orders are excluded from the MVP.
 
-Customers may add products from multiple sellers to one cart.
+## BR-007: Inventory Validation & Reservation
+Stock must be revalidated and atomically reserved for 10–15 minutes at checkout initiation. Unpaid or expired reservations are automatically released.
 
-## BR-006: Seller Order Separation
+## BR-008: Price & MRP Validation
+The backend determines final payable amounts. Frontend-provided prices must never be trusted. Store selling price must never exceed the product Maximum Retail Price (MRP).
 
-Every seller participating in a parent order must receive an independent seller order.
+## BR-009: Server-Side Payment Verification
+An order must never be marked paid based solely on a frontend success callback. Payment is confirmed only via cryptographic server-side signature verification and verified webhooks.
 
-## BR-007: Inventory Validation
-
-Stock must be revalidated during checkout.
-
-## BR-008: Price Validation
-
-The backend determines final prices. Frontend-provided prices must never be trusted.
-
-## BR-009: Payment Verification
-
-An order must not be marked paid based solely on a frontend success response.
-
-## BR-010: Refund Integrity
-
-Refunds must reference the original payment and be recorded independently.
+## BR-010: Refund Integrity & Source Refunds
+Refunds must reference the original payment transaction. Refunds are credited directly to the original payment source (5–7 business days). Customer wallet is excluded from the MVP.
 
 ## BR-011: Commission Integrity
+Platform commission is category-based and calculated strictly on the net store item price of delivered items. Commission rules must be preserved immutably with the order.
 
-Commission rules must be preserved with relevant transaction records.
+## BR-012: Hyperlocal Serviceability
+Customers can only place orders for stores whose configured delivery radius and service area cover the customer's delivery coordinates and PIN code.
 
-## BR-012: Serviceability
+## BR-013: Cancellation State Boundaries
+Customer cancellation is unconditionally free before the order status reaches `PACKED`. Once `PACKED`, cancellation requires administrative intervention. Once `OUT_FOR_DELIVERY`, cancellation is strictly prohibited.
 
-Customers must not place orders for addresses outside the applicable service area.
+## BR-014: Platform-Managed Delivery Assignment
+Delivery assignment is managed exclusively by the platform. Orders marked `PACKED` are automatically dispatched to eligible delivery partners or modular external providers.
 
-## BR-013: Order Cancellation
+## BR-015: Delivery Completion & Proof
+A delivery is completed only when the delivery partner records customer handover confirmation (e.g., delivery OTP or verified cash collection for COD).
 
-Cancellation must follow configured eligibility and fulfilment rules.
+## BR-016: Account Suspension Enforcement
+Suspended users and merchants cannot perform restricted marketplace operations. Listings of suspended sellers are immediately hidden from customer discovery.
 
-## BR-014: Delivery Assignment
+## BR-017: Administrative & Financial Auditability
+All sensitive administrative actions (KYC approvals, commission changes, refunds, cancellations, and settlements) must produce immutable audit log entries.
 
-Only eligible delivery partners can accept valid delivery assignments.
-
-## BR-015: Delivery Completion
-
-A delivery must have an appropriate completion record.
-
-## BR-016: Account Suspension
-
-Suspended users cannot perform restricted marketplace operations.
-
-## BR-017: Auditability
-
-Sensitive administrative and financial actions must be recorded.
-
-## BR-018: Historical Records
-
-Deleting or deactivating a user, seller or product must not unintentionally destroy historical order and financial information.
+## BR-018: Historical Record Immutability
+Deactivation or deletion of a user, seller, or catalog product must never mutate historical order, payment, and financial ledger snapshots.
 
 ## BR-019: Coupon Validation
-
-Coupons must be validated on the backend against all configured eligibility conditions.
+Platform coupons must be validated server-side against cart value, expiration date, per-user limits, and overall usage limits.
 
 ## BR-020: Order Snapshots
+Orders must preserve product names, variants, SKUs, unit prices, MRPs, delivery addresses, and applied discounts as immutable snapshots at order creation time.
 
-Orders must preserve product names, quantities, prices and applicable charges as they existed when the order was placed.
+## BR-021: COD Risk Controls
+COD orders are capped at a configurable threshold (baseline: ₹1,500), restricted to serviceable PIN codes, and automatically disabled for customers with repeated RTO rejections.
+
+## BR-022: Settlement Payout Holds
+Seller payouts follow a T+3 business day settlement cycle post-delivery. Payouts are automatically held for active customer complaints, incomplete KYC, or negative ledger balances.
 
 ---
 
 # 18. EDGE CASES AND EXCEPTION HANDLING
 
-The platform must explicitly handle the following situations.
+The platform must explicitly handle the following operational edge cases:
 
-## 18.1 Inventory
+## 18.1 Inventory & Checkout
+- Simultaneous Checkout: Two customers attempt to buy the final item simultaneously; atomic database reservation ensures the first commits and the second receives a clear "Item out of stock" message.
+- Stock Modification during Checkout: Seller updates inventory while a customer is in checkout; checkout revalidation blocks transaction and informs customer.
+- Checkout Abandonment: Customer closes browser during payment; BullMQ worker automatically expires the reservation after TTL (15 min) and restores available stock.
 
-- Two customers attempt to purchase the final item simultaneously.
-- Seller changes stock during checkout.
-- Product becomes unavailable after being added to cart.
-- Seller deactivates a listing with items in customer carts.
-- Inventory restoration after cancellation.
-- Partial fulfilment due to insufficient stock.
+## 18.2 Store Order Exceptions
+- Store Rejection: Store is unable to fulfill (e.g. inventory damaged); store rejects order within acceptance window, customer is notified immediately, and 100% full source refund is initiated.
+- Partial Out-of-Stock before Packing: Store discovers an item is missing; store/admin coordinates with customer. If partial fulfillment is accepted, order total is adjusted and partial refund issued. If rejected, entire order is cancelled.
+- Store Delays: Store fails to mark order `PACKED` within SLA; administrative alert triggers manual intervention or automatic cancellation.
 
-## 18.2 Multi-Vendor Orders
+## 18.3 Payments & Webhooks
+- Browser Closes Post-Payment: Razorpay server-to-server webhook `order.paid` arrives independently, confirms order, and initiates fulfillment without requiring frontend callback.
+- Duplicate Webhooks: Razorpay re-transmits webhook; system checks `PaymentWebhookEvent` table, detects existing event ID, returns HTTP 200, and skips duplicate processing.
+- Payment Delayed / Interrupted: Payment order remains `PENDING` until webhook confirmation or timeout.
 
-- One seller rejects an order while others accept.
-- One seller cannot fulfil an item.
-- One seller order is cancelled while others continue.
-- Different sellers have different delivery availability.
-- One seller order is delivered while another remains pending.
-- Partial refund for one seller's items.
+## 18.4 Delivery & Transit
+- Rider Rejection / Timeout: Delivery partner rejects or ignores assignment within 90 seconds; system auto-reassigns to the next nearest available rider.
+- Customer Unreachable at Doorstep: Rider waits required grace period (e.g. 10 minutes), attempts phone contact; if unreachable, marks `DELIVERY_FAILED`, package is returned to store (RTO), and admin reviews resolution.
+- Transit Damage: Parcel damaged during delivery; rider records damage, customer is refunded, and platform absorbs delivery loss.
 
-## 18.3 Payments
-
-- Payment succeeds but the browser closes.
-- Payment gateway response is delayed.
-- Duplicate payment webhook is received.
-- Payment fails after order initiation.
-- Payment succeeds but order confirmation processing fails.
-- Refund request fails.
-- Duplicate refund requests occur.
-- COD order is cancelled after seller acceptance.
-
-## 18.4 Delivery
-
-- Delivery partner rejects an assignment.
-- No delivery partner is available.
-- Delivery partner becomes unavailable.
-- Seller delays order preparation.
-- Customer is unavailable.
-- Delivery address is incorrect.
-- Delivery is unsuccessful.
-- Delivery partner loses network connectivity.
-
-## 18.5 Authentication and Accounts
-
-- Duplicate email registration.
-- Duplicate mobile number registration.
-- Suspended account attempts login.
-- Expired access token.
-- Invalid refresh token.
-- Repeated login failures.
-- Unauthorized role access.
-
-## 18.6 Coupons and Pricing
-
-- Coupon expires during checkout.
-- Coupon usage limit is reached.
-- Product price changes after cart addition.
-- Seller discount is removed.
-- Coupon becomes invalid.
-- Minimum order amount is no longer satisfied.
+## 18.5 Authentication & OTP
+- OTP Flooding: Customer spams "Resend OTP"; rate limiter enforces 60-second cooldown and caps requests at 5 per hour.
+- Brute Force OTP Guessing: Attacker attempts guessing OTP; account enters temporary 15-minute lock after 5 consecutive failures.
+- Token Expiry during Session: Access token expires (15 min); frontend transparently exchanges rotating refresh token via HttpOnly cookie without interrupting user.
 
 All exceptions must produce understandable user messages and maintain data consistency.
 
@@ -1728,88 +1556,51 @@ The project will be considered functionally ready for production review when the
 
 ---
 
-# 22. OUT OF SCOPE FOR INITIAL RELEASE
+# 22. OUT OF SCOPE FOR MVP RELEASE
 
-Unless separately approved, the following are excluded from the initial website development scope:
+The following features and architectures are explicitly excluded from the MVP scope:
 
-1. Native Android application.
-2. Native iOS application.
-3. Dedicated seller mobile application.
-4. Dedicated delivery partner mobile application.
-5. Advanced AI-based recommendations.
-6. Machine-learning-based demand forecasting.
-7. Automated warehouse management.
-8. Advanced route optimization.
-9. Automated multi-seller marketplace split payouts.
-10. WhatsApp Business automation.
-11. Subscription-based customer membership.
-12. Loyalty points and reward systems.
-13. Advanced marketing automation.
-14. International marketplace operations.
-15. Multi-currency support.
-
-These features may be considered for future development.
+1. Multi-Seller Combined Cart & Checkout (parent orders and seller sub-orders).
+2. Customer Stored-Value Wallet / Internal Credit System (avoids RBI PPI regulatory compliance in MVP).
+3. Live GPS Continuous Streaming / Geolocation Tracking of Delivery Riders (milestone status tracking used instead).
+4. Automated Instant Marketplace Split Settlements (e.g. Razorpay Route before operational eligibility confirmation).
+5. Native Android & iOS mobile applications (responsive Next.js web application serves mobile web).
+6. Dedicated Seller and Delivery Partner Native Mobile Apps.
+7. AI-based Personalized Recommendation Engines.
+8. Machine-learning-based Demand Forecasting & Automated Dynamic Pricing.
+9. Direct Platform-Owned Dark Store Warehouses (pure third-party seller marketplace for MVP).
+10. Automated Route Optimization for multi-stop delivery routes.
+11. WhatsApp Business Automated Conversational Commerce.
+12. Customer Paid Subscription Memberships (e.g. VIP free delivery pass).
+13. Loyalty Points and Reward Tiering Programs.
+14. International Marketplace Operations and Multi-Currency Transactions.
+15. Doorstep Open-Box Physical Return Pickups for perishable goods.
 
 ---
 
 # 23. ASSUMPTIONS AND DEPENDENCIES
 
-The following assumptions apply until confirmed otherwise.
+The following dependencies and assumptions apply to the Phase 00 baseline:
 
-1. Marvel's Basket will provide the approved brand assets.
-2. The client will provide product and category information.
-3. The client will provide seller onboarding policies.
-4. The client will provide commission and settlement rules.
-5. The client will provide delivery operational policies.
-6. Razorpay integration depends on account approval and credentials.
-7. Maps integration depends on API access and billing configuration.
-8. Hosting and infrastructure depend on final commercial approval.
-9. Email and SMS integrations depend on provider configuration.
-10. Product images and other media require appropriate usage rights.
-11. Final legal policies must be approved by the client.
-12. GST, invoicing and marketplace compliance rules require appropriate professional confirmation.
-
-Any assumption affecting implementation must be resolved before its dependent feature is finalized.
+1. Brand Assets & Guidelines: Marvel's Basket will provide final logo SVGs and banner image photography.
+2. Product Master Catalog Seed: Initial catalog of categories, FMCG products, and grocery metadata must be curated.
+3. Seller Verification Documents: Business PAN, GSTIN declaration, and FSSAI license numbers must be validated by admin.
+4. Commission & Settlement Rates: Category commission percentages (10%–18% baseline) and payout schedules (T+3 baseline) require final owner sign-off.
+5. Razorpay Account & Commercials: Account activation, API credentials, and webhook secrets for UPI, Cards, Netbanking.
+6. SMS Provider Gateway: Fast2SMS, MSG91, or Twilio integration for customer Phone OTP delivery.
+7. Google Maps Platform: API Key with Geocoding, Places, and Distance Matrix APIs enabled for location serviceability.
+8. Hosting Infrastructure: Containerized deployment on Render/AWS/Railway with managed PostgreSQL and Redis.
+9. Legal Policies: Terms of Service, Privacy Policy (DPDP Act 2023 compliant), and Refund/Cancellation Policy drafted and approved.
 
 ---
 
 # 24. REQUIREMENT PRIORITY
 
-Requirements will be classified using three priority levels.
-
-| Priority | Meaning |
-|---|---|
-| P0 - Critical | Required for the initial production launch |
-| P1 - High | Important functionality for a complete marketplace |
-| P2 - Future | Enhancement or future development |
-
-### P0 - Critical
-
-- Authentication.
-- Role-based access control.
-- Customer shopping.
-- Seller registration and approval.
-- Product management.
-- Seller-specific inventory.
-- Multi-vendor cart.
-- Checkout.
-- Order management.
-- Payment integration.
-- Delivery workflow.
-- Admin management.
-- Security.
-- Production deployment.
-
-### P1 - High
-
-- Advanced product filters.
-- Wishlist.
-- Reviews and ratings.
-- Coupons.
-- Advanced analytics.
-- Settlement reporting.
-- Promotional banners.
-- Delivery partner earnings.
+| Priority | Meaning | Scope Included |
+|---|---|---|
+| P0 - Critical | Mandatory for MVP Launch | Customer Phone OTP, Seller Onboarding & KYC, Master Catalog & Store Listings, Store Inventory, Single-Store Cart & Checkout, Atomic Reservation, Single-Store Orders, Razorpay (UPI/Cards/Netbanking) + COD, Platform-Managed Delivery Milestones, Category Commission & Ledger, Admin Approvals & Audit Logs, Security & Docker Deployment |
+| P1 - High | Operational Marketplace Completeness | Store Operating Hours validation, Distance-tiered delivery fee calculation, Platform Coupons, Customer Photo Complaints & Source Refunds, Delivery Partner Payout Ledger, Admin Sales & Settlement Reports, Email/SMS event notifications |
+| P2 - Future | Post-MVP Roadmap | Multi-seller combined cart & checkout, Customer Stored-Value Wallet, Live GPS continuous tracking, Razorpay Route automated splits, Native iOS/Android mobile apps, Dark store management |
 - Automated notifications.
 
 ### P2 - Future
