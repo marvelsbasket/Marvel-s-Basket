@@ -1,0 +1,65 @@
+/**
+ * Marvel's Basket — Shared Domain Enums
+ * Aligned with ADR-001 through ADR-016 and BR-001 through BR-022.
+ */
+
+export enum UserRole {
+  CUSTOMER = 'CUSTOMER',
+  SELLER = 'SELLER',
+  ADMIN = 'ADMIN',
+  DELIVERY_PARTNER = 'DELIVERY_PARTNER',
+}
+
+export enum OrderStatus {
+  PLACED = 'PLACED',
+  CONFIRMED = 'CONFIRMED',
+  PACKING = 'PACKING',
+  READY_FOR_PICKUP = 'READY_FOR_PICKUP',
+  OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
+  DELIVERED = 'DELIVERED',
+  CANCELLED = 'CANCELLED',
+  REFUNDED = 'REFUNDED',
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  AUTHORIZED = 'AUTHORIZED',
+  CAPTURED = 'CAPTURED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+}
+
+export enum PaymentMethod {
+  UPI = 'UPI',
+  CARD = 'CARD',
+  NET_BANKING = 'NET_BANKING',
+  COD = 'COD',
+}
+
+export enum SellerStatus {
+  PENDING_VERIFICATION = 'PENDING_VERIFICATION',
+  VERIFIED = 'VERIFIED',
+  SUSPENDED = 'SUSPENDED',
+  REJECTED = 'REJECTED',
+}
+
+export enum StoreStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  BUSY = 'BUSY',
+}
+
+export enum DeliveryStatus {
+  UNASSIGNED = 'UNASSIGNED',
+  ASSIGNED = 'ASSIGNED',
+  PICKED_UP = 'PICKED_UP',
+  IN_TRANSIT = 'IN_TRANSIT',
+  DELIVERED = 'DELIVERED',
+  FAILED = 'FAILED',
+}
+
+export enum DeliveryProvider {
+  INTERNAL = 'INTERNAL',
+  EXTERNAL_PORTER = 'EXTERNAL_PORTER',
+  EXTERNAL_SHADOWFAX = 'EXTERNAL_SHADOWFAX',
+}

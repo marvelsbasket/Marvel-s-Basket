@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+.git/
+package-lock.json
+*.min.js
+*.min.css
+*.tsbuildinfo
+docs/
