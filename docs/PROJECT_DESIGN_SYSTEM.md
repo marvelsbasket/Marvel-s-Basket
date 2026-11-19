@@ -1228,4 +1228,54 @@ The intended experience is:
 
 ---
 
+# 16. Phase 05 Implementation & Component Inventory
+
+**Phase Status:** Completed & Verified  
+**Implementation Directory:** `apps/web`
+
+### 16.1 Asset Pipeline & Branding
+- **Official Brand Logos:**
+  - `apps/web/public/images/logo.png`: Full official logo on white background.
+  - `apps/web/public/images/logo-light.png`: Optimized light theme logo.
+  - `apps/web/public/images/logo-dark.jpg`: High-contrast dark theme logo.
+  - `apps/web/public/images/design-reference.jpg`: Reference UI screenshot.
+- **Brand Logo Component (`apps/web/src/components/shared/logo.tsx`):**
+  - Implements `full`, `compact`, and `icon` variants with responsive height optimization and priority image loading.
+
+### 16.2 Design Tokens & Theme Configuration
+- `apps/web/src/styles/tokens.ts`: Centralized, typed export of colors, radii, shadows, and breakpoints.
+- `apps/web/tailwind.config.ts`: Tailwind extended with `forest` (`#0B5D2A`), `brand` (`#15803D`, `#22A047`), `cta` (`#F4E022`), `highlight` (`#D4E137`), and surface neutrals. Custom border radii: `tile` (14px), `card` (12px), `banner` (16px).
+- `apps/web/src/app/globals.css`: Custom utility classes (`.no-scrollbar`), WCAG AA focus visible styling, and reduced-motion queries.
+
+### 16.3 Reusable Component Primitives
+- **Button (`apps/web/src/components/ui/button.tsx`):** CVA variants (`primary`/`cta`, `brand`, `secondary`, `outline`, `ghost`, `destructive`, `link`), sizes (`sm`, `md`, `lg`, `pill`, `icon`), integrated loading state.
+- **Form Controls (`apps/web/src/components/ui/`):**
+  - `input.tsx`: Text/email/search with label, helper, error, and pill search variant.
+  - `textarea.tsx`: Multi-line text field with error states.
+  - `select.tsx`: Native select with custom chevron indicator.
+  - `checkbox.tsx`: Accessible custom checkbox.
+  - `radio.tsx`: Accessible radio button with checked ring.
+  - `switch.tsx`: Accessible toggle switch with smooth translation.
+- **Surface & Navigation Primitives (`apps/web/src/components/ui/`):**
+  - `card.tsx`: Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter.
+  - `badge.tsx`: CVA badge with `brand`, `highlight` (lime chartreuse), `cta`, `neutral`.
+  - `dialog.tsx`: Accessible modal with backdrop blur, focus trapping, escape key dismiss, and scroll lock.
+  - `dropdown-menu.tsx`: Accessible popup menu with click-outside dismiss and keyboard navigation.
+
+### 16.4 Feedback & Skeleton Primitives
+- `spinner.tsx`: SVG animated circular spinner with multi-color and size variants.
+- `skeleton.tsx`: Pulse loading placeholders, plus pre-composed `StoreCardSkeleton` and `CategoryTileSkeleton`.
+- `empty-state.tsx`: Accessible empty container state with icon, title, description, and call-to-action button.
+- `error-state.tsx`: Accessible error presentation with retry callback.
+
+### 16.5 Layout & Layout-Level Components
+- `storefront-layout.tsx`: Public storefront wrapper integrating Header and Footer.
+- `header.tsx`: Dual-tier responsive navigation reproducing reference design (Tier 1: brand logo, location selector modal for Azamgarh UP, pill search, login button, cart count; Tier 2: Category trigger, promotional links, mobile drawer).
+- `footer.tsx`: Trust strip (`Superfast Delivery`, `Verified Sellers`, `Secure Payments`, `Hyperlocal Support`), catalog links, merchant links, and legal links.
+- `hero-banner.tsx`: Gradient banner with organic wave accent, bold headline, 3 highlight trust pills (`Multiple Sellers`, `Best Prices`, `Quick Delivery`), yellow CTA (`Shop Now →`), and official 3D grocery basket imagery.
+- `category-rail.tsx`: 8-category rail on `#F4F6F8` tiles matching the reference design.
+- `featured-sellers.tsx`: Store cards (`City Fresh Mart`, `Sharma Grocery`, etc.) with rating stars, delivery ETAs, and verified tags.
+
+---
+
 **Document End — PROJECT_DESIGN_SYSTEM.md**

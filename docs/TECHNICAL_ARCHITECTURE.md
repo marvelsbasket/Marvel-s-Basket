@@ -160,6 +160,69 @@ The Next.js application is responsible for:
 - SEO.
 - API communication.
 
+### 2.3 Frontend Application Architecture & Component System (apps/web)
+
+Phase 05 established the foundational architecture for the Next.js 15 App Router frontend:
+
+```mermaid
+flowchart TD
+    subgraph APP["App Router (apps/web/src/app)"]
+        LAYOUT["RootLayout (layout.tsx)"]
+        PAGE["Storefront Home (page.tsx)"]
+        ERROR["ErrorBoundary (error.tsx)"]
+        LOADING["Loading (loading.tsx)"]
+        NOTFOUND["NotFound (not-found.tsx)"]
+    end
+
+    subgraph LAYOUT_COMPONENTS["Layout Components"]
+        SL["StorefrontLayout"]
+        HDR["Header (Dual-Tier)"]
+        FTR["Footer (Trust Strip)"]
+    end
+
+    subgraph SHARED["Shared Domain UI"]
+        LOGO["Logo (Full/Compact/Icon)"]
+        HERO["HeroBanner (Gradient & Badges)"]
+        CATRAIL["CategoryRail (8-Tile Grid)"]
+        STORES["FeaturedSellers (Multi-Store Cards)"]
+    end
+
+    subgraph UI_PRIMITIVES["UI Library (CVA + Radix Patterns)"]
+        BTN["Button"]
+        INP["Input / Select / Textarea"]
+        CHK["Checkbox / Radio / Switch"]
+        CRD["Card & Badge"]
+        DLG["Dialog & DropdownMenu"]
+        SKL["Skeleton & Spinner"]
+        EMP["EmptyState & ErrorState"]
+    end
+
+    subgraph API_CLIENT["API Client Foundation"]
+        CLIENT["ApiClient (Fetch Wrapper)"]
+        EP["Endpoints Dictionary"]
+        ERR["ApiError Normalizer"]
+        ENV["Validated Environment Config"]
+    end
+
+    LAYOUT --> SL
+    SL --> HDR
+    SL --> PAGE
+    SL --> FTR
+    HDR --> LOGO
+    PAGE --> HERO
+    PAGE --> CATRAIL
+    PAGE --> STORES
+    HERO --> BTN
+    STORES --> CRD
+    PAGE --> API_CLIENT
+```
+
+#### Key Architecture Patterns:
+1. **Design Tokens & Theme Centralization:** Codified in `src/styles/tokens.ts` and extended into Tailwind for zero drift.
+2. **Accessible Reusable Primitives:** Built with `class-variance-authority` (CVA), WCAG AA focus rings, keyboard navigability, and smooth transitions.
+3. **Dual-Tier Navigation:** Faithfully reproduces the UI reference with location modal (`Deliver to: Azamgarh, UP`), 9999px pill search bar, and secondary promotional navigation.
+4. **Typed API Client:** `ApiClient` with native `fetch`, automatic `credentials: 'include'` for HttpOnly refresh cookies, `AbortController` timeout (15s), and uniform error classification (`ApiError`).
+
 ### Backend
 
 The NestJS application is responsible for:

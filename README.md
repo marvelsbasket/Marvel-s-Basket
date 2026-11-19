@@ -53,7 +53,10 @@ marvels-basket/
 ├── apps/
 │   ├── web/                     # Customer-facing Next.js 15 web application
 │   │   ├── src/app/             # App Router pages, layout, and global styles
-│   │   ├── tailwind.config.ts   # Design system tokens and brand color palette
+│   │   ├── src/components/      # Reusable UI primitives, feedback, and layout
+│   │   ├── src/lib/api/         # Typed ApiClient with credential transport
+│   │   ├── src/styles/tokens.ts # Centralized design tokens (colors, radii, shadows)
+│   │   ├── tailwind.config.ts   # Extended theme matching official design reference
 │   │   └── package.json         # @marvels-basket/web
 │   │
 │   └── api/                     # NestJS backend API modular monolith

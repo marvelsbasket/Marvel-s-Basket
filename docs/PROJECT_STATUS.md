@@ -4,9 +4,9 @@
 
 **Project:** Marvel's Basket  
 **Organization:** Marvel's Techworks  
-**Document Version:** 2.3  
-**Current Phase:** Phase 04 — Authentication & Authorization Implementation  
-**Phase Status:** Completed (Phase 04 Verified; Ready for Phase 05 / Phase 06)  
+**Document Version:** 2.4  
+**Current Phase:** Phase 05 — Frontend Foundation & Design System  
+**Phase Status:** Completed (Phase 05 Verified; Ready for Phase 06)  
 **Last Updated:** 19 November 2026
 
 ---
@@ -85,25 +85,43 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 
 ---
 
-## 5. Documentation Status Matrix
+## 5. Phase 05 — Frontend Foundation & Design System Summary
 
-| # | Document | Version | Status | Key Updates in Phase 00, 01, 02, 03 & 04 |
+**Phase Status:** **COMPLETED** (Verified on 19 November 2026)
+
+| Area | Status | Verified Outcome |
+|---|---|---|
+| **Design Token System** | Verified | Centralized in `apps/web/src/styles/tokens.ts` and extended in `tailwind.config.ts`. Strictly codifies Forest Green (`#0B5D2A`), Brand Green (`#15803D`, `#22A047`), Citrus Yellow CTA (`#F4E022`), Lime Highlight (`#D4E137`), Category Tile Surface (`#F4F6F8`), and custom radii (`tile: 14px`, `card: 12px`, `banner: 16px`, `full: 9999px`). |
+| **Official Brand Assets** | Verified | Official logos integrated in `apps/web/public/images/` (`logo.png`, `logo-light.png`, `logo-dark.jpg`) and encapsulated via responsive `Logo` component supporting `full`, `compact`, and `icon` variants. |
+| **Dual-Tier Navigation** | Verified | Faithfully replicates the provided design reference screenshot: Tier 1 houses brand logo, location selector with modal (`Deliver to: Azamgarh, UP`), 9999px pill search bar, login action, and cart counter; Tier 2 features `All Categories ▾`, promotional quick links, and mobile slide-out drawer. |
+| **Core UI Components** | Verified | CVA-powered primitives built with accessible ARIA semantics: `Button` (7 variants, 5 sizes, loading state), `Input` (including pill search variant), `Textarea`, `Select`, `Checkbox`, `Radio`, `Switch`, `Badge`, `Card`, `Dialog` (accessible modal), `DropdownMenu` (accessible popup). |
+| **Feedback Primitives** | Verified | Responsive loading and state indicators: `Spinner` (multi-color SVG), `Skeleton` (pulse placeholders with `StoreCardSkeleton` and `CategoryTileSkeleton`), `EmptyState`, and `ErrorState` with retry callbacks. |
+| **Storefront Showcase** | Verified | Homepage (`apps/web/src/app/page.tsx`) unites `HeroBanner` (gradient wave + 3 trust pills + CTA), `CategoryRail` (8 categories on `#F4F6F8` tiles), `FeaturedSellers` (4 store cards with rating stars, delivery times, and verified badges), and an interactive Component Library showcase. |
+| **Typed API Client** | Verified | Lightweight, typed `ApiClient` in `apps/web/src/lib/api/` with automatic `credentials: 'include'` for HttpOnly refresh cookies, `AbortController` timeout (15s), query parameter serialization, and structured `ApiError` normalization. |
+| **Route Boundaries** | Verified | App Router error, loading, and not-found boundaries established (`error.tsx`, `loading.tsx`, `not-found.tsx`). |
+| **Verification & Testing** | Verified | Next.js production build (`next build`), strict typecheck, Prettier format check, and ESLint all passed with 0 errors. 13 unit tests passing in `apps/web`. |
+
+---
+
+## 6. Documentation Status Matrix
+
+| # | Document | Version | Status | Key Updates in Phase 00, 01, 02, 03, 04 & 05 |
 |---|---|---|---|---|
 | 1 | `PROJECT_CONTEXT.md` | 1.1 | Updated | Aligned core business model to single-store checkout and hybrid catalog. |
 | 2 | `PROJECT_REQUIREMENTS.md` | 2.1 | Updated | Locked MVP scope, email OTP verification via Resend, mobile OTP excluded from Phase 04. |
-| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.3 | Updated | Section 6.8 added documenting Authentication & Authorization Architecture, token families, and guards. |
+| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.4 | Updated | Section 2.3 & 16 updated with Next.js App Router architecture, design system, and typed API client. |
 | 4 | `DATABASE_SCHEMA.md` | 2.2 | Updated | Added `token_family_id` column to `sessions` table and migration `20261119081743_session_token_family`. |
-| 5 | `PROJECT_DECISIONS.md` | 2.4 | Updated | Added **ADR-036** through **ADR-039** (Argon2id, Resend Email OTP, Refresh Token Rotation & Family Reuse Detection, Global Declarative Guards). |
-| 6 | `IMPLEMENTATION_PHASES.md` | 2.4 | Updated | Phase 04 marked Completed with full task verification; Phase 05/06 unblocked. |
-| 7 | `PROJECT_STATUS.md` | 2.3 | Updated | Phase 04 completed; authentication verified; ready for Phase 05/06. |
-| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.0 | Preserved | Approved visual direction preserved without modification; implemented in `apps/web`. |
-| 9 | `README.md` | 2.3 | Updated | Added authentication endpoints and environment configurations. |
+| 5 | `PROJECT_DECISIONS.md` | 2.5 | Updated | Added **ADR-040** (Tailwind Design Token Centralization) and **ADR-041** (Typed Next.js Fetch API Client). |
+| 6 | `IMPLEMENTATION_PHASES.md` | 2.5 | Updated | Phase 05 marked Completed with full task verification; Phase 06 unblocked. |
+| 7 | `PROJECT_STATUS.md` | 2.4 | Updated | Phase 05 completed; frontend foundation & design system verified; ready for Phase 06. |
+| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.1 | Updated | Section 16 added documenting Phase 05 design token implementations and component inventory. |
+| 9 | `README.md` | 2.4 | Updated | Added frontend scripts and architecture overview. |
 | 10 | `infrastructure/docker/README.md`| 1.0 | Created | Dedicated Docker architecture, volume lifecycle, health probes, and safety commands. |
 | 11 | `apps/api/README.md` | 1.2 | Updated | Added Auth module documentation, endpoints, and security testing guides. |
 
 ---
 
-## 6. Development Phase Roadmap Status
+## 7. Development Phase Roadmap Status
 
 | Phase | Name | Priority | Status | Blockers / Next Dependencies |
 |---|---|---|---|---|
@@ -112,7 +130,7 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 | **Phase 02** | Backend Foundation | Critical | **Completed** | NestJS architecture, Prisma/Redis services, Swagger, tests passing. |
 | **Phase 03** | Database Implementation | Critical | **Completed** | 54 tables, 21 enums, 3 migrations, seed data, 10/10 DB tests passing. |
 | **Phase 04** | Authentication & Authorization | Critical | **Completed** | Argon2id, Resend email OTP, dual-token rotation, reuse detection, RBAC. 77/77 tests passing. |
-| **Phase 05** | Frontend Foundation & Design System | High | **Ready to Start** | Unblocked by Phase 01. |
+| **Phase 05** | Frontend Foundation & Design System | High | **Completed** | Design tokens, official logos, dual-tier navbar, CVA UI library, API client. Build & checks passing. |
 | **Phase 06** | User & Profile Management | High | **Ready to Start** | Unblocked by Phase 04 & 05. |
 | **Phase 07** | Seller Onboarding & KYC | High | Not Started | Dependent on Phase 04. |
 | **Phase 08** | Product Catalog & Categories | High | Not Started | Dependent on Phase 07. |
@@ -134,13 +152,12 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 
 ---
 
-## 7. Immediate Next Steps
+## 8. Immediate Next Steps
 
-1. Transition to **Phase 05 — Frontend Foundation & Design System**:
-   - Establish design tokens, typography, colors, and Tailwind configuration in `apps/web`.
-   - Build reusable core UI components (buttons, inputs, cards, dialogs, dropdowns, empty/loading states).
-   - Configure centralized API client with automatic token refresh and cookie transport.
-2. Alternatively, proceed to **Phase 06 — User & Profile Management** to implement customer/seller profile endpoints on the backend.
+1. Transition to **Phase 06 — User & Profile Management**:
+   - Implement backend profile endpoints (GET/PATCH `/api/v1/users/me`, address management `/api/v1/users/addresses`).
+   - Implement frontend account dashboard, address management forms, and profile settings in `apps/web`.
+2. Alternatively, proceed to **Phase 07 — Seller Onboarding & KYC** to implement seller registration and document submission workflows.
 
 ---
 
