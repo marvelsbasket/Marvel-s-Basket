@@ -33,4 +33,26 @@ export const environmentValidationSchema = Joi.object({
   }),
 
   JWT_EXPIRES_IN: Joi.string().default('7d'),
+
+  JWT_ACCESS_SECRET: Joi.string().min(32).optional(),
+
+  JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
+
+  JWT_REFRESH_SECRET: Joi.string().min(32).optional(),
+
+  JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+
+  RESEND_API_KEY: Joi.string().default('re_dev_placeholder_api_key'),
+
+  EMAIL_FROM: Joi.string().default("Marvel's Basket <noreply@marvelsbasket.com>"),
+
+  EMAIL_VERIFICATION_OTP_LENGTH: Joi.number().min(4).max(8).default(6),
+
+  EMAIL_VERIFICATION_OTP_TTL_SECONDS: Joi.number().min(60).max(3600).default(300),
+
+  EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS: Joi.number().min(10).max(600).default(60),
+
+  EMAIL_VERIFICATION_MAX_ATTEMPTS: Joi.number().min(1).max(10).default(5),
+
+  PASSWORD_RESET_TOKEN_TTL_SECONDS: Joi.number().min(60).max(7200).default(900),
 }).unknown(true);

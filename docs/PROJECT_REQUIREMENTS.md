@@ -170,42 +170,42 @@ Delivery partners must only access information necessary for their assigned deli
 
 Module ID: AUTH
 
-## 3.1 Authentication Strategy by Role
+## 3.1 Authentication Strategy (Phase 04 Approved Baseline)
 
-The platform implements differentiated, role-specific authentication strategies aligned with operational ergonomics and security requirements:
+The platform implements a unified, high-security email-and-password authentication model with email OTP verification across all user roles, intentionally excluding SMS OTP dependencies:
 
 | Role | Primary Authentication Method | Credential Type | Verification Requirement |
 |---|---|---|---|
-| Customer | Phone Number + OTP | 6-digit numeric OTP | Verified SMS OTP (5 min expiry) |
-| Delivery Partner | Phone Number + OTP | 6-digit numeric OTP | Verified SMS OTP (5 min expiry) |
-| Seller | Business Email + Password | Argon2id Hash | Email verification + Admin Approval |
+| Customer | Email + Password | Argon2id Hash | 6-digit Email OTP via Resend (5 min expiry) |
+| Seller | Business Email + Password | Argon2id Hash | 6-digit Email OTP via Resend + Admin Approval |
+| Delivery Partner | Email + Password | Argon2id Hash | 6-digit Email OTP via Resend + KYC Approval |
 | Admin / Super Admin | Email + Strong Password | Argon2id Hash | Role permission verification (MFA-ready) |
 
-## 3.2 Customer & Delivery Partner Phone OTP Workflow
+> **Note on Mobile Verification:** Mobile phone number verification via SMS OTP is explicitly excluded from Phase 04 scope. Optional phone numbers collected at registration are stored as contact information only. No SMS gateway integration or SMS endpoints are implemented in Phase 04.
+
+## 3.2 Email Verification OTP Workflow (Resend + Redis)
 
 Requirements:
-- Request OTP with a valid 10-digit Indian mobile number (+91).
-- Automatic customer profile creation upon first successful OTP verification.
-- OTP expiry fixed at 5 minutes (300 seconds).
-- Resend cooldown: minimum 60 seconds before requesting a new OTP.
-- Maximum attempts: 3 incorrect OTP entries before invalidation.
-- Rate limiting / Abuse prevention:
-  - Maximum 5 OTP requests per phone number per hour.
-  - Maximum 10 OTP requests per IP address per hour.
-  - Temporary lock (15 minutes) upon 5 consecutive failed attempts.
-- Redis-backed ephemeral OTP cache with strict TTL and atomic verification.
+- User registers with full name, email, and strong password (min 8 characters, requiring uppercase, lowercase, number, and special character).
+- System dispatches a cryptographically secure 6-digit numeric OTP (`crypto.randomInt(100000, 1000000)`) via **Resend** transactional email.
+- Unverified users are rejected at login with HTTP 403 Forbidden until email verification is complete.
+- OTP expiry: exactly 5 minutes (300 seconds TTL).
+- Resend cooldown: minimum 60 seconds before requesting a fresh OTP.
+- Maximum attempts: 5 incorrect attempts before the OTP is permanently invalidated in Redis.
+- OTP storage: Stored in Redis as a SHA-256 hash (`otp:verify-email:<email>`). Plaintext OTPs are never stored in databases or cache.
+- Auditing: A persistent audit record is logged in PostgreSQL `verification_tokens` table (`type: EMAIL_VERIFICATION`).
 
-## 3.3 Seller & Administrator Authentication Workflow
+## 3.3 Session Management & Token Rotation Workflow
 
 Requirements:
-- Registration / Login with business email and strong password (minimum 8 characters, requiring uppercase, lowercase, number, and special character).
-- Password hashing using Argon2id with recommended memory and iteration cost parameters.
-- JWT Access Token (short-lived, 15 minutes) issued in authorization headers or secure cookies.
-- Refresh Token (long-lived, 7 days) stored hashed in the database and delivered via secure `HttpOnly`, `SameSite=Strict`, `Secure` cookies.
-- Refresh token rotation upon every refresh request: issuing a new refresh token and revoking the old token.
-- Reuse detection: If a revoked refresh token is presented, all sessions for that user must be invalidated immediately.
-- Explicit logout revokes the current session and refresh token in the database.
-- Password reset via cryptographically secure single-use token sent to verified email (15-minute expiry).
+- Authentication via `/api/v1/auth/login` verifies credentials using Argon2id with constant-time failure response against account enumeration.
+- **Access Token:** Short-lived JWT (15 minutes) containing `{ sub, email, roles, permissions, sessionId, tokenFamilyId }`, returned in JSON response body.
+- **Refresh Token:** Long-lived (7 days) opaque 80-character hex string stored as a SHA-256 hash in PostgreSQL `sessions` table.
+- **Cookie Security:** Refresh token delivered exclusively via `HttpOnly`, `SameSite=lax`, `Secure` (in production) cookie scoped to `/api/v1/auth`.
+- **RFC 6749 Token Family Rotation:** On every refresh (`/api/v1/auth/refresh`), the used session is marked `revokedAt = now()`, and a new refresh token and session are generated under the same `token_family_id`.
+- **Reuse Detection:** If a previously revoked refresh token is presented, the system detects a compromise, immediately revoking all active sessions sharing that `token_family_id` and rejecting the request with HTTP 401 Unauthorized.
+- **Logout:** Single-session logout (`/api/v1/auth/logout`) revokes the current session and clears the cookie; multi-device logout (`/api/v1/auth/logout-all`) revokes all active sessions for the user.
+- **Password Reset:** Generates a 64-character cryptographic token (15-min TTL) sent via Resend. Consuming the token updates the password and revokes all active sessions.
 
 ## 3.4 Authorization & RBAC
 

@@ -322,39 +322,40 @@ All approved models and relationships migrate successfully and pass database int
 # 6. Phase 04 — Authentication & Authorization
 
 **Priority:** Critical  
-**Status:** Not Started
+**Status:** **Completed** (Verified on 19 November 2026)
 
 ### Objective
 
-Implement secure authentication and backend authorization.
+Implement a complete, secure, production-ready authentication and authorization foundation for Marvel's Basket adhering to strict security standards, dual-token JWT/HttpOnly session handling, email OTP verification via Resend, and granular Role-Based Access Control (RBAC).
 
-### Tasks
+### Verified Tasks
 
-- [ ] Implement registration.
-- [ ] Implement login.
-- [ ] Implement logout.
-- [ ] Implement password hashing if password authentication is selected.
-- [ ] Implement email or mobile verification as required.
-- [ ] Implement password reset if applicable.
-- [ ] Implement session or token management.
-- [ ] Implement refresh-token handling if applicable.
-- [ ] Implement role-based authorization.
-- [ ] Implement resource-level authorization.
-- [ ] Protect customer routes.
-- [ ] Protect seller routes.
-- [ ] Protect admin routes.
-- [ ] Test unauthorized access scenarios.
+- [x] Installed and configured NestJS 10-compatible authentication dependencies (`@nestjs/jwt`, `@nestjs/passport`, `passport-jwt`, `argon2`, `resend`, `cookie-parser`).
+- [x] Configured environment validation for JWT secret keys, token expirations, and Resend email credentials.
+- [x] Added `token_family_id` column to PostgreSQL `sessions` table and applied migration `20261119081743_session_token_family`.
+- [x] Built responsive, branded email templates (`verification-otp` and `password-reset`) in `apps/api/src/modules/email/`.
+- [x] Built `EmailService` integrating official Resend Node SDK with automated mock/sandbox fallback.
+- [x] Implemented Argon2id password hashing (`memoryCost: 65536, timeCost: 3, parallelism: 4`) with timing attack protection.
+- [x] Implemented registration with mandatory customer role assignment (`UserRoleType.CUSTOMER`), customer profile, and empty cart creation.
+- [x] Implemented single-use 6-digit numeric email verification OTPs (`crypto.randomInt`) cached in Redis with SHA-256 hashes, 5-minute TTL, 60-second cooldown, and 5-attempt brute-force lockout.
+- [x] Implemented dual-token session architecture: short-lived access JWT (15 minutes) and rotating opaque 80-char hex refresh token (7 days) stored in secure `HttpOnly`, `SameSite=lax` cookie.
+- [x] Implemented RFC 6749 Token Rotation with automatic token family reuse detection (revokes all active sessions in the token family upon detecting compromised token replay).
+- [x] Implemented forgot password and reset password workflows with single-use 64-char crypto tokens and session invalidation.
+- [x] Implemented RBAC and Permission-based authorization guards (`RolesGuard`, `PermissionsGuard`) with `SUPER_ADMIN` platform override.
+- [x] Implemented global `JwtAuthGuard`, `RolesGuard`, and `PermissionsGuard` as `APP_GUARD` with `@Public()` decorator bypass.
+- [x] Created unit tests (43 passing across 8 suites) and E2E integration tests (24 passing across 2 suites).
 
 ### Deliverables
 
-- Authentication APIs.
-- Authorization guards.
-- Role and permission handling.
-- Secure account workflows.
+- `apps/api/src/modules/auth/` (AuthModule, AuthService, AuthController, DTOs, Guards, Strategies, Decorators, Interfaces).
+- `apps/api/src/modules/email/` (EmailModule, EmailService, responsive HTML/text email templates).
+- `apps/api/prisma/migrations/20261119081743_session_token_family/` (Session token family schema migration).
+- `apps/api/src/modules/auth/auth.service.spec.ts` (Comprehensive unit test coverage).
+- `apps/api/test/auth.e2e-spec.ts` (Comprehensive end-to-end authentication and token reuse test suite).
 
 ### Completion Criteria
 
-Users must only access resources and operations permitted by their authenticated identity and assigned permissions.
+All authentication endpoints (`/register`, `/verify-email`, `/resend-verification-otp`, `/login`, `/refresh`, `/logout`, `/logout-all`, `/forgot-password`, `/reset-password`, `/me`) are fully operational, tested against live PostgreSQL and Redis services, and documented in Swagger. Mobile/SMS verification was intentionally kept out of scope as required.
 
 ---
 

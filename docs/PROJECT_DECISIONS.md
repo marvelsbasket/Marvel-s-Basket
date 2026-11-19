@@ -812,6 +812,76 @@ Payment gateways (e.g. Razorpay) send asynchronous webhooks for payment capture,
 
 ---
 
+## ADR-036: Password Hashing using Argon2id
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+User passwords require robust, modern cryptographic hashing resistant to GPU, FPGA, and ASIC-accelerated brute-force attacks, side-channel timing attacks, and rainbow tables. Legacy algorithms like bcrypt or PBKDF2 are less memory-hard than Argon2id.
+
+### Decision
+1. Passwords must be hashed using **Argon2id** (`argon2` package, `type: argon2.argon2id`).
+2. Parameters calibrated for production: `memoryCost: 65536` (64 MB), `timeCost: 3`, `parallelism: 4`.
+3. To mitigate user enumeration via timing discrepancies on failed logins, the system executes a constant-time dummy verification hash when a requested email does not exist.
+
+---
+
+## ADR-037: Email Verification using Single-Use OTP via Resend with Redis Rate Limiting
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+User email verification must be reliable, vendor-portable, resistant to abuse, and non-blocking. Mobile/SMS OTP involves telecommunication aggregator complexities and costs that are premature for Phase 04 backend foundations.
+
+### Decision
+1. Registration requires email verification before account login is permitted (enforced by HTTP 403 Forbidden).
+2. Mobile phone verification is explicitly postponed and kept out of scope for Phase 04.
+3. Verification uses a cryptographically secure 6-digit numeric OTP (`crypto.randomInt(100000, 1000000)`).
+4. Plaintext OTPs are never stored. The SHA-256 hash of the OTP is cached in Redis with a 5-minute TTL (`otp:verify-email:<email>`).
+5. A 60-second cooldown key is enforced between OTP generation requests (`otp:cooldown:verify-email:<email>`).
+6. Maximum 5 failed verification attempts allowed; exceeding this threshold immediately deletes the cached OTP.
+7. Outbound email delivery is managed through **Resend** Node SDK via a dedicated `EmailModule`, with automatic fallback to mock/sandbox mode during testing.
+
+---
+
+## ADR-038: Refresh Token Rotation with Token Family Reuse Detection (RFC 6749)
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Long-lived refresh tokens present a major security risk if intercepted by malicious actors. Without token rotation and reuse detection, a compromised refresh token allows persistent unauthorized session renewal.
+
+### Decision
+1. The platform adopts a dual-token model:
+   - **Access Token:** Short-lived stateless JWT (15 minutes).
+   - **Refresh Token:** Long-lived stateful opaque 80-character hex string (7 days).
+2. Raw refresh tokens are never persisted in the database; only SHA-256 hashes are stored in the PostgreSQL `Session` table.
+3. Refresh tokens are transported via `HttpOnly`, `SameSite=lax`, `Secure` (in production) cookies, scoped to `/api/v1/auth`.
+4. The `Session` model tracks `token_family_id` (migration `20261119081743_session_token_family`).
+5. On every refresh, the presented token is invalidated (`revokedAt = now()`), and a new session is created inheriting the same `token_family_id`.
+6. **RFC 6749 Reuse Detection:** If a previously revoked refresh token is presented, the system flags a replay attack and immediately revokes all active sessions in that `token_family_id`.
+
+---
+
+## ADR-039: Global Declarative Guard Architecture with Public Decorator Bypass
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Individual controller route protection can easily lead to accidental security lapses if a developer omits `@UseGuards(JwtAuthGuard)`. A secure-by-default architecture requires all endpoints to be protected unless explicitly designated public.
+
+### Decision
+1. `JwtAuthGuard`, `RolesGuard`, and `PermissionsGuard` are registered globally as `APP_GUARD` in `AppModule`.
+2. All endpoints are authenticated by default. Endpoints intended for open access must be explicitly annotated with `@Public()`.
+3. `@Roles(...UserRoleType[])` and `@Permissions(...string[])` decorators enable declarative, granular access control.
+4. `SUPER_ADMIN` has platform-wide bypass across all role-protected endpoints.
+
+---
+
 # Part C — Complete Decision Register Summary
 
 | ADR # | Decision Topic | Status | Category | Key Implementation Invariant |
@@ -851,6 +921,10 @@ Payment gateways (e.g. Razorpay) send asynchronous webhooks for payment capture,
 | **ADR-033** | Immutable Order Snapshots | **Accepted** | Database/Audit | Frozen price, SKU, product title, and address snapshots |
 | **ADR-034** | Double-Entry Financial Ledger | **Accepted** | Database/Finance | Append-only SellerLedgerEntry; unique `sellerLedgerEntryId` on SettlementItem |
 | **ADR-035** | Payment Webhook Idempotency | **Accepted** | Database/Payments | Unique constraint on `PaymentWebhookEvent(provider, eventId)` |
+| **ADR-036** | Password Hashing using Argon2id | **Accepted** | Security/Auth | Argon2id (`memoryCost: 65536, timeCost: 3, parallelism: 4`) with timing attack mitigation |
+| **ADR-037** | Email OTP Verification via Resend | **Accepted** | Security/Auth | 6-digit numeric OTP via Resend, SHA-256 in Redis, 5m TTL, 60s cooldown, 5-attempt limit |
+| **ADR-038** | Refresh Token Rotation & Family Reuse Detection | **Accepted** | Security/Auth | Opaque 80-char hex in HttpOnly cookie; `token_family_id` tracks lineage and revokes family on reuse |
+| **ADR-039** | Global Declarative Guard Architecture | **Accepted** | Security/Auth | `JwtAuthGuard`, `RolesGuard`, `PermissionsGuard` as APP_GUARD with `@Public()` bypass |
 
 ---
 

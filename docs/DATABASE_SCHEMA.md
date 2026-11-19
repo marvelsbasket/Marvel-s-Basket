@@ -459,21 +459,22 @@ Unique constraint:
 
 ## 5.6 Session
 
-Stores refresh-session information.
+Stores refresh-session information with RFC 6749 token family rotation and reuse detection.
 
 Fields:
 
-- id
-- userId
-- refreshTokenHash
-- expiresAt
-- revokedAt
-- userAgent
-- ipAddress
-- createdAt
-- updatedAt
+- id (UUID v4, PK)
+- userId (UUID v4, FK -> users.id, Cascade Delete)
+- refreshTokenHash (String, SHA-256 hash of opaque refresh token)
+- tokenFamilyId (UUID v4, nullable, indexed, tracks lineage of rotated tokens)
+- expiresAt (DateTime, indexed)
+- revokedAt (DateTime, nullable)
+- userAgent (String, nullable)
+- ipAddress (String, nullable)
+- createdAt (DateTime)
+- updatedAt (DateTime)
 
-Refresh tokens must be stored as hashes rather than raw token values.
+Refresh tokens must always be stored as SHA-256 hashes rather than raw token values. The `tokenFamilyId` groups all tokens descended from an initial login session; if an already-revoked token is submitted for refresh, all active sessions belonging to the same `tokenFamilyId` are immediately invalidated (Migration `20261119081743_session_token_family`).
 
 ## 5.7 VerificationToken
 

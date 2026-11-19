@@ -22,6 +22,20 @@ export interface RedisConfig {
 export interface JwtConfig {
   secret: string;
   expiresIn: string;
+  accessSecret: string;
+  accessExpiresIn: string;
+  refreshSecret: string;
+  refreshExpiresIn: string;
+}
+
+export interface EmailConfig {
+  resendApiKey: string;
+  from: string;
+  otpLength: number;
+  otpTtlSeconds: number;
+  resendCooldownSeconds: number;
+  maxAttempts: number;
+  passwordResetTtlSeconds: number;
 }
 
 export interface RootConfig {
@@ -29,4 +43,5 @@ export interface RootConfig {
   database: DatabaseConfig;
   redis: RedisConfig;
   jwt: JwtConfig;
+  email: EmailConfig;
 }

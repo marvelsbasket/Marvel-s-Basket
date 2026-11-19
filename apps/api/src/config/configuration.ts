@@ -22,5 +22,21 @@ export default (): RootConfig => ({
   jwt: {
     secret: process.env.JWT_SECRET || '',
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    accessSecret: process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || '',
+    accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
+    refreshSecret: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || '',
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+  },
+  email: {
+    resendApiKey: process.env.RESEND_API_KEY || 're_dev_placeholder_api_key',
+    from: process.env.EMAIL_FROM || "Marvel's Basket <noreply@marvelsbasket.com>",
+    otpLength: parseInt(process.env.EMAIL_VERIFICATION_OTP_LENGTH || '6', 10),
+    otpTtlSeconds: parseInt(process.env.EMAIL_VERIFICATION_OTP_TTL_SECONDS || '300', 10),
+    resendCooldownSeconds: parseInt(
+      process.env.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS || '60',
+      10,
+    ),
+    maxAttempts: parseInt(process.env.EMAIL_VERIFICATION_MAX_ATTEMPTS || '5', 10),
+    passwordResetTtlSeconds: parseInt(process.env.PASSWORD_RESET_TOKEN_TTL_SECONDS || '900', 10),
   },
 });

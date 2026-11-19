@@ -4,9 +4,9 @@
 
 **Project:** Marvel's Basket  
 **Organization:** Marvel's Techworks  
-**Document Version:** 2.2  
-**Current Phase:** Phase 02 — Backend Foundation  
-**Phase Status:** Completed (Phase 02 Verified; Ready for Phase 03)  
+**Document Version:** 2.3  
+**Current Phase:** Phase 04 — Authentication & Authorization Implementation  
+**Phase Status:** Completed (Phase 04 Verified; Ready for Phase 05 / Phase 06)  
 **Last Updated:** 19 November 2026
 
 ---
@@ -46,7 +46,9 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 
 ---
 
-## 2. Phase 03 — Database Implementation Summary
+## 3. Phase 03 — Database Implementation Summary
+
+**Phase Status:** **COMPLETED** (Verified on 19 November 2026)
 
 | Area | Status | Verified Outcome |
 |---|---|---|
@@ -63,25 +65,45 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 
 ---
 
-## 3. Documentation Status Matrix
+## 4. Phase 04 — Authentication & Authorization Summary
 
-| # | Document | Version | Status | Key Updates in Phase 00, 01, 02 & 03 |
-|---|---|---|---|---|
-| 1 | `PROJECT_CONTEXT.md` | 1.1 | Updated | Aligned core business model to single-store checkout and hybrid catalog. |
-| 2 | `PROJECT_REQUIREMENTS.md` | 2.0 | Updated | Locked MVP scope, single-store cart/order rules, BR-001 to BR-022, edge cases, out-of-scope boundaries. |
-| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.2 | Updated | Added Section 6.7 documenting Database Implementation, migrations, partial indexes, and root tooling. |
-| 4 | `DATABASE_SCHEMA.md` | 2.1 | Validated | Streamlined single-store order models, webhook idempotency, double-entry seller ledger, partial unique index. |
-| 5 | `PROJECT_DECISIONS.md` | 2.3 | Updated | Added **ADR-029** through **ADR-035** (UUID v4 keys, Decimal precision, partial unique index, single-store boundary, immutable snapshots, financial ledger, webhook idempotency). |
-| 6 | `IMPLEMENTATION_PHASES.md` | 2.3 | Updated | Phase 03 marked Completed with full task verification; Phase 04 unblocked. |
-| 7 | `PROJECT_STATUS.md` | 2.3 | Updated | Phase 03 completed; database verified; Phase 04 ready to start. |
-| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.0 | Preserved | Approved visual direction preserved without modification; implemented in `apps/web`. |
-| 9 | `README.md` | 2.2 | Updated | Added database management commands, Prisma migration guides, and seed instructions. |
-| 10 | `infrastructure/docker/README.md`| 1.0 | Created | Dedicated Docker architecture, volume lifecycle, health probes, and safety commands. |
-| 11 | `apps/api/README.md` | 1.1 | Updated | Added database models, migration commands, and testing conventions. |
+**Phase Status:** **COMPLETED** (Verified on 19 November 2026)
+
+| Area | Status | Verified Outcome |
+|---|---|---|
+| **Password Security** | Verified | Passwords hashed using **Argon2id** (`memoryCost: 65536, timeCost: 3, parallelism: 4`). Timing attack protection with dummy verification for non-existent users. |
+| **Email OTP Verification** | Verified | Single-use 6-digit numeric OTP generated with `crypto.randomInt`, hashed with SHA-256 in Redis. Enforces 5-minute TTL, 60-second cooldown, and lockout after 5 failed attempts. |
+| **Email Delivery via Resend** | Verified | Dedicated `EmailModule` wrapping official Resend Node SDK. Branded HTML + text email templates for verification OTP and password reset. Automatic sandbox mock mode for test environments. |
+| **Mobile Verification Scope** | Verified | Mobile/SMS verification was explicitly confirmed out of scope for Phase 04. No SMS endpoints or SMS dependencies introduced. |
+| **Dual-Token & Session Model** | Verified | Short-lived Access Token (15-min JWT) + rotating Refresh Token (7-day opaque 80-char hex) stored in secure `HttpOnly`, `SameSite=lax` cookie with body fallback. |
+| **RFC 6749 Token Rotation & Reuse Detection** | Verified | Session records track `token_family_id` (migration `20261119081743_session_token_family`). Attempted reuse of a rotated refresh token immediately invalidates all active sessions in the token family. |
+| **Role-Based & Permission Access Control** | Verified | `@Roles()` and `@Permissions()` decorators paired with `RolesGuard` and `PermissionsGuard`. `SUPER_ADMIN` grants universal superuser bypass. |
+| **Global Guard Pipeline** | Verified | `JwtAuthGuard`, `RolesGuard`, and `PermissionsGuard` registered globally as `APP_GUARD` with `@Public()` decorator bypass on public routes. |
+| **Password Reset Workflow** | Verified | Single-use 64-character cryptographic reset token (15-minute TTL) with instant invalidation of all existing sessions upon successful reset. Enumeration-safe generic responses. |
+| **Automated Testing Suite** | Verified | 43 unit tests passing (8 suites) + 24 E2E tests passing (2 suites) covering all auth flows against live PostgreSQL and Redis containers. |
+| **OpenAPI / Swagger Integration** | Verified | Swagger updated with `BearerAuth` (JWT) and `CookieAuth` (`refreshToken`) under the `Authentication` tag. |
 
 ---
 
-## 4. Development Phase Roadmap Status
+## 5. Documentation Status Matrix
+
+| # | Document | Version | Status | Key Updates in Phase 00, 01, 02, 03 & 04 |
+|---|---|---|---|---|
+| 1 | `PROJECT_CONTEXT.md` | 1.1 | Updated | Aligned core business model to single-store checkout and hybrid catalog. |
+| 2 | `PROJECT_REQUIREMENTS.md` | 2.1 | Updated | Locked MVP scope, email OTP verification via Resend, mobile OTP excluded from Phase 04. |
+| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.3 | Updated | Section 6.8 added documenting Authentication & Authorization Architecture, token families, and guards. |
+| 4 | `DATABASE_SCHEMA.md` | 2.2 | Updated | Added `token_family_id` column to `sessions` table and migration `20261119081743_session_token_family`. |
+| 5 | `PROJECT_DECISIONS.md` | 2.4 | Updated | Added **ADR-036** through **ADR-039** (Argon2id, Resend Email OTP, Refresh Token Rotation & Family Reuse Detection, Global Declarative Guards). |
+| 6 | `IMPLEMENTATION_PHASES.md` | 2.4 | Updated | Phase 04 marked Completed with full task verification; Phase 05/06 unblocked. |
+| 7 | `PROJECT_STATUS.md` | 2.3 | Updated | Phase 04 completed; authentication verified; ready for Phase 05/06. |
+| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.0 | Preserved | Approved visual direction preserved without modification; implemented in `apps/web`. |
+| 9 | `README.md` | 2.3 | Updated | Added authentication endpoints and environment configurations. |
+| 10 | `infrastructure/docker/README.md`| 1.0 | Created | Dedicated Docker architecture, volume lifecycle, health probes, and safety commands. |
+| 11 | `apps/api/README.md` | 1.2 | Updated | Added Auth module documentation, endpoints, and security testing guides. |
+
+---
+
+## 6. Development Phase Roadmap Status
 
 | Phase | Name | Priority | Status | Blockers / Next Dependencies |
 |---|---|---|---|---|
@@ -89,9 +111,9 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 | **Phase 01** | Monorepo & Development Environment | Critical | **Completed** | Monorepo initialized, Docker active, all checks passing. |
 | **Phase 02** | Backend Foundation | Critical | **Completed** | NestJS architecture, Prisma/Redis services, Swagger, tests passing. |
 | **Phase 03** | Database Implementation | Critical | **Completed** | 54 tables, 21 enums, 3 migrations, seed data, 10/10 DB tests passing. |
-| **Phase 04** | Authentication & Authorization | Critical | **Ready to Start** | Unblocked by Phase 02 & Phase 03 completion. |
-| **Phase 05** | Frontend Foundation & Design System | High | Not Started | Dependent on Phase 01. |
-| **Phase 06** | User & Profile Management | High | Not Started | Dependent on Phase 04 & 05. |
+| **Phase 04** | Authentication & Authorization | Critical | **Completed** | Argon2id, Resend email OTP, dual-token rotation, reuse detection, RBAC. 77/77 tests passing. |
+| **Phase 05** | Frontend Foundation & Design System | High | **Ready to Start** | Unblocked by Phase 01. |
+| **Phase 06** | User & Profile Management | High | **Ready to Start** | Unblocked by Phase 04 & 05. |
 | **Phase 07** | Seller Onboarding & KYC | High | Not Started | Dependent on Phase 04. |
 | **Phase 08** | Product Catalog & Categories | High | Not Started | Dependent on Phase 07. |
 | **Phase 09** | Seller Listings & Inventory | High | Not Started | Dependent on Phase 08. |
@@ -112,13 +134,13 @@ Phase 02 established the production NestJS backend architecture, centralized exc
 
 ---
 
-## 5. Immediate Next Steps
+## 7. Immediate Next Steps
 
-1. Transition to **Phase 03 — Database Implementation**:
-   - Implement the complete relational schema from `docs/DATABASE_SCHEMA.md` in `apps/api/prisma/schema.prisma` (Users, Profiles, Stores, Categories, Products, Listings, Carts, Orders, Payments, Delivery, Ledgers).
-   - Create initial Prisma migration (`prisma migrate dev`).
-   - Create database seeding scripts for platform categories, test stores, admin accounts, and sample products.
-   - Verify referential integrity, indexes, and decimal monetary constraints in PostgreSQL.
+1. Transition to **Phase 05 — Frontend Foundation & Design System**:
+   - Establish design tokens, typography, colors, and Tailwind configuration in `apps/web`.
+   - Build reusable core UI components (buttons, inputs, cards, dialogs, dropdowns, empty/loading states).
+   - Configure centralized API client with automatic token refresh and cookie transport.
+2. Alternatively, proceed to **Phase 06 — User & Profile Management** to implement customer/seller profile endpoints on the backend.
 
 ---
 

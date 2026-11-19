@@ -180,3 +180,32 @@ npm run db:status
 # Run database integrity test suite
 npm run test:db
 ```
+
+---
+
+## 7. Authentication & Authorization (Phase 04)
+
+The backend provides a complete, production-ready authentication and authorization system under `/api/v1/auth/*`:
+
+### Features:
+
+- **Argon2id Password Hashing:** Robust memory-hard hashing (`memoryCost: 65536, timeCost: 3, parallelism: 4`) with timing attack mitigation.
+- **Email Verification via Resend:** Cryptographically secure 6-digit numeric OTPs dispatched via Resend. Hashed with SHA-256 in Redis with a 5-minute TTL, 60-second cooldown, and 5-attempt brute-force protection.
+- **Dual-Token Session Management:** Short-lived access JWT (15m) + rotating refresh token (7d) transported in secure `HttpOnly`, `SameSite=lax` cookies.
+- **RFC 6749 Token Rotation & Reuse Detection:** Rotated sessions are tracked via `token_family_id`. Replay attacks on old refresh tokens trigger immediate invalidation of all sessions in the token family.
+- **Declarative Global RBAC:** Global `JwtAuthGuard`, `RolesGuard`, and `PermissionsGuard` with `@Public()` decorator bypass on public routes.
+
+### Endpoints:
+
+| Method | Endpoint                               | Access        | Description                                   |
+| ------ | -------------------------------------- | ------------- | --------------------------------------------- |
+| `POST` | `/api/v1/auth/register`                | Public        | Register customer account & send email OTP    |
+| `POST` | `/api/v1/auth/verify-email`            | Public        | Verify email address with 6-digit OTP         |
+| `POST` | `/api/v1/auth/resend-verification-otp` | Public        | Resend email OTP (60s cooldown)               |
+| `POST` | `/api/v1/auth/login`                   | Public        | Authenticate user; returns JWT & sets cookie  |
+| `POST` | `/api/v1/auth/refresh`                 | Public        | Rotate refresh token and issue new token pair |
+| `POST` | `/api/v1/auth/logout`                  | Public        | Invalidate current session and clear cookie   |
+| `POST` | `/api/v1/auth/logout-all`              | Authenticated | Terminate all active sessions across devices  |
+| `POST` | `/api/v1/auth/forgot-password`         | Public        | Request single-use password reset link        |
+| `POST` | `/api/v1/auth/reset-password`          | Public        | Reset password using verified crypto token    |
+| `GET`  | `/api/v1/auth/me`                      | Authenticated | Retrieve profile, roles, and permissions      |

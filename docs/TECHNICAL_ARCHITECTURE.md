@@ -995,99 +995,85 @@ This eliminates parent/child order orchestration bugs, atomic multi-order status
 
 # 7. AUTHENTICATION AND AUTHORIZATION ARCHITECTURE
 
-## 7.1 Differentiated Authentication Strategy
+## 7.1 Authentication Architecture (Phase 04 Baseline)
 
-The platform implements differentiated authentication architectures based on user role and UX convenience:
+Marvel's Basket implements a secure, production-grade authentication and authorization foundation using NestJS 10, Passport JWT, Argon2id, Redis, and Resend:
 
-1. **Customers & Delivery Partners: Mobile Phone Number + OTP**
-   - High-conversion, friction-free login without passwords.
-   - 6-digit numeric OTP delivered via SMS gateway (Fast2SMS / MSG91).
-   - OTP stored in Redis with 5-minute TTL (300 seconds).
-   - Rate limiting: max 5 requests/hour per phone, 60-second cooldown between requests.
-   - Brute-force protection: max 3 verification attempts per OTP; account locked for 15 minutes after 5 failed attempts.
-   - Auto-creates `CustomerProfile` on first verified login.
+1. **Email + Password Authentication with Email OTP Verification**
+   - User registration creates a customer account assigned `UserRoleType.CUSTOMER`, customer profile, and empty cart within an ACID database transaction.
+   - Passwords securely hashed with **Argon2id** (`memoryCost: 65536, timeCost: 3, parallelism: 4`) with timing attack mitigation on failed lookups.
+   - Email verification enforced before login: users cannot authenticate until email ownership is proven.
+   - **Verification Delivery:** 6-digit numeric OTP (`crypto.randomInt`) dispatched via **Resend** transactional email API.
+   - **OTP Protection in Redis:**
+     - OTP stored as a SHA-256 cryptographic hash (`otp:verify-email:<email>`).
+     - 5-minute expiration (300 seconds TTL).
+     - 60-second cooldown period between successive OTP requests (`otp:cooldown:verify-email:<email>`).
+     - Brute-force protection: attempt counter (`otp:attempts:verify-email:<email>`). Max 5 failed attempts locks and deletes the OTP immediately.
+   - **Mobile Verification Status:** Mobile/SMS OTP is explicitly deferred and kept out of scope for Phase 04 to prioritize a resilient, vendor-independent email verification flow.
 
-2. **Sellers & Administrators: Email + Password Authentication**
-   - Traditional credential authentication for desktop dashboard users.
-   - Passwords hashed using Argon2id (memory cost 64MB, 3 iterations, parallelism 1).
-   - Administrative login enforces role-level security with future MFA readiness.
+## 7.2 Dual-Token Architecture & RFC 6749 Token Family Rotation
 
-## 7.2 Token & Session Architecture
+The API implements a dual-token architecture combining stateless JWT access tokens with rotating stateful refresh tokens:
 
-The API uses stateless JWT access tokens combined with stateful rotating refresh tokens:
+### 7.2.1 Access Token (Stateless JWT)
+- **Lifetime:** Short-lived (15 minutes).
+- **Payload:** `{ sub: userId, email: string, roles: string[], permissions: string[], sessionId: string, tokenFamilyId: string }`.
+- **Validation:** Statelessly decoded and cryptographically verified by `JwtStrategy` using `ConfigService` (`jwt.accessSecret`). Verifies real-time active user status and permission claims.
+- **Transport:** Delivered in the response body for `Authorization: Bearer <token>` client storage.
 
-### Access Token
-- Short-lived JWT (15 minutes).
-- Payload: `{ sub: userId, role: UserRoleType, sellerId?: string, sessionVersion: number }`.
-- Verified statelessly in NestJS `JwtAuthGuard` using public key / secret.
-- Delivered in `Authorization: Bearer <token>` or secure cookie.
+### 7.2.2 Refresh Token & Token Family Rotation (Stateful)
+- **Lifetime:** Long-lived (7 days).
+- **Format:** Opaque 80-character cryptographically random hex string (`crypto.randomBytes(40).toString('hex')`).
+- **Database Storage:** SHA-256 hash stored in PostgreSQL `sessions` table (`refreshTokenHash`). Raw refresh tokens are never persisted to the database.
+- **Lineage Tracking:** `token_family_id` (UUID v4, indexed) links all successive rotated tokens derived from an initial login session.
+- **Transport:** Stored in secure, browser-isolated cookies (`HttpOnly`, `SameSite=lax`, `secure` in production) under `/api/v1/auth`, with optional request body fallback.
+- **RFC 6749 Reuse Detection:**
+  - Upon token refresh, the presented session is verified. If valid, it is immediately marked `revokedAt = now()`, and a new refresh token and session are issued with the **same** `tokenFamilyId`.
+  - If a client presents a refresh token whose database session has **already been revoked**, the system detects a token replay attack / token compromise.
+  - The system immediately revokes **all active sessions** belonging to that `tokenFamilyId`, neutralizing the attacker and forcing the legitimate user to log in again.
+- **Single-Device & Multi-Device Logout:**
+  - `/api/v1/auth/logout`: Revokes the current refresh session and clears the cookie.
+  - `/api/v1/auth/logout-all`: Inactive status applied to all active sessions across all devices for the user (`revokedAt = now()`).
 
-### Refresh Token & Session Management
-- Long-lived token (7 days).
-- Stored as a cryptographic SHA-256 hash in the database `Session` table.
-- Delivered exclusively via `HttpOnly`, `Secure`, `SameSite=Strict` cookies to mitigate XSS attacks.
-- **Refresh Token Rotation:** On every token refresh, the used refresh token is invalidated, and a new refresh token + access token pair is issued.
-- **Reuse Detection:** If an already-revoked refresh token hash is presented, the system immediately revokes all active sessions for that user (mitigating token theft).
-- Explicit logout destroys the session record in PostgreSQL and clears the cookie.
+## 7.3 Password Reset Architecture
 
-## 7.3 Cookie Security
+- Single-use, cryptographically secure 64-character hex token (`crypto.randomBytes(32).toString('hex')`) with 15-minute TTL.
+- Stored as a SHA-256 hash in `verification_tokens` table (`type: PASSWORD_RESET`).
+- Password reset email dispatched via Resend containing frontend reset URL.
+- Anti-enumeration defense: `/forgot-password` always returns a generic success message regardless of whether the email exists in the database.
+- Executing `/reset-password` updates the password using Argon2id, marks the token as used (`usedAt = now()`), and terminates all existing sessions for the user to enforce fresh authentication.
 
-Cookies must use:
+## 7.4 Declarative Authorization Guards (Global RBAC)
 
-- HttpOnly.
-- Secure in production.
-- Appropriate SameSite policy.
-- Restricted path.
-- Appropriate expiration.
+The application enforces declarative authorization via NestJS execution context:
 
-The production routing should use a same-origin API proxy or reverse proxy where practical, allowing host-only secure cookies.
+1. **`JwtAuthGuard` (Global `APP_GUARD`)**:
+   - Inspects `@Public()` decorator via `Reflector`. Routes marked `@Public()` bypass authentication.
+   - All other routes require a valid Bearer JWT. Throws standardized `401 Unauthorized`.
 
-If cross-origin cookies are required, CORS, cookie domains and CSRF protections must be configured explicitly.
+2. **`RolesGuard` (Global `APP_GUARD`)**:
+   - Inspects `@Roles(...UserRoleType[])` decorator metadata (`custom:roles`).
+   - Verifies the user has at least one of the required roles: `CUSTOMER`, `SELLER`, `DELIVERY_PARTNER`, `ADMIN`, `SUPER_ADMIN`.
+   - `SUPER_ADMIN` enjoys platform-wide bypass across all role-protected endpoints.
+   - Throws standardized `403 Forbidden` if role requirements are not met.
 
-## 7.4 Role-Based Access Control
+3. **`PermissionsGuard` (Global `APP_GUARD`)**:
+   - Inspects `@Permissions(...string[])` decorator metadata (`custom:permissions`).
+   - Ensures the user possesses all required permissions mapped from their assigned roles.
+   - `SUPER_ADMIN` enjoys automatic bypass.
 
-Initial roles:
+4. **Resource-Level Ownership (IDOR Protection)**:
+   - Enforced in business service layer by matching route/query resource owner IDs against `req.user.id` or `req.user.sellerId`.
 
-```text
-CUSTOMER
-SELLER
-DELIVERY_PARTNER
-ADMIN
-SUPER_ADMIN
-```
+## 7.5 Cookie Security Parameters
 
-Permissions must be checked by NestJS guards and backend policies.
-
-Frontend route protection is only a user experience measure. It must never replace backend authorization.
-
-## 7.5 Seller Data Isolation
-
-Every seller-owned operation must validate seller ownership on the backend.
-
-Example:
-
-```text
-Authenticated Seller
-       |
-       v
-Request: Update Product
-       |
-       v
-Verify Seller Identity
-       |
-       v
-Verify Product Ownership
-       |
-       v
-Validate Permissions
-       |
-       v
-Execute Operation
-```
-
-Changing a seller ID in a request must never grant access to another seller's resources.
-
----
+| Parameter | Configuration | Security Purpose |
+|---|---|---|
+| `httpOnly` | `true` | Prevents client-side JavaScript / XSS theft of refresh tokens. |
+| `secure` | `nodeEnv === 'production'` | Enforces transmission strictly over HTTPS in production environments. |
+| `sameSite` | `'lax'` | Protects against Cross-Site Request Forgery (CSRF) on cross-origin requests. |
+| `path` | `'/api/v1/auth'` | Restricts cookie transmission solely to authentication endpoints (`/refresh`, `/logout`). |
+| `maxAge` | `7 * 24 * 60 * 60 * 1000` | Aligns cookie lifetime with refresh token database TTL (7 days). |
 
 # 8. API ARCHITECTURE
 
