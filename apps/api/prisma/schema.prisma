@@ -1,0 +1,24 @@
+// ==============================================================================
+// MARVEL'S BASKET — PRISMA SCHEMA (PHASE 01 FOUNDATIONAL BASELINE)
+// ==============================================================================
+// Full marketplace relational domain entities (Users, Stores, Products, Orders,
+// Payments, Delivery, Ledgers) are scheduled for Phase 02 as per roadmap.
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SystemHealthCheck {
+  id        String   @id @default(uuid())
+  service   String   @default("marvels-basket-api")
+  status    String   @default("ok")
+  checkedAt DateTime @default(now()) @map("checked_at")
+
+  @@map("system_health_checks")
+}

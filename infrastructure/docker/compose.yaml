@@ -1,0 +1,54 @@
+name: marvels_basket
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: marvels_basket_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-marvel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-marvel_dev_secure_password_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-marvels_basket_dev}
+    volumes:
+      - marvels_basket_postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - marvels_basket_network
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-marvel} -d ${POSTGRES_DB:-marvels_basket_dev}',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: marvels_basket_redis
+    restart: unless-stopped
+    command: ['redis-server', '/usr/local/etc/redis/redis.conf']
+    volumes:
+      - marvels_basket_redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - marvels_basket_network
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  marvels_basket_postgres_data:
+    name: marvels_basket_postgres_data
+  marvels_basket_redis_data:
+    name: marvels_basket_redis_data
+
+networks:
+  marvels_basket_network:
+    name: marvels_basket_network
+    driver: bridge

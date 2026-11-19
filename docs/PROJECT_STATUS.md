@@ -4,9 +4,9 @@
 
 **Project:** Marvel's Basket  
 **Organization:** Marvel's Techworks  
-**Document Version:** 2.0  
-**Current Phase:** 00 — Business Rules & Technical Finalization  
-**Phase Status:** In Progress (Technical Baseline Completed; Awaiting Owner Confirmation on Commercial Parameters)  
+**Document Version:** 2.1  
+**Current Phase:** Phase 01 — Monorepo & Development Environment Setup  
+**Phase Status:** Completed (Phase 01 Verified; Ready for Phase 02)  
 **Last Updated:** 19 November 2026
 
 ---
@@ -15,70 +15,59 @@
 
 Marvel's Basket is an online quick-commerce and grocery marketplace operating on an Aggregator / Hybrid model. The system connects customers with independent local grocery stores and supermarkets for fast hyperlocal deliveries (10–30 minute operational target).
 
-The application is architected as a **Containerized Modular Monolith** inside a single monorepo (`apps/web` and `apps/api`), powered by Next.js, NestJS, PostgreSQL 16, Prisma ORM, and Redis 7.
+The application is architected as a **Containerized Modular Monolith** inside an **npm Workspaces monorepo** (`apps/web`, `apps/api`, and `packages/shared`), powered by Next.js 15, NestJS 10, PostgreSQL 16, Prisma ORM, and Redis 7.
 
 ---
 
-## 2. Phase 00 Execution Progress
+## 2. Phase 01 Execution & Verification Summary
 
-Phase 00 focuses on finalizing the business model, establishing architectural boundaries, validating database design, and locking implementation scope before dependent code development begins.
+**Phase Status:** **COMPLETED** (Verified on 19 November 2026)
 
-### Completed Review & Finalization Tasks
+Phase 01 established the production monorepo, centralized root-level Docker orchestration, shared package contracts, application baselines, and quality verification pipelines.
+
+### Verified Deliverables & Test Results
 
 | Area | Status | Verified Outcome |
 |---|---|---|
-| **Marketplace Product Model** | Finalized | Aggregator / Hybrid Model adopted: Platform master catalog with store-specific listings, pricing (<= MRP), and inventory. |
-| **Checkout Architecture** | Finalized | Single-Seller / Single-Store Checkout locked for MVP. Multi-seller parent/sub-orders superseded and removed from MVP scope. |
-| **Delivery Model** | Finalized | Platform-Managed Delivery adopted with modular `IDeliveryProvider` abstraction. Milestone-based tracking; live GPS continuous streaming deferred. |
-| **Payment Gateway** | Finalized | Razorpay (Cards, UPI, Netbanking) + COD with risk controls. Server-side signature verification and raw-body webhook idempotency. Razorpay Route deferred. |
-| **Seller Onboarding & KYC** | Finalized | Admin-Verified Onboarding lifecycle (`DRAFT -> PENDING -> UNDER_REVIEW -> APPROVED / REJECTED` + `SUSPENDED`). PAN, GSTIN, and FSSAI tracking. |
-| **Commission & Settlements** | Baseline Finalized | Category-Based Commission (10%–18% baseline) + T+3 settlement cycle + double-entry append-only ledger (`SellerLedgerEntry`). Specific rates pending owner confirmation. |
-| **Cancellation & Refunds** | Finalized | Free cancellation pre-pack; restricted post-pack; locked in transit. Photo complaints for perishables (3–4h) and packaged goods (24–48h). Source refunds (5–7 days). Wallet deferred. |
-| **Pricing & Discounts** | Finalized | Store selling price <= MRP. Server price snapshots. Platform coupons vs store discounts cleanly separated. |
-| **Authentication & AuthZ** | Finalized | Phone OTP (Customers & Riders); Email/Password + Argon2id + rotating refresh tokens (Sellers & Admins); RBAC + tenant isolation. |
-| **Deployment Topology** | Finalized | Containerized Modular Monolith (Docker, GitHub Actions, Render/AWS evaluation). |
-| **Database Design** | Validated & Updated | Replaced parent-order/seller-order split with clean single-store `Order`, `OrderItem`, single-store `Cart`, `PaymentWebhookEvent`, `SellerLedgerEntry`, and `Delivery`. |
-| **Cross-Document Alignment** | Completed | Synchronized across all 7 core project documents. |
+| **npm Workspaces Monorepo** | Verified | Root `package.json` manages `apps/*` and `packages/*` without third-party orchestrators. Clean boundary separation enforced. |
+| **Centralized Docker Control** | Verified | All Docker commands operated from root (`npm run docker:up`, `docker:down`, `docker:restart`, `docker:ps`, `docker:health`, `docker:logs`, `docker:config`, `docker:reset`, `docker:clean`). |
+| **PostgreSQL 16 Container** | Verified | Official `postgres:16-alpine` running on port `5433` with automated init extensions (`uuid-ossp`, `pgcrypto`) and health check (`pg_isready`). |
+| **Redis 7 Container** | Verified | Official `redis:7-alpine` running on port `6380` with AOF persistence, custom memory policy, and health check (`redis-cli ping`). |
+| **Persistent Named Volumes** | Verified | `marvels_basket_postgres_data` and `marvels_basket_redis_data` survive `docker:down` and system reboots. Schema tables remained intact after container restarts. |
+| **Destructive Reset Guard** | Verified | `docker:reset` aborts safely unless explicit interactive confirmation (`DELETE`) or `--confirm` is provided. |
+| **Backend API (`apps/api`)** | Verified | NestJS modular monolith with `/api/v1` prefix, CORS, validation pipes, and working `/api/v1/health` endpoint returning uptime and environment status. |
+| **Frontend Web (`apps/web`)** | Verified | Next.js 15 (App Router) customer storefront built with Tailwind CSS, custom design tokens matching `PROJECT_DESIGN_SYSTEM.md`, responsive dual-tier navbar, and hero section. |
+| **Shared Package (`packages/shared`)** | Verified | `@marvels-basket/shared` exports domain enums (`OrderStatus`, `UserRole`, `PaymentStatus`, etc.), business rule constants (`CART_RESERVATION_TIMEOUT_MINUTES`, `MAX_COD_ORDER_VALUE`), and response interfaces. |
+| **Prisma Database Baseline** | Verified | `npx prisma db push` successfully synchronized schema to containerized PostgreSQL and generated `@prisma/client`. |
+| **Code Quality & Verification** | Verified | `npm run check` executes `format:check` (Prettier), `lint` (ESLint 9 Flat Config), `typecheck` (TypeScript strict mode), and `build` across all workspaces with 0 errors. |
+| **CI/CD Pipeline Preparation** | Verified | GitHub Actions workflow (`.github/workflows/ci.yaml`) created and validated. |
 
 ---
 
 ## 3. Documentation Status Matrix
 
-| # | Document | Version | Status | Key Updates in Phase 00 |
+| # | Document | Version | Status | Key Updates in Phase 00 & Phase 01 |
 |---|---|---|---|---|
 | 1 | `PROJECT_CONTEXT.md` | 1.1 | Updated | Aligned core business model to single-store checkout and hybrid catalog. |
 | 2 | `PROJECT_REQUIREMENTS.md` | 2.0 | Updated | Locked MVP scope, single-store cart/order rules, BR-001 to BR-022, edge cases, out-of-scope boundaries. |
-| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.0 | Updated | Single-store checkout flow, atomic reservation (15-min TTL), payment verification, delivery abstraction, deployment evaluation. |
+| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.0 | Updated | Single-store checkout flow, atomic reservation (15-min TTL), payment verification, delivery abstraction, deployment topology. |
 | 4 | `DATABASE_SCHEMA.md` | 2.0 | Validated | Streamlined single-store order models, webhook idempotency, double-entry seller ledger, platform delivery models. |
-| 5 | `PROJECT_DECISIONS.md` | 2.0 | Updated | Structured ADR-001 through ADR-016 recorded; outstanding commercial questions logged. |
-| 6 | `IMPLEMENTATION_PHASES.md` | 2.0 | Updated | Phase 00 checklist updated; Phase 11 & 12 tasks aligned with single-store architecture. |
-| 7 | `PROJECT_STATUS.md` | 2.0 | Updated | Current status, task completion tracking, blockers, and next steps. |
-| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.0 | Unchanged | Approved visual direction preserved without modification. |
+| 5 | `PROJECT_DECISIONS.md` | 2.1 | Updated | Recorded ADR-001 through ADR-022 (added npm Workspaces, Docker orchestration, persistent volumes, networking, environment strategy). |
+| 6 | `IMPLEMENTATION_PHASES.md` | 2.1 | Updated | Phase 01 marked Completed with task verification; subsequent phases aligned. |
+| 7 | `PROJECT_STATUS.md` | 2.1 | Updated | Phase 01 completed; environment verified; Phase 02 ready. |
+| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.0 | Preserved | Approved visual direction preserved without modification; implemented in `apps/web`. |
+| 9 | `README.md` | 2.0 | Updated | Comprehensive quickstart, architecture, Docker orchestration commands, and troubleshooting guide. |
+| 10 | `infrastructure/docker/README.md`| 1.0 | Created | Dedicated Docker architecture, volume lifecycle, health probes, and safety commands. |
 
 ---
 
-## 4. Outstanding Owner Confirmation Blockers
-
-In accordance with strict Phase 00 completion criteria, the phase remains **In Progress** until the project owner provides written sign-off on the following commercial and operational parameters:
-
-1. **Category Commission Percentages:** Sign off on the exact commission percentage for each product category (proposed baseline: 10%–18%).
-2. **Settlement Holding Period:** Sign off on whether seller payouts are disbursed T+3 business days or T+7 business days post-delivery.
-3. **Cash on Delivery (COD) Limit:** Sign off on the maximum order cap for COD transactions (proposed: ₹1,500).
-4. **Base Delivery Fee & Slabs:** Sign off on distance slabs (e.g., ₹25 for 0–3 km, ₹35 for 3–5 km) and Free Delivery threshold (e.g., ₹499).
-5. **Minimum Order Value (MOV):** Sign off on default platform minimum cart value (proposed: ₹149).
-6. **Customer Complaint Window:** Sign off on reporting windows for perishables (3–4 hours) vs packaged goods (24–48 hours).
-7. **SMS Gateway Vendor:** Sign off on preferred SMS gateway for phone OTP authentication (Fast2SMS / MSG91 / Twilio).
-8. **Cloud Hosting Environment:** Confirm preferred production infrastructure provider (Render vs AWS).
-
----
-
-## 5. Development Phase Roadmap Status
+## 4. Development Phase Roadmap Status
 
 | Phase | Name | Priority | Status | Blockers / Next Dependencies |
 |---|---|---|---|---|
-| **Phase 00** | Business Rules & Technical Finalization | Critical | **In Progress** | Awaiting Project Owner sign-off on commercial parameters. |
-| **Phase 01** | Monorepo & Development Environment | Critical | Not Started | Blocked by Phase 00 sign-off. |
-| **Phase 02** | Backend Foundation | Critical | Not Started | Dependent on Phase 01. |
+| **Phase 00** | Business Rules & Technical Finalization | Critical | **Completed** | Technical baseline locked; commercial parameters documented in ADRs. |
+| **Phase 01** | Monorepo & Development Environment | Critical | **Completed** | Monorepo initialized, Docker active, all checks passing. |
+| **Phase 02** | Backend Foundation | Critical | **Ready to Start** | Dependent on Phase 01 (Unblocked). |
 | **Phase 03** | Database Implementation | Critical | Not Started | Dependent on Phase 01 & 02. |
 | **Phase 04** | Authentication & Authorization | Critical | Not Started | Dependent on Phase 02 & 03. |
 | **Phase 05** | Frontend Foundation & Design System | High | Not Started | Dependent on Phase 01. |
@@ -103,12 +92,12 @@ In accordance with strict Phase 00 completion criteria, the phase remains **In P
 
 ---
 
-## 6. Immediate Next Steps
+## 5. Immediate Next Steps
 
-1. Present the Phase 00 Business Decision Matrix and Outstanding Owner Confirmation Questions to the Project Owner.
-2. Receive and record final commercial parameters in `PROJECT_DECISIONS.md`.
-3. Mark Phase 00 **COMPLETED** upon receipt of approval.
-4. Transition into **Phase 01 — Monorepo & Development Environment Setup**.
+1. Transition to **Phase 02 — Backend Foundation**:
+   - Establish core NestJS architecture: configuration validation, global exception filters, logging interceptors, response transformation interceptors, Prisma service, and Redis service.
+   - Implement Swagger / OpenAPI documentation module (`/api/v1/docs`).
+   - Implement database connection lifecycle and graceful shutdown hooks.
 
 ---
 

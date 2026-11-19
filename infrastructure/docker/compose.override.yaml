@@ -1,0 +1,15 @@
+# ==============================================================================
+# MARVEL'S BASKET — DOCKER COMPOSE DEVELOPMENT OVERRIDES
+# ==============================================================================
+# Automatically merged with compose.yaml in local development workflows.
+# Exposes ports to the local host machine.
+# ==============================================================================
+
+services:
+  postgres:
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+
+  redis:
+    ports:
+      - '${REDIS_PORT:-6379}:6379'

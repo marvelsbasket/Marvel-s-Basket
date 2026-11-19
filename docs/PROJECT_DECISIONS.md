@@ -105,36 +105,39 @@ Use **PostgreSQL 16** as the relational database and **Prisma ORM** as the datab
 
 ---
 
-## ADR-004: Monorepo Architecture & Workspace Tooling
+## ADR-004: Monorepo Architecture & npm Workspaces
 
 **Status:** Accepted  
 **Date:** 2026-11-19  
 
 ### Context
-Frontend and backend share TypeScript contracts, validation schemas, and database types. Managing independent repositories creates version drift and coordination overhead.
+Frontend, backend, and infrastructure share TypeScript contracts, validation schemas, domain enums, and database types. Managing independent repositories creates version drift and coordination overhead. However, heavyweight orchestration tooling (Turborepo, Nx) introduces unnecessary abstraction layers and external dependencies for a standard modular monolith.
 
 ### Decision
-Implement a single monorepo using **pnpm workspaces** and **Turborepo** task orchestration.
+Implement a single monorepo using standard **npm Workspaces** (`"workspaces": ["apps/*", "packages/*"]`) without third-party task runners.
 
 ### Directory Layout
 ```text
 marvels-basket/
 ├── apps/
-│   ├── web/         # Next.js frontend application
-│   └── api/         # NestJS backend API application
+│   ├── web/         # Next.js frontend application (@marvels-basket/web)
+│   └── api/         # NestJS backend API application (@marvels-basket/api)
 ├── packages/
-│   ├── database/    # Prisma schema, migrations, and generated client
-│   ├── shared-types/# Common DTOs, enums, and API interfaces
-│   └── config/      # Shared ESLint, Prettier, and TypeScript configs
+│   └── shared/      # Shared domain enums, constants, types (@marvels-basket/shared)
+├── infrastructure/
+│   └── docker/      # Centralized Docker infrastructure (PostgreSQL 16, Redis 7)
+├── scripts/         # Centralized orchestration scripts (docker, dev, clean)
+└── docs/            # Project architecture and governance documentation
 ```
 
 ### Consequences
-- Root-level dependency caching via Turborepo.
-- Frontend cannot directly access PostgreSQL; database package is consumed only by `apps/api`.
-- Shared types ensure end-to-end type safety without runtime backend coupling.
+- Root-level centralized control for all dev, build, lint, format, and Docker commands.
+- Zero dependency on third-party task orchestrators; standard npm CLI commands (`npm run --workspaces`).
+- Clean boundary separation: `packages/shared` contains purely agnostic utilities and types, preventing frontend and backend leaks.
+- Independent deployability of `apps/web` and `apps/api`.
 
 ### Dependencies
-- pnpm 9+, Turborepo 2+.
+- Node.js 20+ (LTS v22 recommended), npm 10+.
 
 ---
 
@@ -468,6 +471,117 @@ Implement **Coordinate and PIN-Code-Based Hyperlocal Serviceability**:
 
 ---
 
+## ADR-017: Centralized Root-Level Docker Orchestration
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Developers need a frictionless workflow for starting, stopping, inspecting, and managing local container dependencies without navigating between disparate subdirectories. Decentralized Compose setups lead to environment inconsistencies, port conflicts, and unmanaged container drift.
+
+### Decision
+Organize all Docker Compose infrastructure under `infrastructure/docker/` and expose the entire lifecycle via standardized root `package.json` scripts (`docker:up`, `docker:down`, `docker:restart`, `docker:ps`, `docker:logs`, `docker:health`, `docker:reset`, `docker:clean`) orchestrated by `scripts/docker/manage.js`.
+
+### Consequences
+- Developers interact exclusively with the repository root.
+- The Compose configuration remains modular (`compose.yaml`, `compose.override.yaml`, `compose.production.yaml`).
+- All scripts work cross-platform on macOS, Linux, and Windows environments with Node.js.
+
+---
+
+## ADR-018: PostgreSQL 16 & Redis 7 Containerization
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Marvel's Basket relies on PostgreSQL 16 for relational data and Redis 7 for high-speed caching and cart reservations. Requiring manual host installation introduces version mismatches and setup friction.
+
+### Decision
+Containerize PostgreSQL (`postgres:16-alpine`) and Redis (`redis:7-alpine`) using official lightweight Alpine images with automated health checks (`pg_isready` and `redis-cli ping`).
+
+### Consequences
+- Consistent database and cache runtimes across all development and testing environments.
+- Automated database extension initialization (`uuid-ossp`, `pgcrypto`) via `/docker-entrypoint-initdb.d`.
+- Redis configured with Append-Only File (AOF) persistence and memory caps via custom `redis.conf`.
+
+---
+
+## ADR-019: Isolated Container Networking
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Containers need to communicate seamlessly using internal DNS aliases while remaining isolated from other Docker projects on the developer's machine.
+
+### Decision
+Define a dedicated user-defined bridge network named `marvels_basket_network` for all project containers.
+
+### Consequences
+- Predictable internal DNS resolution (`postgres`, `redis`).
+- No host network namespace pollution.
+- Development host port publishing is isolated to `compose.override.yaml`.
+
+---
+
+## ADR-020: Persistent Named Volumes & Destructive Reset Protection
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Developers frequently stop and restart their development environments. Standard teardowns must never inadvertently destroy local database records, test accounts, or seed data. Conversely, an explicit command is needed to completely purge data when resetting local state.
+
+### Decision
+Use named persistent volumes (`marvels_basket_postgres_data` and `marvels_basket_redis_data`).
+1. `npm run docker:down` strictly halts containers while preserving all named volumes.
+2. `npm run docker:reset` is explicitly destructive, requiring either an interactive typed confirmation (`DELETE`) or a `--confirm` flag in CI/CD environments.
+
+### Consequences
+- Accidental data loss during routine shutdowns is completely prevented.
+- Complete environment wipe is preserved for intentional resets with clear safeguards.
+
+---
+
+## ADR-021: Shared Code Boundaries & Workspace Package Resolution
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Code shared between frontend (`apps/web`) and backend (`apps/api`) must remain strictly modular to prevent backend business logic or database drivers from leaking into the customer client bundle.
+
+### Decision
+Establish `packages/shared` (`@marvels-basket/shared`) containing only platform-wide enums, constants, and TypeScript interfaces. Framework-specific dependencies (Next.js, NestJS, Prisma) are strictly forbidden in `packages/shared`.
+
+### Consequences
+- Zero backend bundle leakage into the Next.js client.
+- Single source of truth for order statuses, payment methods, user roles, and business rule constants.
+- Resolved via npm workspaces and TypeScript path mappings.
+
+---
+
+## ADR-022: Multi-Tier Environment Variable Management
+
+**Status:** Accepted  
+**Date:** 2026-11-19  
+
+### Context
+Different applications and services require distinct environment variables, while developers need a single root template to bootstrap the system.
+
+### Decision
+1. Maintain `.env.example` at the repository root as the canonical documentation and quickstart template.
+2. Maintain localized `.env.example` templates within `apps/web/`, `apps/api/`, and `infrastructure/docker/`.
+3. The Docker orchestration script (`manage.js`) automatically reads root `.env` or falls back gracefully.
+4. `.env` and all secret files are strictly excluded from git via `.gitignore`.
+
+### Consequences
+- Clear onboarding for new engineers.
+- Zero risk of secret leakage to version control.
+
+---
+
 # Part C — Complete Decision Register Summary
 
 | ADR # | Decision Topic | Status | Category | Key Implementation Invariant |
@@ -475,7 +589,7 @@ Implement **Coordinate and PIN-Code-Based Hyperlocal Serviceability**:
 | **ADR-001** | Frontend Framework | **Accepted** | Technical | Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui |
 | **ADR-002** | Backend Architecture | **Accepted** | Technical | NestJS Modular Monolith, REST API (`/api/v1`) |
 | **ADR-003** | Database & ORM | **Accepted** | Technical | PostgreSQL 16, Prisma ORM, Decimal monetary types |
-| **ADR-004** | Monorepo Structure | **Accepted** | Technical | pnpm workspaces + Turborepo (`apps/web`, `apps/api`) |
+| **ADR-004** | Monorepo Structure | **Accepted** | Technical | npm Workspaces (`apps/*`, `packages/*`), centralized scripts |
 | **ADR-005** | Monorepo Architecture | **Accepted** | Technical | Separation of concerns, shared packages without backend leaks |
 | **ADR-006** | Product Ownership | **Accepted** | Business | Hybrid Master Catalog + Store-specific listings & inventory |
 | **ADR-007** | Checkout Model | **Accepted** | Business | Single-Store Checkout (Multi-seller parent/sub-orders superseded) |
@@ -488,6 +602,12 @@ Implement **Coordinate and PIN-Code-Based Hyperlocal Serviceability**:
 | **ADR-014** | Cancellation & Refunds | **Accepted** | Business | Free pre-pack; restricted post-pack; source refunds (5–7 days); no wallet |
 | **ADR-015** | Pricing & Discounts | **Accepted** | Business | Store selling price <= MRP; server price snapshots; platform coupons |
 | **ADR-016** | Hyperlocal Serviceability| **Accepted** | Business/Tech | Store radius + PIN code filtering; distance-tiered delivery fees |
+| **ADR-017** | Centralized Docker Orchestration | **Accepted** | Infrastructure | Root-level `npm run docker:*` commands via `manage.js` |
+| **ADR-018** | Postgres 16 & Redis 7 Services | **Accepted** | Infrastructure | Official Alpine container images with healthcheck probes |
+| **ADR-019** | Container Bridge Network | **Accepted** | Infrastructure | Dedicated `marvels_basket_network` bridge with internal DNS |
+| **ADR-020** | Persistent Volumes & Reset Guard | **Accepted** | Infrastructure | Named volumes preserved on down; reset requires typed confirmation |
+| **ADR-021** | Shared Code Boundaries | **Accepted** | Architecture | `@marvels-basket/shared` holds domain enums & constants only |
+| **ADR-022** | Environment Config Strategy | **Accepted** | Configuration | Multi-tier `.env.example` templates; root `.env` orchestration |
 
 ---
 

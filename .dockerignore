@@ -1,0 +1,28 @@
+# Dependencies
+**/node_modules
+**/.pnp
+**/.pnp.js
+
+# Build Outputs
+**/dist
+**/build
+**/.next
+**/out
+
+# Version Control
+**/.git
+**/.gitignore
+
+# Environment files with secrets
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs and OS artifacts
+**/.DS_Store
+**/*.log
+**/npm-debug.log*
+**/coverage
+**/.eslintcache
+**/.vscode
+**/.idea

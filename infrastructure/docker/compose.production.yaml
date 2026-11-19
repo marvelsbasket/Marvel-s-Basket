@@ -1,0 +1,41 @@
+# ==============================================================================
+# MARVEL'S BASKET — DOCKER COMPOSE PRODUCTION REFERENCE SPECIFICATION
+# ==============================================================================
+# Used for staging or production container orchestration.
+# Restricts direct host port exposure; internal communication stays on bridge.
+# ==============================================================================
+
+name: marvels_basket_prod
+
+services:
+  postgres:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '5'
+
+  redis:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.2'
+          memory: 128M
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '20m'
+        max-file: '3'
