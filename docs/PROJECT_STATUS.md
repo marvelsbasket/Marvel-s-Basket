@@ -4,9 +4,9 @@
 
 **Project:** Marvel's Basket  
 **Organization:** Marvel's Techworks  
-**Document Version:** 2.7  
-**Current Phase:** Phase 08 — Product Catalog & Categories  
-**Phase Status:** Completed (Phase 08 Verified; Ready for Phase 09)  
+**Document Version:** 2.8  
+**Current Phase:** Phase 09 — Seller Listings & Inventory Management  
+**Phase Status:** Completed (Phase 09 Verified; Ready for Phase 10 & 11)  
 **Last Updated:** 20 November 2026
 
 ---
@@ -156,8 +156,8 @@ Phase 06 delivered the complete customer profile and delivery address management
 | **Phase 06** | User & Profile Management | High | **Completed** | Customer profile, address CRUD, atomic default address, mobile nav, Basket terminology. 107/107 tests passing. |
 | **Phase 07** | Seller Onboarding & KYC | High | **Completed** | Footer discovery, 5-step onboarding wizard, draft saving, AES-256-GCM bank encryption, Cloudinary authenticated KYC, admin inspection & review, state machine (DRAFT -> APPROVED_ACTIVE), Resend notifications. 137 unit + 59 E2E + 10 DB tests passing. |
 | **Phase 08** | Product Catalog & Categories | High | **Completed** | Platform master catalog, 2-tier categories, brands, variants, max-5 images, store-scoped catalog discovery, Indian search synonyms, admin wizard & management, responsive storefront PDP & category rails. 151 unit + 75 E2E + 8 web tests passing. |
-| **Phase 09** | Seller Listings & Inventory | High | **Ready to Start** | Unblocked by Phase 08. |
-| **Phase 10** | Customer Shopping Experience | High | Not Started | Dependent on Phase 08 & 09. |
+| **Phase 09** | Seller Listings & Inventory | High | **Completed** | Master catalog variant mapping, store-specific pricing (<= MRP ceiling), triple-state inventory (stock_on_hand, reserved, available), parameterized conditional SQL update (zero overselling), ascending row-lock ordering (zero deadlocks), 10m TTL reservations, Redis distributed lock expiration worker, pre-checkout cart revalidation, immutable audit ledger, physical-to-ledger reconciliation, seller inventory dashboard UI. 175 unit + 8 E2E + 62 web tests passing. |
+| **Phase 10** | Customer Shopping Experience | High | **Ready to Start** | Unblocked by Phase 08 & 09. |
 | **Phase 11** | Cart & Checkout (Single Store) | Critical | Not Started | Dependent on Phase 09 & 10. |
 | **Phase 12** | Order Management | Critical | Not Started | Dependent on Phase 11. |
 | **Phase 13** | Payment Integration (Razorpay + COD) | Critical | Not Started | Dependent on Phase 12. |
@@ -176,10 +176,10 @@ Phase 06 delivered the complete customer profile and delivery address management
 
 ## 9. Immediate Next Steps
 
-1. Transition to **Phase 09 — Seller Listings & Inventory**:
-   - Implement Seller Storefront Inventory Mapping (`SellerProduct` & `Inventory`).
-   - Seller-specific selling price configuration (enforcing `<= MRP` ceiling) and localized promotional discounts.
-   - Real-time stock management, low-stock threshold alerts, and batch inventory updates.
-   - Store inventory CSV/Excel bulk upload and reconciliation.
+1. Transition to **Phase 10 — Customer Shopping Experience**:
+   - Customer-facing homepage enhancements, quick-add carousel rails, and category landing pages.
+   - Live location picker and serviceable store mapping.
+   - Dynamic store switching modal with basket retention/clearing confirmation.
+   - Product search with debounce, fuzzy matching, and Indian regional grocery synonyms.
 
 **Document End — PROJECT_STATUS.md**

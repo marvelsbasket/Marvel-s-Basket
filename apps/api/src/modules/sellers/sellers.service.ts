@@ -10,7 +10,7 @@ import {
   UpdateSellerProfileDto,
   UpdateSellerStoreDto,
 } from './dto';
-import { SellerStatus, VerificationStatus } from '@prisma/client';
+import { Prisma, SellerStatus, VerificationStatus } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
 const FOOD_CATEGORIES = new Set([
@@ -62,31 +62,44 @@ export class SellersService {
     const businessName = dto?.storeDisplayName || `${user.name}'s Store`;
     const slug = this.generateSlug(businessName);
 
-    const seller = await this.prisma.seller.create({
-      data: {
-        ownerUserId: user.id,
-        businessName,
-        storeDisplayName: dto?.storeDisplayName || businessName,
-        storeCategory: dto?.storeCategory || 'GROCERY',
-        slug,
-        businessEmail: user.email || '',
-        businessPhone: user.phone || '',
-        status: SellerStatus.DRAFT,
-        currentStep: 1,
-        profile: {
-          create: {
-            addressLine1: 'Pending store address',
-            city: 'Pending',
-            state: 'Pending',
-            postalCode: '000000',
-            serviceRadiusKm: new Decimal(5.0),
+    try {
+      const seller = await this.prisma.seller.create({
+        data: {
+          ownerUserId: user.id,
+          businessName,
+          storeDisplayName: dto?.storeDisplayName || businessName,
+          storeCategory: dto?.storeCategory || 'GROCERY',
+          slug,
+          businessEmail: user.email || '',
+          businessPhone: user.phone || '',
+          status: SellerStatus.DRAFT,
+          currentStep: 1,
+          profile: {
+            create: {
+              addressLine1: 'Pending store address',
+              city: 'Pending',
+              state: 'Pending',
+              postalCode: '000000',
+              serviceRadiusKm: new Decimal(5.0),
+            },
           },
         },
-      },
-      include: { profile: true, documents: true },
-    });
+        include: { profile: true, documents: true },
+      });
 
-    return this.formatSellerApplication(seller, user);
+      return this.formatSellerApplication(seller, user);
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existingUser = await this.prisma.user.findUnique({
+          where: { id: userId },
+          include: { seller: { include: { profile: true, documents: true } } },
+        });
+        if (existingUser?.seller) {
+          return this.formatSellerApplication(existingUser.seller, existingUser);
+        }
+      }
+      throw err;
+    }
   }
 
   /**
@@ -563,7 +576,19 @@ export class SellersService {
     });
 
     if (!seller) {
-      throw new NotFoundException('No seller application found');
+      return {
+        sellerId: null,
+        status: null,
+        isSubmitted: false,
+        submittedAt: null,
+        approvalDate: null,
+        rejectionReason: null,
+        suspensionReason: null,
+        currentStep: 0,
+        totalDocuments: 0,
+        verifiedDocuments: 0,
+        recentHistory: [],
+      };
     }
 
     const verifiedDocs = seller.documents.filter(

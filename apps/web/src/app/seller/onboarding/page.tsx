@@ -240,13 +240,13 @@ export default function SellerOnboardingPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSaveDraft = async () => {
+  const handleSaveDraft = async (): Promise<boolean> => {
     setSavingDraft(true);
     setSaveSuccessMessage(null);
     setFormError(null);
 
     try {
-      const payload: Record<string, unknown> = {
+      const rawPayload: Record<string, unknown> = {
         currentStep,
         ownerName: formData.ownerName,
         businessPhone: formData.businessPhone,
@@ -267,20 +267,34 @@ export default function SellerOnboardingPage() {
         legalBusinessName: formData.legalBusinessName,
         businessEntityType: formData.businessEntityType,
         pan: formData.pan,
-        gstin: formData.gstin || undefined,
-        fssaiNumber: formData.fssaiNumber || undefined,
-        fssaiExpiryDate: formData.fssaiExpiryDate || undefined,
-        shopEstablishmentNumber: formData.shopEstablishmentNumber || undefined,
+        gstin: formData.gstin,
+        fssaiNumber: formData.fssaiNumber,
+        fssaiExpiryDate: formData.fssaiExpiryDate,
+        shopEstablishmentNumber: formData.shopEstablishmentNumber,
         bankAccountHolderName: formData.bankAccountHolderName,
         bankIfscCode: formData.bankIfscCode,
         bankName: formData.bankName,
         bankAccountType: formData.bankAccountType,
-        upiId: formData.upiId || undefined,
+        upiId: formData.upiId,
       };
 
       if (formData.bankAccountNumber) {
-        payload.bankAccountNumber = formData.bankAccountNumber;
-        payload.confirmBankAccountNumber = formData.confirmBankAccountNumber;
+        rawPayload.bankAccountNumber = formData.bankAccountNumber;
+        rawPayload.confirmBankAccountNumber = formData.confirmBankAccountNumber;
+      }
+
+      // Filter out empty strings and null/undefined values so unfinished steps don't fail regex/min-length
+      const payload: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rawPayload)) {
+        if (value === undefined || value === null) continue;
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if (trimmed !== '') {
+            payload[key] = trimmed;
+          }
+        } else {
+          payload[key] = value;
+        }
       }
 
       const res = await SellerService.updateMyApplication(payload);
@@ -295,10 +309,12 @@ export default function SellerOnboardingPage() {
 
       setSaveSuccessMessage('Draft saved successfully! You can resume anytime.');
       setTimeout(() => setSaveSuccessMessage(null), 4000);
+      return true;
     } catch (err: unknown) {
       setFormError(
         err instanceof Error ? err.message : 'Failed to save draft. Please check your inputs.',
       );
+      return false;
     } finally {
       setSavingDraft(false);
     }
@@ -310,7 +326,8 @@ export default function SellerOnboardingPage() {
     }
 
     // Auto-save draft on step transition
-    await handleSaveDraft();
+    const saved = await handleSaveDraft();
+    if (!saved) return;
 
     const nextStep = currentStep + 1;
     setCurrentStep(nextStep);

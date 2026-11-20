@@ -589,3 +589,200 @@ export interface CatalogStoreMappingItem {
   status: string;
   lastInventoryUpdate: string;
 }
+
+// ==============================================================================
+// PHASE 09: SELLER LISTINGS & INVENTORY MANAGEMENT
+// ==============================================================================
+
+export interface CreateSellerListingRequest {
+  productId: string;
+  variantId: string;
+  sellingPrice: number;
+  initialStock?: number;
+  lowStockThreshold?: number;
+  sellerSku?: string;
+  status?: string;
+}
+
+export interface UpdateSellerListingRequest {
+  sellingPrice?: number;
+  sellerSku?: string;
+  status?: string;
+  lowStockThreshold?: number;
+}
+
+export interface UpdateListingPriceRequest {
+  sellingPrice: number;
+}
+
+export interface UpdateListingStatusRequest {
+  status: 'ACTIVE' | 'PAUSED' | 'OUT_OF_STOCK' | 'DISABLED';
+  reason?: string;
+}
+
+export interface SellerListingItem {
+  id: string;
+  sellerId: string;
+  productId: string;
+  productName: string;
+  productSlug: string;
+  categoryName: string;
+  brandName?: string | null;
+  variantId: string;
+  variantName: string;
+  packSize?: string | null;
+  sku?: string | null;
+  sellerSku?: string | null;
+  mrp: number;
+  sellingPrice: number;
+  discountPercent: number;
+  status: string;
+  imageUrl?: string | null;
+  stockOnHand: number;
+  reservedStock: number;
+  availableStock: number;
+  lowStockThreshold: number;
+  isLowStock: boolean;
+  isOutOfStock: boolean;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface InventoryOverviewMetrics {
+  totalListedProducts: number;
+  activeListings: number;
+  pausedListings: number;
+  outOfStockListings: number;
+  lowStockListings: number;
+  totalStockOnHand: number;
+  totalReservedStock: number;
+  totalAvailableStock: number;
+}
+
+export interface AdjustStockRequest {
+  operation:
+    | 'RESTOCK'
+    | 'MANUAL_INCREASE'
+    | 'MANUAL_DECREASE'
+    | 'DAMAGED_STOCK_WRITEOFF'
+    | 'EXPIRED_STOCK_WRITEOFF'
+    | 'PICKER_SHORTAGE_WRITEOFF'
+    | 'INVENTORY_CORRECTION';
+  quantity: number;
+  note: string;
+  referenceType?: string;
+  referenceId?: string;
+  idempotencyKey?: string;
+}
+
+export interface InventoryAdjustmentHistoryItem {
+  id: string;
+  inventoryId: string;
+  type: string;
+  quantity: number;
+  stockBefore: number;
+  stockAfter: number;
+  referenceType?: string | null;
+  referenceId?: string | null;
+  note?: string | null;
+  performedBy?: string | null;
+  createdAt: string;
+}
+
+export interface InventoryReconciliationResult {
+  inventoryId: string;
+  sellerProductId: string;
+  productName: string;
+  variantName: string;
+  currentStockOnHand: number;
+  calculatedStockFromLedger: number;
+  discrepancy: number;
+  isReconciled: boolean;
+  totalStockIn: number;
+  totalStockOut: number;
+  totalWriteOffs: number;
+}
+
+export interface CartItemRevalidationInput {
+  listingId?: string;
+  variantId: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface CartItemRevalidationResult {
+  variantId: string;
+  listingId: string;
+  productName: string;
+  packSize?: string | null;
+  requestedQuantity: number;
+  availableQuantity: number;
+  adjustedQuantity: number;
+  originalUnitPrice: number;
+  currentUnitPrice: number;
+  priceChanged: boolean;
+  isAvailable: boolean;
+  status: string;
+  message?: string;
+}
+
+export interface CartRevalidationResponse {
+  storeId: string;
+  storeName: string;
+  isStoreAcceptingOrders: boolean;
+  isStoreServiceable: boolean;
+  items: CartItemRevalidationResult[];
+  hasPriceChanges: boolean;
+  hasQuantityAdjustments: boolean;
+  isOrderable: boolean;
+  revalidationTimestamp: string;
+}
+
+export interface CreateStockReservationRequest {
+  storeId: string;
+  items: Array<{
+    variantId?: string;
+    listingId?: string;
+    quantity: number;
+  }>;
+  checkoutSessionId: string;
+  cartId?: string;
+  ttlMinutes?: number;
+  idempotencyKey: string;
+}
+
+export interface StockReservationResult {
+  reservationId: string;
+  checkoutSessionId: string;
+  status: string;
+  expiresAt: string;
+  items: Array<{
+    inventoryId: string;
+    listingId: string;
+    variantId: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+}
+
+export interface CommitReservationRequest {
+  checkoutSessionId: string;
+  orderId?: string;
+  idempotencyKey: string;
+}
+
+export interface ReleaseReservationRequest {
+  checkoutSessionId: string;
+  reason?: string;
+  idempotencyKey?: string;
+}
+
+export interface PickerShortageWriteOffRequest {
+  storeId: string;
+  listingId: string;
+  shortageQuantity: number;
+  orderId?: string;
+  reason: string;
+  pickerId: string;
+  idempotencyKey: string;
+}

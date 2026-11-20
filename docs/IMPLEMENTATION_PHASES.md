@@ -543,7 +543,7 @@ Approved platform master catalog workflows support creation, editing, variant ma
 # 11. Phase 09 — Seller Listings & Inventory
 
 **Priority:** High  
-**Status:** Ready to Start
+**Status:** **Completed**
 
 ### Objective
 
@@ -551,28 +551,31 @@ Implement seller-specific product listings, pricing, and stock management.
 
 ### Tasks
 
-- [ ] Implement seller product listings.
-- [ ] Associate listings with catalog products.
-- [ ] Implement seller-specific pricing.
-- [ ] Implement listing availability.
-- [ ] Implement stock management.
-- [ ] Implement inventory adjustment history.
-- [ ] Implement stock validation.
-- [ ] Implement stock reservation logic.
-- [ ] Implement concurrency protection.
-- [ ] Build seller inventory screens.
-- [ ] Test inventory consistency.
+- [x] Implement seller product listings (`SellerProduct` mapped to master catalog variants).
+- [x] Associate listings with catalog products with strict `(seller_id, variant_id)` partial uniqueness.
+- [x] Implement seller-specific pricing with database CHECK constraint (`0 < selling_price <= variant.mrp`).
+- [x] Implement listing availability and statuses (`ACTIVE`, `PAUSED`, `OUT_OF_STOCK`, `DISABLED`).
+- [x] Implement triple-state inventory management (`stock_on_hand`, `reserved_stock`, `available_stock = stock_on_hand - reserved_stock`).
+- [x] Implement append-only immutable inventory adjustment history ledger (`InventoryTransaction`) with before/after balance tracking.
+- [x] Implement stock validation and mathematical ledger reconciliation.
+- [x] Implement stock reservation logic with 10-minute configurable TTL and background Redis distributed lock expiration worker.
+- [x] Implement concurrency protection: parameterized conditional SQL update (zero overselling) and consistent ascending row-lock ordering (zero deadlocks).
+- [x] Build responsive seller inventory dashboard UI with overview metrics, catalog browser, quick price edit, stock adjustment modal, audit drawer, and reconciliation modal.
+- [x] Test inventory consistency (175 API unit tests, 8 real PostgreSQL E2E concurrency tests, 62 Web tests).
 
 ### Deliverables
 
-- Seller listing management.
-- Inventory APIs.
-- Stock management interfaces.
-- Inventory validation and reservation logic.
+- Seller listing management APIs (`/api/v1/seller/stores/:storeId/listings/*`).
+- Master catalog browser API for sellers (`/api/v1/seller/catalog/products`).
+- Inventory management & audit ledger APIs (`/api/v1/seller/stores/:storeId/inventory/*`).
+- Cart pre-checkout revalidation and reservation APIs (`/api/v1/inventory/*`).
+- Automated background reservation expiration worker with distributed Redis locking.
+- Seller Inventory Frontend Dashboard (`/seller/inventory`) with overview cards, search/filters, action modals, and ledger history.
+- Concurrency & Invariant test suite (`inventory-concurrency.e2e-spec.ts`).
 
 ### Completion Criteria
 
-Inventory operations must prevent overselling and maintain consistency during concurrent purchase attempts.
+Inventory operations must prevent overselling and maintain consistency during concurrent purchase attempts. (Verified with 8/8 real PostgreSQL E2E tests).
 
 ---
 

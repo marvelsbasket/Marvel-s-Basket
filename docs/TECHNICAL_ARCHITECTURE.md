@@ -1394,20 +1394,33 @@ flowchart TD
     L --> Q
 ```
 
-## 9.2 Atomic Inventory Reservation
+## 9.2 Atomic Inventory Reservation & Concurrency Engine (Phase 09)
 
-To prevent race conditions, overselling, or ghost locks:
-- Reservation occurs during the checkout transition (`Proceed to Payment`).
-- Execution uses an atomic PostgreSQL transaction with row-level locks (`SELECT FOR UPDATE`) or atomic conditional update:
+To prevent race conditions, overselling, and deadlock cascades under high concurrency:
+- **Triple-State Inventory Model:** Physical inventory is tracked explicitly via `stockOnHand` (physical units on hand), `reservedQuantity` (units held in active checkout sessions), and `availableQuantity = stockOnHand - reservedQuantity`.
+- **Database CHECK Constraint Enforcement:**
+  `CHECK ("stock_on_hand" >= 0 AND "reserved_quantity" >= 0 AND "reserved_quantity" <= "stock_on_hand" AND "available_quantity" >= 0 AND "available_quantity" = ("stock_on_hand" - "reserved_quantity"))`
+- **Deadlock Elimination (Section 8.B):** Multi-item reservations sort inventory IDs in consistent alphabetical ascending order before row locking, preventing deadlocks when competing carts contain items in opposite sequences.
+- **Parameterized Conditional SQL Update (Section 8.A):**
   ```sql
-  UPDATE "Inventory"
-  SET "availableQuantity" = "availableQuantity" - :qty,
-      "reservedQuantity" = "reservedQuantity" + :qty
-  WHERE "sellerProductId" = :id AND "availableQuantity" >= :qty;
+  UPDATE inventories
+  SET "reserved_quantity" = "reserved_quantity" + $1,
+      "available_quantity" = "available_quantity" - $1,
+      "updated_at" = NOW()
+  WHERE "id" = $2::uuid
+    AND ("stock_on_hand" - "reserved_quantity") >= $1
+  RETURNING "id", "stock_on_hand", "reserved_quantity", "available_quantity";
   ```
-- Creates a `StockReservation` record with `expiresAt = NOW() + INTERVAL '15 minutes'`.
-- A BullMQ delayed job schedules a sweep at `expiresAt`. If `status == 'ACTIVE'`, the worker automatically releases the reserved stock and marks the reservation `EXPIRED`.
-- On verified payment success, `StockReservation` is updated to `COMMITTED`, and `reservedQuantity` is permanently decremented.
+  If zero rows match due to concurrent depletion, the engine immediately throws an HTTP 409 Conflict (`INSUFFICIENT_STOCK`), guaranteeing zero overselling.
+- **Reservation Lifecycle & Redis Distributed Locking Worker:**
+  - Reservations have a configurable 10-minute TTL (`expiresAt = NOW() + INTERVAL '10 minutes'`) with states `ACTIVE`, `COMMITTED`, `RELEASED`, `EXPIRED`.
+  - A background `ReservationExpirationWorker` runs periodically utilizing a Redis distributed lock (`SET lock:reservation_expiration ... NX PX 50000`) and safe Lua script release, automatically sweeping expired reservations and restoring reserved stock to available stock.
+- **Idempotency & Auditable Ledger:**
+  - Idempotency keys (`idempotencyKey`) on reservations and stock adjustments prevent duplicate deductions upon network retries.
+  - Every physical adjustment records an append-only `InventoryTransaction` with `stockBefore` and `stockAfter`.
+  - Reconciliation API verifies `currentStockOnHand == sum(ledger transactions)`.
+- **Pre-Checkout Cart Revalidation:**
+  - `/api/v1/inventory/revalidate-cart` verifies store orderability, active status, and live prices without locking inventory rows, keeping locks minimal until actual checkout initiation.
 
 ## 9.3 Payment & Webhook Processing
 

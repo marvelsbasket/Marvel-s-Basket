@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -53,6 +53,11 @@ export function StepDocumentUpload({
   const [uploadingType, setUploadingType] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const triggerFileInput = (type: string) => {
+    fileInputRefs.current[type]?.click();
+  };
 
   const isFoodCategory = [
     'GROCERY',
@@ -102,6 +107,22 @@ export function StepDocumentUpload({
 
   const handleFileSelected = async (type: string, file: File) => {
     setActionError(null);
+
+    // Validate size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setActionError('File size exceeds the 10 MB limit. Please select a smaller file.');
+      return;
+    }
+
+    // Validate extension
+    const validExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
+    const fileNameLower = file.name.toLowerCase();
+    const hasValidExtension = validExtensions.some((ext) => fileNameLower.endsWith(ext));
+    if (!hasValidExtension) {
+      setActionError('Unsupported file type. Please upload a PDF, JPG, PNG, or WebP document.');
+      return;
+    }
+
     setUploadingType(type);
 
     try {
@@ -217,6 +238,23 @@ export function StepDocumentUpload({
                   )}
                 </div>
 
+                {/* Hidden native file input activated by Upload / Replace button */}
+                <input
+                  type="file"
+                  ref={(el) => {
+                    fileInputRefs.current[cfg.type] = el;
+                  }}
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  disabled={isUploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileSelected(cfg.type, file);
+                    e.target.value = '';
+                  }}
+                  className="hidden"
+                  aria-hidden="true"
+                />
+
                 <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                   {uploaded ? (
                     <>
@@ -235,47 +273,58 @@ export function StepDocumentUpload({
 
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(uploaded.id)}
-                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 mr-1" />
-                        Replace
-                      </Button>
-                    </>
-                  ) : (
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.webp"
-                        disabled={isUploading}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileSelected(cfg.type, file);
-                        }}
-                        className="hidden"
-                      />
-                      <Button
-                        type="button"
                         variant="outline"
                         size="sm"
                         disabled={isUploading}
+                        onClick={() => triggerFileInput(cfg.type)}
                         className="text-xs font-semibold cursor-pointer"
                       >
                         {isUploading ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin text-brand" />
-                            Uploading...
+                            Replacing...
                           </>
                         ) : (
                           <>
                             <Upload className="w-3.5 h-3.5 mr-1 text-brand" />
-                            Upload File
+                            Replace
                           </>
                         )}
                       </Button>
-                    </label>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={isUploading}
+                        onClick={() => handleDelete(uploaded.id)}
+                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1" />
+                        Delete
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isUploading}
+                      onClick={() => triggerFileInput(cfg.type)}
+                      className="text-xs font-semibold cursor-pointer"
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin text-brand" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5 mr-1 text-brand" />
+                          Upload File
+                        </>
+                      )}
+                    </Button>
                   )}
                 </div>
               </CardContent>

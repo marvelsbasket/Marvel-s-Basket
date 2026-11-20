@@ -1160,12 +1160,14 @@ async function main() {
       await prisma.inventory.upsert({
         where: { sellerProductId: store1Listing.id },
         update: {
+          stockOnHand: v.store1Stock,
           availableQuantity: v.store1Stock,
           reservedQuantity: 0,
           lowStockThreshold: 5,
         },
         create: {
           sellerProductId: store1Listing.id,
+          stockOnHand: v.store1Stock,
           availableQuantity: v.store1Stock,
           reservedQuantity: 0,
           lowStockThreshold: 5,
@@ -1208,12 +1210,14 @@ async function main() {
       await prisma.inventory.upsert({
         where: { sellerProductId: store2Listing.id },
         update: {
+          stockOnHand: v.store2Stock,
           availableQuantity: v.store2Stock,
           reservedQuantity: 0,
           lowStockThreshold: 5,
         },
         create: {
           sellerProductId: store2Listing.id,
+          stockOnHand: v.store2Stock,
           availableQuantity: v.store2Stock,
           reservedQuantity: 0,
           lowStockThreshold: 5,

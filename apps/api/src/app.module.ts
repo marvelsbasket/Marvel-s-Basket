@@ -15,6 +15,7 @@ import { SellersModule } from './modules/sellers/sellers.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { BrandsModule } from './modules/brands/brands.module';
 import { ProductsModule } from './modules/products/products.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 import { JwtAuthGuard, RolesGuard, PermissionsGuard } from './modules/auth/guards';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
@@ -41,6 +42,7 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     CategoriesModule,
     BrandsModule,
     ProductsModule,
+    InventoryModule,
     HealthModule,
   ],
   providers: [

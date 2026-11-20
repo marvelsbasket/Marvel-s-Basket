@@ -1141,6 +1141,41 @@ In Marvel's Basket's Aggregator / Hybrid Marketplace Model, multiple independent
 
 ---
 
+## ADR-052: Store Inventory Engine, Concurrency Safety, and Reservation Lifecycle
+
+**Status:** Accepted  
+**Date:** 2026-11-20  
+
+### Context
+In high-velocity grocery quick-commerce, multiple customers frequently attempt to purchase the same inventory items concurrently. Unprotected inventory systems suffer from overselling (last-item race condition), cart checkout deadlocks when multi-item baskets lock rows in varying orders, or abandoned checkout sessions holding phantom stock indefinitely. Furthermore, seller pricing must never violate the statutory consumer ceiling (MRP), and all physical stock changes must remain strictly auditable and tamper-proof.
+
+### Decision
+1. **Triple-State Inventory Model & Database Constraints:**
+   - Physical stock is tracked via `stock_on_hand` (units physically in the store/warehouse), `reserved_stock` (units held in active checkout sessions), and `available_stock = stock_on_hand - reserved_stock`.
+   - PostgreSQL CHECK constraint `inventories_stock_invariants_check` guarantees `stock_on_hand >= 0 AND reserved_quantity >= 0 AND reserved_quantity <= stock_on_hand AND available_quantity >= 0 AND available_quantity = (stock_on_hand - reserved_quantity)`.
+   - PostgreSQL CHECK constraint `seller_products_selling_price_check` guarantees `selling_price > 0 AND (mrp IS NULL OR selling_price <= mrp)`.
+   - Partial unique index on `("seller_id", "variant_id") WHERE variant_id IS NOT NULL` prevents duplicate variant mappings within the same store.
+2. **Last-Item Race Protection via Parameterized Conditional SQL Update:**
+   - Reservations use: `UPDATE inventories SET reserved_quantity = reserved_quantity + $1, available_quantity = available_quantity - $1 WHERE id = $2 AND (stock_on_hand - reserved_quantity) >= $1 RETURNING id`.
+   - If zero rows are returned due to a concurrent reservation seizing the remaining stock, the system rejects the request immediately with an HTTP 409 Conflict (`INSUFFICIENT_STOCK`), guaranteeing zero overselling.
+3. **Deadlock Elimination via Ascending Lock Ordering:**
+   - Multi-item cart reservations always sort inventory IDs in consistent alphabetical ascending order before acquiring transaction locks, eliminating deadlocks between competing carts containing the same items in opposite sequences.
+4. **Reservation Lifecycle & Distributed Expiration Worker:**
+   - Stock reservations have a 10-minute configurable TTL with statuses `ACTIVE`, `COMMITTED`, `RELEASED`, `EXPIRED`.
+   - Background reservation cleanup runs via a Redis distributed lock (`SET lock:reservation_expiration ... NX PX 50000`) with safe Lua script release, automatically restoring expired reserved units to available stock.
+5. **Pre-Checkout Revalidation without Premature Locking:**
+   - Cart revalidation verifies store serviceability, active product/variant status, live prices, and available stock without locking inventory rows, protecting system throughput until checkout initiation.
+6. **Immutable Audit Ledger & Mathematical Reconciliation:**
+   - All physical adjustments are appended to `InventoryTransaction` with `stockBefore`, `stockAfter`, and idempotency keys. Normal downward adjustments are blocked if they would violate currently reserved checkout units.
+   - Comprehensive reconciliation verifies `currentStockOnHand == sum(ledger transactions)`.
+
+### Consequences
+- Prevents customer checkout disappointments from overselling and phantom inventory.
+- Eliminates database deadlock spikes under peak grocery order surges.
+- Establishes a rock-solid, production-grade foundation for Phase 11 (Cart & Checkout) and Phase 12 (Order Management).
+
+---
+
 # Part C — Complete Decision Register Summary
 
 | ADR # | Decision Topic | Status | Category | Key Implementation Invariant |
@@ -1196,6 +1231,7 @@ In Marvel's Basket's Aggregator / Hybrid Marketplace Model, multiple independent
 | **ADR-049** | Unified Unverified Account Recovery & Automatic Resend | **Accepted** | Security/Auth | Auto-resend OTP on re-register/login for unverified accounts; Argon2id password-check-first invariant |
 | **ADR-050** | Mobile Navigation Refinement & Delivery Address Prominence | **Accepted** | Frontend/UX | Remove duplicate mobile avatar, add mobile Deliver To selector, promote Orders in bottom nav, unify basket badge |
 | **ADR-051** | Master Catalog & Store-Specific Inventory Separation | **Accepted** | Catalog/Architecture | Platform owns master catalog, variants, and MRP; stores own local selling price & inventory; store-scoped discovery |
+| **ADR-052** | Store Inventory Engine, Concurrency Safety & Reservations | **Accepted** | Inventory/Engine | Parameterized conditional SQL update (no overselling), ascending row-lock ordering (no deadlocks), Redis lock TTL cleanup |
 
 ---
 

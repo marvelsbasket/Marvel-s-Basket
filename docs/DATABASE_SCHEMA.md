@@ -968,68 +968,83 @@ This allows customers to compare sellers and prices.
 
 ## 10.1 Inventory
 
-Maintains stock for each seller listing.
+Maintains stock for each seller listing with strict physical stock invariant tracking and concurrency protection.
 
 Fields:
 
-- id
-- sellerProductId
-- availableQuantity
-- reservedQuantity
-- lowStockThreshold
-- updatedAt
+- id (UUID, Primary Key)
+- sellerProductId (UUID, Unique Foreign Key -> seller_products.id)
+- stockOnHand (Int, physical inventory physically present in store/warehouse, default: 0)
+- availableQuantity (Int, available to sell = stockOnHand - reservedQuantity)
+- reservedQuantity (Int, units held in active customer checkout carts, default: 0)
+- lowStockThreshold (Int, default: 5)
+- updatedAt (DateTime)
 
-Constraint:
+Database Constraints & Invariants:
 
-`sellerProductId` must be unique.
-
-Inventory values must never become negative.
-
-Available quantity and reserved quantity must remain consistent with the stock ledger.
+1. `inventories_stock_invariants_check`:
+   `CHECK ("stock_on_hand" >= 0 AND "reserved_quantity" >= 0 AND "reserved_quantity" <= "stock_on_hand" AND "available_quantity" >= 0 AND "available_quantity" = ("stock_on_hand" - "reserved_quantity"))`
+2. `seller_products_selling_price_check`:
+   `CHECK ("selling_price" > 0 AND ("mrp" IS NULL OR "selling_price" <= "mrp"))`
+3. `seller_products_seller_id_variant_id_not_null_key`:
+   Partial unique index: `("seller_id", "variant_id") WHERE "variant_id" IS NOT NULL`
 
 ## 10.2 InventoryTransaction
 
-Maintains the history of stock changes.
+Maintains an immutable, append-only audit ledger of every stock modification.
 
 Fields:
 
-- id
-- inventoryId
-- type
-- quantity
-- referenceType
-- referenceId
-- note
-- createdBy
-- createdAt
+- id (UUID, Primary Key)
+- inventoryId (UUID, Foreign Key -> inventories.id)
+- type (InventoryTransactionType enum: INITIAL_STOCK, RESTOCK, MANUAL_INCREASE, MANUAL_DECREASE, DAMAGED_STOCK_WRITEOFF, EXPIRED_STOCK_WRITEOFF, PICKER_SHORTAGE_WRITEOFF, ORDER_COMMITTED, INVENTORY_CORRECTION)
+- quantity (Int, signed delta: positive for stock inward, negative for stock outward/loss)
+- stockBefore (Int, physical stock on hand prior to transaction)
+- stockAfter (Int, physical stock on hand after transaction)
+- referenceType (String, e.g. PO_RECEIPT, ORDER, AUDIT, WRITE_OFF)
+- referenceId (String, external PO number, order ID, or discrepancy ticket)
+- note (String, mandatory audit explanation)
+- idempotencyKey (String, unique operational key preventing duplicate ledger appends)
+- createdBy (UUID, user ID who executed the adjustment)
+- createdAt (DateTime)
 
-Transactions should be append-only from the application's business perspective.
+Indexes:
+- `inventory_transactions_inventory_id_created_at_idx`
+- `inventory_transactions_idempotency_key_idx`
+
+Transactions are strictly append-only and mathematically reconciled against physical stock on hand.
 
 ## 10.3 StockReservation
 
-Tracks inventory reserved for checkout.
+Tracks inventory reserved for customer checkout sessions with deterministic lifecycle and auto-expiration.
 
 Fields:
 
-- id
-- inventoryId
-- orderItemId (optional until order items are created)
-- quantity
-- status
-- expiresAt
-- committedAt
-- releasedAt
-- createdAt
+- id (UUID, Primary Key)
+- inventoryId (UUID, Foreign Key -> inventories.id)
+- orderItemId (UUID, optional until order is committed)
+- checkoutSessionId (String, unique customer checkout session token)
+- cartId (String, customer shopping cart reference)
+- quantity (Int, quantity held)
+- unitPrice (Decimal 10,2, price at moment of reservation)
+- status (StockReservationStatus enum: ACTIVE, COMMITTED, RELEASED, EXPIRED)
+- idempotencyKey (String, unique reservation key preventing double reservation)
+- expiresAt (DateTime, reservation TTL timestamp, default 10 minutes)
+- committedAt (DateTime, timestamp when order payment succeeded)
+- releasedAt (DateTime, timestamp when checkout was abandoned or canceled)
+- createdAt (DateTime)
 
-Rules:
+Database Constraints & Rules:
 
-- Reservation must be created transactionally.
-- Reservation expiration must release stock.
-- Successful payment must commit the reservation.
-- Failed or expired checkout must release stock.
-- Duplicate reservation processing must be prevented.
-
-The checkout implementation must ensure the reservation is durably associated with the checkout/order workflow.
+1. `stock_reservations_quantity_check`:
+   `CHECK ("quantity" > 0)`
+2. Deadlock Prevention (Section 8.B):
+   Multi-item reservations acquire row-level locks strictly in ascending alphabetical order of `inventoryId`.
+3. Parameterized Conditional SQL Update (Section 8.A):
+   `UPDATE inventories SET reserved_quantity = reserved_quantity + $1, available_quantity = available_quantity - $1 WHERE id = $2 AND (stock_on_hand - reserved_quantity) >= $1 RETURNING id`
+   Prevents overselling even under concurrent milliseconds-apart customer checkout requests.
+4. Auto-Expiration:
+   Background Redis distributed lock worker sweeps expired reservations and restores reserved quantities to available quantities.
 
 ---
 

@@ -4,7 +4,7 @@ import { SellersService } from './sellers.service';
 import { PrismaService } from '../../database/prisma.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { EmailService } from '../email/email.service';
-import { SellerStatus, VerificationStatus } from '@prisma/client';
+import { Prisma, SellerStatus, VerificationStatus } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
 describe('SellersService', () => {
@@ -318,6 +318,31 @@ describe('SellersService', () => {
       expect(result.success).toBe(true);
       expect(cloudinary.deleteResource).toHaveBeenCalled();
       expect(prisma.sellerDocument.delete).toHaveBeenCalled();
+    });
+
+    it('should return empty status when no seller application exists', async () => {
+      prisma.seller.findUnique.mockResolvedValue(null);
+
+      const status = await service.getStatus('user-uuid-without-seller');
+      expect(status.status).toBeNull();
+      expect(status.sellerId).toBeNull();
+      expect(status.isSubmitted).toBe(false);
+    });
+
+    it('should recover from concurrent P2002 race condition on getOrCreateApplication', async () => {
+      const p2002Error = new Error('Unique constraint failed on owner_user_id') as any;
+      p2002Error.code = 'P2002';
+      Object.setPrototypeOf(p2002Error, Prisma.PrismaClientKnownRequestError.prototype);
+
+      // First call has no seller
+      prisma.user.findUnique.mockResolvedValueOnce({ ...mockUser, seller: null });
+      // Create fails with P2002
+      prisma.seller.create.mockRejectedValueOnce(p2002Error);
+      // Recovery call finds the newly created seller
+      prisma.user.findUnique.mockResolvedValueOnce({ ...mockUser, seller: mockSeller });
+
+      const res = await service.getOrCreateApplication('user-uuid-1');
+      expect(res.id).toBe(mockSeller.id);
     });
   });
 });

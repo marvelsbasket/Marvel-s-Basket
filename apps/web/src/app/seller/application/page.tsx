@@ -47,7 +47,7 @@ export default function SellerApplicationStatusPage() {
     fetchStatus();
   }, []);
 
-  const getStatusDisplay = (status: string) => {
+  const getStatusDisplay = (status?: string | null) => {
     switch (status) {
       case 'APPROVED_ACTIVE':
       case 'APPROVED':
@@ -115,7 +115,6 @@ export default function SellerApplicationStatusPage() {
           ),
         };
       case 'PENDING_VERIFICATION':
-      default:
         return {
           title: 'Application Under Review',
           badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
@@ -126,6 +125,23 @@ export default function SellerApplicationStatusPage() {
             <Button variant="outline" onClick={fetchStatus}>
               <RefreshCcw className="w-3.5 h-3.5 mr-1.5" />
               Refresh Status
+            </Button>
+          ),
+        };
+      default:
+        return {
+          title: 'No Application Found',
+          badgeClass: 'bg-slate-100 text-slate-700 border-slate-300',
+          icon: <FileText className="w-8 h-8 text-slate-600" />,
+          description:
+            'You haven’t started a seller registration yet. Join Marvel’s Basket to sell groceries to nearby customers.',
+          actionButton: (
+            <Button
+              className="bg-brand text-white font-bold"
+              onClick={() => router.push('/seller/onboarding')}
+            >
+              Start Seller Onboarding
+              <ArrowRight className="w-4 h-4 ml-1.5" />
             </Button>
           ),
         };
@@ -156,7 +172,7 @@ export default function SellerApplicationStatusPage() {
               <Spinner size="lg" />
               <p className="text-xs text-ink-muted">Fetching your application status...</p>
             </Card>
-          ) : error || !statusOverview ? (
+          ) : error || !statusOverview || !statusOverview.status ? (
             <Card className="border-border bg-white p-8 text-center space-y-4">
               <AlertCircle className="w-10 h-10 text-red-500 mx-auto" />
               <h3 className="font-bold text-ink">No Seller Application Found</h3>
