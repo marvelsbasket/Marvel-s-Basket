@@ -7,6 +7,7 @@ import {
 } from '@marvels-basket/shared';
 import { api } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/endpoints';
+import { RegisterResponseData } from '../types';
 
 const ACCESS_TOKEN_KEY = 'mb_access_token';
 
@@ -43,8 +44,8 @@ export const authService = {
     return response.data;
   },
 
-  async register(data: RegisterRequest): Promise<unknown> {
-    const response = await api.post(ENDPOINTS.AUTH.REGISTER, data);
+  async register(data: RegisterRequest): Promise<RegisterResponseData> {
+    const response = await api.post<RegisterResponseData>(ENDPOINTS.AUTH.REGISTER, data);
     return response.data;
   },
 

@@ -35,4 +35,27 @@ export const ENDPOINTS = {
     DELETE: (id: string) => `/addresses/${id}`,
     SET_DEFAULT: (id: string) => `/addresses/${id}/default`,
   },
+  SELLERS: {
+    APPLICATION: '/sellers/applications',
+    MY_APPLICATION: '/sellers/me/application',
+    SUBMIT_APPLICATION: '/sellers/me/application/submit',
+    STATUS: '/sellers/me/status',
+    PROFILE: '/sellers/me/profile',
+    STORE: '/sellers/me/store',
+    DOCUMENTS: '/sellers/me/documents',
+    DOCUMENT: (id: string) => `/sellers/me/documents/${id}`,
+  },
+  ADMIN_SELLERS: {
+    LIST: '/admin/sellers',
+    DETAIL: (id: string) => `/admin/sellers/${id}`,
+    REVIEW_DOCUMENT: (id: string, docId: string) =>
+      `/admin/sellers/${id}/documents/${docId}/review`,
+    DOCUMENT_PREVIEW: (id: string, docId: string) =>
+      `/admin/sellers/${id}/documents/${docId}/preview`,
+    APPROVE: (id: string) => `/admin/sellers/${id}/approve`,
+    REJECT: (id: string) => `/admin/sellers/${id}/reject`,
+    SUSPEND: (id: string) => `/admin/sellers/${id}/suspend`,
+    REACTIVATE: (id: string) => `/admin/sellers/${id}/reactivate`,
+    HISTORY: (id: string) => `/admin/sellers/${id}/history`,
+  },
 } as const;

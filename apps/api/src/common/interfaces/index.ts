@@ -29,6 +29,7 @@ export interface ApiErrorResponse {
   code: string;
   message: string;
   errors?: FieldError[];
+  data?: unknown;
   timestamp: string;
   path: string;
   correlationId: string;

@@ -4,6 +4,13 @@ import { Resend } from 'resend';
 import { EmailSendResult, SendEmailOptions } from './email.interface';
 import { renderVerificationOtpEmail } from './templates/verification-otp.template';
 import { renderPasswordResetEmail } from './templates/password-reset.template';
+import {
+  renderSellerApplicationSubmittedEmail,
+  renderSellerApprovedEmail,
+  renderSellerRejectedEmail,
+  renderSellerSuspendedEmail,
+  renderSellerReactivatedEmail,
+} from './templates/seller-lifecycle.template';
 
 @Injectable()
 export class EmailService {
@@ -18,19 +25,38 @@ export class EmailService {
       this.configService.get<string>('email.from') || "Marvel's Basket <noreply@marvelsbasket.com>";
 
     const nodeEnv = this.configService.get<string>('app.nodeEnv', 'development');
+    const devSendRealEmails = this.configService.get<boolean>('email.devSendRealEmails', false);
+    const isPlaceholderKey =
+      !apiKey || apiKey.startsWith('re_dev_placeholder') || apiKey === 're_placeholder';
 
-    // Enable mock mode in tests, or if apiKey is a dev placeholder
-    this.isMockMode =
-      nodeEnv === 'test' ||
-      !apiKey ||
-      apiKey.startsWith('re_dev_placeholder') ||
-      apiKey === 're_placeholder';
-
-    if (!this.isMockMode && apiKey) {
-      this.resend = new Resend(apiKey);
-      this.logger.log('Resend email client initialized successfully.');
+    if (nodeEnv === 'production') {
+      if (!isPlaceholderKey) {
+        this.resend = new Resend(apiKey);
+        this.isMockMode = false;
+        this.logger.log('Resend email client initialized successfully for production.');
+      } else {
+        this.isMockMode = true;
+        this.logger.error(
+          'CRITICAL: RESEND_API_KEY is not configured or is a placeholder in production!',
+        );
+      }
+    } else if (nodeEnv === 'test') {
+      this.isMockMode = true;
+      this.logger.log('EmailService running in simulated/mock mode (no live emails sent in test).');
     } else {
-      this.logger.log('EmailService running in simulated/mock mode (no live emails sent).');
+      // Development environment: send real emails only if explicitly enabled
+      if (devSendRealEmails && !isPlaceholderKey) {
+        this.resend = new Resend(apiKey);
+        this.isMockMode = false;
+        this.logger.log(
+          'Resend email client initialized in development (DEV_SEND_REAL_EMAILS=true).',
+        );
+      } else {
+        this.isMockMode = true;
+        this.logger.log(
+          'EmailService running in development mock mode (DEV_SEND_REAL_EMAILS=false; live delivery skipped).',
+        );
+      }
     }
   }
 
@@ -113,6 +139,98 @@ export class EmailService {
     return this.sendEmail({
       to,
       subject: "Marvel's Basket — Password Reset Request",
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Dispatches seller application submitted confirmation.
+   */
+  async sendSellerApplicationSubmittedEmail(
+    to: string,
+    name: string,
+    storeName: string,
+    applicationId: string,
+  ): Promise<EmailSendResult> {
+    const { html, text } = renderSellerApplicationSubmittedEmail({
+      name,
+      storeName,
+      applicationId,
+    });
+    return this.sendEmail({
+      to,
+      subject: "Marvel's Basket — Seller Application Received",
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Dispatches seller approved notification.
+   */
+  async sendSellerApprovedEmail(
+    to: string,
+    name: string,
+    storeName: string,
+  ): Promise<EmailSendResult> {
+    const { html, text } = renderSellerApprovedEmail({ name, storeName });
+    return this.sendEmail({
+      to,
+      subject: "Marvel's Basket — Store Approved & Activated",
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Dispatches seller application rejection / action required notification.
+   */
+  async sendSellerRejectedEmail(
+    to: string,
+    name: string,
+    storeName: string,
+    reason: string,
+  ): Promise<EmailSendResult> {
+    const { html, text } = renderSellerRejectedEmail({ name, storeName, reason });
+    return this.sendEmail({
+      to,
+      subject: "Marvel's Basket — Action Required on Seller Application",
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Dispatches store suspension notification.
+   */
+  async sendSellerSuspendedEmail(
+    to: string,
+    name: string,
+    storeName: string,
+    reason: string,
+  ): Promise<EmailSendResult> {
+    const { html, text } = renderSellerSuspendedEmail({ name, storeName, reason });
+    return this.sendEmail({
+      to,
+      subject: "Marvel's Basket — Store Suspension Notice",
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Dispatches store reactivation notification.
+   */
+  async sendSellerReactivatedEmail(
+    to: string,
+    name: string,
+    storeName: string,
+  ): Promise<EmailSendResult> {
+    const { html, text } = renderSellerReactivatedEmail({ name, storeName });
+    return this.sendEmail({
+      to,
+      subject: "Marvel's Basket — Store Reactivated",
       html,
       text,
     });

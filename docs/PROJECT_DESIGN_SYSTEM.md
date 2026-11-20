@@ -1293,10 +1293,15 @@ Marvel's Basket is targeted at an audience where more than 90% of user sessions 
   1. **Home (`/`):** Quick return to main storefront.
   2. **Categories (`/categories`):** Explore grocery aisles.
   3. **Basket (`/basket`):** Active shopping basket with dynamic item count badge.
-  4. **Addresses (`/addresses`):** Direct access to saved delivery addresses.
-  5. **Profile (`/profile`):** Customer profile, account preferences, and orders.
+  4. **Orders (`/orders`):** Direct access to customer order history and active delivery tracking (Package icon).
+  5. **Profile (`/profile`):** Customer profile, account preferences, and saved delivery addresses.
 - Active Indicator: Highlights active tab with primary brand green (`#00873D`, `stroke-[2.2]`, font-bold).
 - Safe Area Offset: Content wrappers incorporate `pb-16 md:pb-0` to eliminate content clipping behind the navigation bar.
+
+### 17.3 Mobile Top Navigation Refinements (ADR-050)
+- **Profile De-duplication:** Removed user profile avatar on mobile viewports (`< sm`), relying cleanly on the persistent bottom navigation Profile tab. Desktop profile dropdown remains unchanged.
+- **Hyperlocal Location Selector:** Added compact delivery address selector directly adjacent to the brand logo (`flex md:hidden`) triggering the address modal. Text truncates gracefully across compact viewports (320px–430px) to prevent layout shifting.
+- **Unified Basket Badging:** Mobile top-navbar Basket icon displays an identical absolute item-count badge (`absolute -top-1.5 -right-2.5 bg-cta text-[10px] font-black`) matching the bottom navigation badge geometry and typography.
 
 ### 17.3 Basket Terminology Standard
 In accordance with brand identity and market conventions, all customer-facing touchpoints strictly utilize **Basket** rather than Cart:
@@ -1311,6 +1316,56 @@ In accordance with brand identity and market conventions, all customer-facing to
 - **`AccountSettingsCard`:** Granular switch toggles for notification channels (Email, Push, SMS, Promotions), security overview, session sign out, and account deactivation modal.
 - **`AddressCard`:** Badge category pills (`Home`, `Work`, `Other`), default address indicator, formatted recipient contact and address details, "Set as Default" button, edit action, and delete confirmation.
 - **`AddressFormModal`:** Accessible dialog/bottom sheet with category selector pills, Indian PIN code validation, 10-digit mobile number validation, and default address checkbox.
+
+---
+
+# 18. Phase 07 — Seller Onboarding, Document Upload & Admin Console Patterns
+
+### 18.1 Public Seller Landing Page (`/sell-on-marvels-basket`)
+- **Footer Entry Point:** Storefront footer includes a **PARTNER** section linking to `/sell-on-marvels-basket`.
+- **Hero Section:** High-contrast brand green hero (`bg-gradient-to-br from-brand-forest via-brand to-forest`) featuring dynamic status-aware CTAs ("Start Application", "Resume Application", "Check Status", "Go to Store Profile").
+- **Value Proposition Grid:** 4-pillar benefit cards (0% Onboarding Fee, Fast 2-Day Payouts, Hyperlocal Reach, Store Dashboard).
+- **Prerequisite Checklist:** Explicit requirements for PAN, GSTIN, FSSAI license, bank account, and physical address.
+- **Interactive FAQ Accordion:** Clean collapsible details addressing merchant commission, delivery handling, and payout cycles.
+
+### 18.2 Five-Step Onboarding Wizard
+- **Component:** `apps/web/src/features/seller/components/step-indicator.tsx`
+  - Visual timeline displaying steps 1 through 5 with active, completed, and pending states.
+  - Numbered circles with checkmark icons for completed steps and brand green fill for active step.
+- **Step 1: Personal Profile (`StepPersonalProfile`):**
+  - Read-only verified email badge, merchant full name, and 10-digit mobile number input.
+- **Step 2: Store Information (`StepStoreInfo`):**
+  - Store display name, category selector pills, address inputs, and one-click "Detect Current GPS" button with coordinate preview.
+  - Service radius slider (1–15 km) and operating hours time pickers with weekly off dropdown.
+- **Step 3: Business & Tax Details (`StepBusinessTax`):**
+  - Legal business name, business entity type radio cards, PAN input (auto-uppercase with regex formatting), optional GSTIN, and conditional mandatory FSSAI number and expiry date for grocery categories.
+- **Step 4: Bank & Settlement Details (`StepBankDetails`):**
+  - Account holder name, bank account number with confirmation matching, IFSC code with auto-bank name resolution, account type (Current / Savings), and UPI ID.
+  - Masked account display (`••••••••1234`) when resuming saved drafts for security.
+- **Step 5: KYC Document Uploads & Final Review (`StepDocumentUpload` & `StepReviewSubmit`):**
+  - Document cards with status badges (`Verified`, `Pending Review`, `Rejected`, `Upload Required`).
+  - Dropzone file picker supporting PDF, JPEG, PNG, and WebP (up to 10MB).
+  - Final legal agreement checkbox and comprehensive review summary showing all submitted data before dispatching application.
+
+### 18.3 In-App Document Inspection Modal
+- Admins can inspect submitted PDF and image documents directly inside the application (`apps/web/src/app/admin/sellers/[id]/page.tsx` and `step-document-upload.tsx`).
+- Images render within a scaled lightbox viewport with rounded corners and soft drop shadows.
+- PDFs render in high-fidelity embedded iframe viewports with zoom controls and page navigation.
+- Fallback "Open in External Tab" link utilizing cryptographic 60-minute signed preview URLs.
+
+### 18.4 Admin Verification Queue & Dossier Console
+- **Application Queue (`/admin/sellers`):**
+  - Metric summary cards (Total Applications, Pending Verification, Active Stores, Rejected/Suspended).
+  - Live search bar and segmented status filter pills (`All`, `Pending`, `Approved`, `Rejected`, `Suspended`).
+  - Category filter dropdown and paginated table/card view showing verified document counts.
+- **Application Dossier (`/admin/sellers/[id]`):**
+  - Detailed split-screen view: Left pane displays merchant identity, store address, tax identifiers, and masked bank info. Right pane displays KYC documents, review notes, and status transition history.
+  - Per-document review buttons (`Approve`, `Reject` with feedback prompt).
+  - High-level application action buttons: `Approve Store & Activate`, `Reject Application`, `Suspend Store`, and `Reactivate Store` with confirmation dialogues.
+
+### 18.5 Operational Seller Profile & Store Settings
+- **Store Profile (`/seller/profile`):** Active status badge, store summary card, authorized merchant card, delivery radius indicator, and quick links to settings.
+- **Store Settings Editor (`/seller/store`):** Interactive form allowing approved merchants to modify operating hours, order preparation time, weekly off days, and service radius.
 
 ---
 

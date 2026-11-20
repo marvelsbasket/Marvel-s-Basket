@@ -36,6 +36,19 @@ export interface EmailConfig {
   resendCooldownSeconds: number;
   maxAttempts: number;
   passwordResetTtlSeconds: number;
+  emailOtpEnabled: boolean;
+  devLogEmailOtp: boolean;
+  devSendRealEmails: boolean;
+}
+
+export interface CloudinaryConfig {
+  cloudName: string;
+  apiKey: string;
+  apiSecret: string;
+}
+
+export interface SecurityConfig {
+  encryptionKey: string;
 }
 
 export interface RootConfig {
@@ -44,4 +57,6 @@ export interface RootConfig {
   redis: RedisConfig;
   jwt: JwtConfig;
   email: EmailConfig;
+  cloudinary: CloudinaryConfig;
+  security: SecurityConfig;
 }

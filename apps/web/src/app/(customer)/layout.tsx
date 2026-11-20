@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronRight, MapPin, Settings, ShoppingBag, User } from 'lucide-react';
+import { ChevronRight, MapPin, Package, Settings, ShoppingBag, User } from 'lucide-react';
 import { StorefrontLayout } from '@/components/layout/storefront-layout';
 import { AuthGuard } from '@/features/auth';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,12 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
       href: '/profile',
       icon: User,
       isActive: pathname === '/profile' || pathname === '/profile/edit',
+    },
+    {
+      label: 'My Orders',
+      href: '/orders',
+      icon: Package,
+      isActive: pathname.startsWith('/orders') || pathname.startsWith('/track-order'),
     },
     {
       label: 'Delivery Addresses',

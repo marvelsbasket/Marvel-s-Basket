@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -15,6 +16,8 @@ import * as crypto from 'crypto';
 import { RedisService } from '../../cache/redis.service';
 import { PrismaService } from '../../database/prisma.service';
 import { EmailService } from '../email/email.service';
+import { logDevEmailOtp } from '../../common/utils/dev-otp-logger.util';
+import { ErrorCode } from '../../common/constants';
 import {
   ForgotPasswordDto,
   LoginDto,
@@ -44,6 +47,9 @@ export interface AuthResponse {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
+  private readonly nodeEnv: string;
+  private readonly emailOtpEnabled: boolean;
+  private readonly devLogEmailOtp: boolean;
   private readonly accessSecret: string;
   private readonly accessExpiresIn: string;
   private readonly refreshSecret: string;
@@ -59,6 +65,9 @@ export class AuthService {
     private readonly redisService: RedisService,
     private readonly emailService: EmailService,
   ) {
+    this.nodeEnv = this.configService.get<string>('app.nodeEnv') || 'development';
+    this.emailOtpEnabled = this.configService.get<boolean>('email.emailOtpEnabled') ?? true;
+    this.devLogEmailOtp = this.configService.get<boolean>('email.devLogEmailOtp') ?? false;
     this.accessSecret = this.configService.get<string>('jwt.accessSecret')!;
     this.accessExpiresIn = this.configService.get<string>('jwt.accessExpiresIn') || '15m';
     this.refreshSecret = this.configService.get<string>('jwt.refreshSecret')!;
@@ -73,11 +82,16 @@ export class AuthService {
   /**
    * Register a new user account as a CUSTOMER.
    * Dispatches a 6-digit verification OTP to the user's email.
+   * If an existing unverified account is found, it automatically dispatches a fresh OTP
+   * without creating a duplicate account (Scenario A recovery).
    */
   async register(dto: RegisterDto): Promise<{
     message: string;
     userId: string;
     email: string;
+    requiresVerification?: boolean;
+    isExistingUnverified?: boolean;
+    cooldownRemainingSeconds?: number;
   }> {
     const normalizedEmail = dto.email.trim().toLowerCase();
 
@@ -92,9 +106,39 @@ export class AuthService {
           'An account with this email address already exists. Please log in.',
         );
       }
-      throw new ConflictException(
-        'An account with this email exists but is unverified. Please verify your email or request a new OTP.',
-      );
+
+      // Existing unverified account recovery (Scenario A)
+      if (!this.emailOtpEnabled) {
+        await this.prisma.user.update({
+          where: { id: existingUser.id },
+          data: { emailVerifiedAt: new Date() },
+        });
+        return {
+          message: 'Registration successful. Email verification is disabled in this environment.',
+          userId: existingUser.id,
+          email: existingUser.email!,
+          requiresVerification: false,
+          isExistingUnverified: false,
+          cooldownRemainingSeconds: 0,
+        };
+      }
+
+      const dispatchResult = await this.sendOrResendVerificationOtp(existingUser, {
+        checkCooldown: true,
+      });
+
+      const message = dispatchResult.dispatched
+        ? "An account with this email already exists but is not verified. We've sent you a new verification code."
+        : `An account with this email already exists but is not verified. A verification code was recently sent to your email. Please check your inbox or wait ${dispatchResult.cooldownRemainingSeconds} second(s) before requesting a new code.`;
+
+      return {
+        message,
+        userId: existingUser.id,
+        email: existingUser.email!,
+        requiresVerification: true,
+        isExistingUnverified: true,
+        cooldownRemainingSeconds: dispatchResult.cooldownRemainingSeconds,
+      };
     }
 
     // Check if phone number is already registered if provided
@@ -159,13 +203,32 @@ export class AuthService {
       return user;
     });
 
+    // If email OTP is disabled, auto-verify user
+    if (!this.emailOtpEnabled) {
+      await this.prisma.user.update({
+        where: { id: newUser.id },
+        data: { emailVerifiedAt: new Date() },
+      });
+      return {
+        message: 'Registration successful. Email verification is disabled in this environment.',
+        userId: newUser.id,
+        email: newUser.email!,
+        requiresVerification: false,
+        isExistingUnverified: false,
+        cooldownRemainingSeconds: 0,
+      };
+    }
+
     // Generate and dispatch verification OTP
-    await this.generateAndSendVerificationOtp(newUser.email!, newUser.name, newUser.id);
+    await this.sendOrResendVerificationOtp(newUser, { checkCooldown: false });
 
     return {
       message: 'Registration successful. Please check your email for a 6-digit verification code.',
       userId: newUser.id,
       email: newUser.email!,
+      requiresVerification: true,
+      isExistingUnverified: false,
+      cooldownRemainingSeconds: this.otpCooldownSeconds,
     };
   }
 
@@ -176,6 +239,10 @@ export class AuthService {
     message: string;
     verified: boolean;
   }> {
+    if (!this.emailOtpEnabled) {
+      throw new BadRequestException('Email OTP verification is disabled in this environment.');
+    }
+
     const normalizedEmail = dto.email.trim().toLowerCase();
 
     const user = await this.prisma.user.findFirst({
@@ -268,6 +335,10 @@ export class AuthService {
     message: string;
     cooldownRemainingSeconds: number;
   }> {
+    if (!this.emailOtpEnabled) {
+      throw new BadRequestException('Email OTP verification is disabled in this environment.');
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
 
     const user = await this.prisma.user.findFirst({
@@ -291,7 +362,7 @@ export class AuthService {
       );
     }
 
-    await this.generateAndSendVerificationOtp(user.email!, user.name, user.id);
+    await this.sendOrResendVerificationOtp(user, { checkCooldown: false });
 
     return {
       message: 'A new verification code has been dispatched to your email.',
@@ -349,7 +420,31 @@ export class AuthService {
     }
 
     if (!user.emailVerifiedAt) {
-      throw new ForbiddenException('Please verify your email address before logging in.');
+      if (!this.emailOtpEnabled) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { emailVerifiedAt: new Date() },
+        });
+      } else {
+        const dispatchResult = await this.sendOrResendVerificationOtp(user, {
+          checkCooldown: true,
+        });
+
+        const message = dispatchResult.dispatched
+          ? "Your email is not verified. We've sent you a new verification code. Please verify your email to continue."
+          : `Your email is not verified. A verification code was recently sent to your email. Please check your inbox or wait ${dispatchResult.cooldownRemainingSeconds} second(s) before requesting a new code.`;
+
+        throw new ForbiddenException({
+          statusCode: HttpStatus.FORBIDDEN,
+          code: ErrorCode.EMAIL_NOT_VERIFIED,
+          message,
+          data: {
+            email: user.email,
+            requiresVerification: true,
+            cooldownRemainingSeconds: dispatchResult.cooldownRemainingSeconds,
+          },
+        });
+      }
     }
 
     // Extract roles and distinct permissions
@@ -751,18 +846,57 @@ export class AuthService {
   }
 
   // ===========================================================================
-  // PRIVATE HELPER METHODS
+  // SHARED & HELPER METHODS
   // ===========================================================================
 
   /**
-   * Generate a 6-digit numeric OTP, persist SHA-256 hash in Redis, set cooldown, and dispatch email.
+   * Unified helper to generate, persist, and dispatch email verification OTPs.
+   * - Confirms user account exists and is not already verified.
+   * - Checks active cooldown if requested.
+   * - Invalidates any previous unused tokens in DB and Redis.
+   * - Generates cryptographically secure 6-digit OTP and hashes with SHA-256.
+   * - Stores OTP hash in Redis (with TTL) and creates audit record in DB.
+   * - Emits dev terminal OTP banner if NODE_ENV=development and enabled.
+   * - Dispatches OTP via EmailService (Resend in production).
+   * - Cleans up Redis keys if email delivery fails to prevent locking the user.
    */
-  private async generateAndSendVerificationOtp(
-    email: string,
-    name: string,
-    userId: string,
-  ): Promise<void> {
-    const normalizedEmail = email.trim().toLowerCase();
+  async sendOrResendVerificationOtp(
+    user: { id: string; email: string | null; name: string; emailVerifiedAt?: Date | null },
+    options: { checkCooldown?: boolean; force?: boolean } = {},
+  ): Promise<{ dispatched: boolean; cooldownRemainingSeconds: number }> {
+    if (!this.emailOtpEnabled) {
+      return { dispatched: false, cooldownRemainingSeconds: 0 };
+    }
+
+    if (!user.email) {
+      throw new BadRequestException('User email address is missing.');
+    }
+
+    if (user.emailVerifiedAt) {
+      throw new BadRequestException('Email address has already been verified.');
+    }
+
+    const normalizedEmail = user.email.trim().toLowerCase();
+    const cooldownKey = `otp:cooldown:verify-email:${normalizedEmail}`;
+
+    if (options.checkCooldown && !options.force) {
+      const remainingCooldown = await this.redisService.ttl(cooldownKey);
+      if (remainingCooldown > 0) {
+        return { dispatched: false, cooldownRemainingSeconds: remainingCooldown };
+      }
+    }
+
+    // Invalidate previous unused DB tokens for this user
+    await this.prisma.verificationToken.updateMany({
+      where: {
+        userId: user.id,
+        type: VerificationTokenType.EMAIL_VERIFICATION,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
 
     // Secure 6-digit OTP using crypto.randomInt
     const otp = crypto.randomInt(100000, 1000000).toString();
@@ -770,7 +904,6 @@ export class AuthService {
 
     const otpKey = `otp:verify-email:${normalizedEmail}`;
     const attemptsKey = `otp:attempts:verify-email:${normalizedEmail}`;
-    const cooldownKey = `otp:cooldown:verify-email:${normalizedEmail}`;
 
     // Store hashed OTP and set TTL in Redis
     await this.redisService.set(otpKey, otpHash, this.otpExpirySeconds);
@@ -783,16 +916,44 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + this.otpExpirySeconds * 1000);
     await this.prisma.verificationToken.create({
       data: {
-        userId,
+        userId: user.id,
         tokenHash: otpHash,
         type: VerificationTokenType.EMAIL_VERIFICATION,
         expiresAt,
       },
     });
 
+    // Development OTP terminal logging (strictly suppressed in production)
+    logDevEmailOtp({
+      purpose: 'Email Verification',
+      email: normalizedEmail,
+      otp,
+      expiresAt,
+      nodeEnv: this.nodeEnv,
+      devLogEnabled: this.devLogEmailOtp,
+    });
+
     // Send email via Resend
     const expiryMinutes = Math.floor(this.otpExpirySeconds / 60);
-    await this.emailService.sendVerificationOtpEmail(normalizedEmail, name, otp, expiryMinutes);
+    try {
+      await this.emailService.sendVerificationOtpEmail(
+        normalizedEmail,
+        user.name,
+        otp,
+        expiryMinutes,
+      );
+    } catch (error) {
+      // Clean up Redis keys so user is not locked with a dead code
+      await Promise.all([
+        this.redisService.del(otpKey),
+        this.redisService.del(attemptsKey),
+        this.redisService.del(cooldownKey),
+      ]);
+      this.logger.error(`Failed to send verification OTP email to ${normalizedEmail}`, error);
+      throw error;
+    }
+
+    return { dispatched: true, cooldownRemainingSeconds: this.otpCooldownSeconds };
   }
 
   /**

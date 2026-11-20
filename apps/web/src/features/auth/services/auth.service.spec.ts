@@ -89,6 +89,74 @@ describe('AuthService', () => {
     });
   });
 
+  describe('register', () => {
+    it('should call register endpoint and return response data', async () => {
+      const mockResponse = {
+        success: true,
+        data: {
+          message:
+            "An account with this email already exists but is not verified. We've sent you a new verification code.",
+          userId: 'u1',
+          email: 'test@example.com',
+          isExistingUnverified: true,
+          requiresVerification: true,
+          cooldownRemainingSeconds: 60,
+        },
+      };
+      (api.post as jest.Mock).mockResolvedValueOnce(mockResponse);
+
+      const result = await authService.register({
+        name: 'Test User',
+        email: 'test@example.com',
+        password: 'Password123!',
+      });
+
+      expect(api.post).toHaveBeenCalledWith('/auth/register', {
+        name: 'Test User',
+        email: 'test@example.com',
+        password: 'Password123!',
+      });
+      expect(result).toEqual(mockResponse.data);
+    });
+  });
+
+  describe('verifyEmail', () => {
+    it('should post verification OTP payload', async () => {
+      const mockResponse = {
+        success: true,
+        data: { message: 'Email verified.', verified: true },
+      };
+      (api.post as jest.Mock).mockResolvedValueOnce(mockResponse);
+
+      const result = await authService.verifyEmail({
+        email: 'test@example.com',
+        otp: '123456',
+      });
+
+      expect(api.post).toHaveBeenCalledWith('/auth/verify-email', {
+        email: 'test@example.com',
+        otp: '123456',
+      });
+      expect(result).toEqual(mockResponse.data);
+    });
+  });
+
+  describe('resendOtp', () => {
+    it('should post email to resend-verification-otp endpoint', async () => {
+      const mockResponse = {
+        success: true,
+        data: { message: 'OTP resent.', cooldownRemainingSeconds: 60 },
+      };
+      (api.post as jest.Mock).mockResolvedValueOnce(mockResponse);
+
+      const result = await authService.resendOtp('test@example.com');
+      expect(api.post).toHaveBeenCalledWith('/auth/resend-verification-otp', {
+        email: 'test@example.com',
+      });
+      expect(result).toEqual(mockResponse.data);
+    });
+  });
+
   describe('getMe', () => {
     it('should fetch authenticated user profile', async () => {
       const mockUser = {

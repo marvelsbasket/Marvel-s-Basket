@@ -54,15 +54,19 @@ enum VerificationTokenType {
 
 enum VerificationStatus {
   PENDING
+  PENDING_REVIEW
   VERIFIED
   REJECTED
+  NEEDS_RESUBMISSION
 }
 
 enum SellerStatus {
   DRAFT
-  PENDING
+  PENDING_VERIFICATION
   UNDER_REVIEW
+  APPROVED_ACTIVE
   APPROVED
+  PENDING
   REJECTED
   SUSPENDED
   CLOSED
@@ -233,6 +237,7 @@ model User {
   couponUsages            CouponUsage[]
   auditLogs               AuditLog[]               @relation("ActorAuditLogs")
   adminActivityLogs       AdminActivityLog[]       @relation("AdminLogs")
+  documentReviews         SellerDocumentReview[]   @relation("DocumentReviewer")
 
   @@index([status])
   @@index([createdAt])
@@ -386,9 +391,35 @@ model Seller {
   approvalDate     DateTime?    @map("approval_date")
   rejectionReason  String?      @map("rejection_reason")
   suspensionReason String?      @map("suspension_reason")
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
-  deletedAt        DateTime?    @map("deleted_at")
+
+  // Phase 07: Seller Onboarding & Business/Store Details
+  storeDisplayName        String?   @map("store_display_name")
+  storeCategory           String?   @map("store_category")
+  legalBusinessName       String?   @map("legal_business_name")
+  businessEntityType      String?   @map("business_entity_type")
+  fssaiNumber             String?   @map("fssai_number")
+  fssaiExpiryDate         DateTime? @map("fssai_expiry_date")
+  shopEstablishmentNumber String?   @map("shop_establishment_number")
+
+  // Encrypted bank details at rest & masked representation
+  bankAccountHolderName      String? @map("bank_account_holder_name")
+  bankAccountNumberEncrypted String? @map("bank_account_number_encrypted")
+  bankAccountNumberMasked    String? @map("bank_account_number_masked")
+  bankIfscCode               String? @map("bank_ifsc_code")
+  bankName                   String? @map("bank_name")
+  bankAccountType            String? @map("bank_account_type")
+  upiId                      String? @map("upi_id")
+
+  // Onboarding wizard progress & lifecycle tracking
+  currentStep Int       @default(1) @map("current_step")
+  isSubmitted Boolean   @default(false) @map("is_submitted")
+  submittedAt DateTime? @map("submitted_at")
+  reviewedBy  String?   @map("reviewed_by") @db.Uuid
+  reviewedAt  DateTime? @map("reviewed_at")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   // Relationships
   owner             User                  @relation("UserToSeller", fields: [ownerUserId], references: [id], onDelete: Restrict)
@@ -403,6 +434,7 @@ model Seller {
   ledgerEntries     SellerLedgerEntry[]
   settlements       Settlement[]
   commissionRules   CommissionRule[]
+  statusHistory     SellerStatusHistory[]
 
   @@index([status])
   @@index([slug])
@@ -410,25 +442,31 @@ model Seller {
 }
 
 model SellerProfile {
-  id              String   @id @default(uuid()) @db.Uuid
-  sellerId        String   @unique @map("seller_id") @db.Uuid
-  logoUrl         String?  @map("logo_url")
-  bannerUrl       String?  @map("banner_url")
-  description     String?
-  addressLine1    String   @map("address_line1")
-  addressLine2    String?  @map("address_line2")
-  landmark        String?
-  city            String
-  state           String
-  postalCode      String   @map("postal_code")
-  country         String   @default("India")
-  latitude        Decimal? @db.Decimal(10, 8)
-  longitude       Decimal? @db.Decimal(11, 8)
-  openingTime     String?  @map("opening_time")
-  closingTime     String?  @map("closing_time")
-  preparationTime Int      @default(15) @map("preparation_time")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                         String   @id @default(uuid()) @db.Uuid
+  sellerId                   String   @unique @map("seller_id") @db.Uuid
+  logoUrl                    String?  @map("logo_url")
+  bannerUrl                  String?  @map("banner_url")
+  description                String?
+  addressLine1               String   @map("address_line1")
+  addressLine2               String?  @map("address_line2")
+  landmark                   String?
+  city                       String
+  state                      String
+  postalCode                 String   @map("postal_code")
+  country                    String   @default("India")
+  latitude                   Decimal? @db.Decimal(10, 8)
+  longitude                  Decimal? @db.Decimal(11, 8)
+  serviceRadiusKm            Decimal? @map("service_radius_km") @db.Decimal(5, 2)
+  openingTime                String?  @map("opening_time")
+  closingTime                String?  @map("closing_time")
+  weeklyOffDays              String?  @map("weekly_off_days")
+  storefrontPhotoUrl         String?  @map("storefront_photo_url")
+  storefrontPhotoPublicId    String?  @map("storefront_photo_public_id")
+  storeInteriorPhotoUrl      String?  @map("store_interior_photo_url")
+  storeInteriorPhotoPublicId String?  @map("store_interior_photo_public_id")
+  preparationTime            Int      @default(15) @map("preparation_time")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
 
   seller Seller @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
@@ -441,17 +479,54 @@ model SellerDocument {
   sellerId           String             @map("seller_id") @db.Uuid
   documentType       String             @map("document_type")
   documentUrl        String             @map("document_url")
+  cloudinaryPublicId String?            @map("cloudinary_public_id")
+  originalFilename   String?            @map("original_filename")
+  mimeType           String?            @map("mime_type")
+  fileSize           Int?               @map("file_size")
   verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
   verifiedBy         String?            @map("verified_by") @db.Uuid
   verifiedAt         DateTime?          @map("verified_at")
   rejectionReason    String?            @map("rejection_reason")
+  expiryDate         DateTime?          @map("expiry_date")
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  seller  Seller                 @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  reviews SellerDocumentReview[]
+
+  @@index([sellerId])
+  @@map("seller_documents")
+}
+
+model SellerDocumentReview {
+  id         String             @id @default(uuid()) @db.Uuid
+  documentId String             @map("document_id") @db.Uuid
+  reviewerId String             @map("reviewer_id") @db.Uuid
+  status     VerificationStatus
+  notes      String?
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  document SellerDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  reviewer User           @relation("DocumentReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([documentId])
+  @@index([reviewerId])
+  @@map("seller_document_reviews")
+}
+
+model SellerStatusHistory {
+  id         String       @id @default(uuid()) @db.Uuid
+  sellerId   String       @map("seller_id") @db.Uuid
+  fromStatus SellerStatus @map("from_status")
+  toStatus   SellerStatus @map("to_status")
+  reason     String?
+  changedBy  String?      @map("changed_by") @db.Uuid
+  createdAt  DateTime     @default(now()) @map("created_at")
 
   seller Seller @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
   @@index([sellerId])
-  @@map("seller_documents")
+  @@map("seller_status_history")
 }
 
 model SellerBusinessHours {

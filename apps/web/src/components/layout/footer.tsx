@@ -119,25 +119,20 @@ export function Footer() {
             <ul className="space-y-2 text-xs text-ink-secondary">
               <li>
                 <Link
-                  href="/become-a-seller"
-                  className="hover:text-brand transition-colors font-medium text-brand"
+                  href="/sell-on-marvels-basket"
+                  className="hover:text-brand transition-colors font-semibold text-brand"
                 >
                   Sell on Marvel&apos;s Basket
                 </Link>
               </li>
               <li>
-                <Link href="/delivery-partner" className="hover:text-brand transition-colors">
-                  Become a Delivery Rider
+                <Link href="/seller/application" className="hover:text-brand transition-colors">
+                  Application Status
                 </Link>
               </li>
               <li>
-                <Link href="/merchant-guide" className="hover:text-brand transition-colors">
-                  Merchant Guidelines
-                </Link>
-              </li>
-              <li>
-                <Link href="/seller/login" className="hover:text-brand transition-colors">
-                  Seller Dashboard
+                <Link href="/seller/profile" className="hover:text-brand transition-colors">
+                  Store Management
                 </Link>
               </li>
             </ul>

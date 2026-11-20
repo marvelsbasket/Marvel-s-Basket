@@ -52,7 +52,8 @@ export class ApiClient {
     if (!headers.has('Accept')) {
       headers.set('Accept', 'application/json');
     }
-    if (body && !headers.has('Content-Type')) {
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+    if (body && !isFormData && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
 
@@ -69,7 +70,7 @@ export class ApiClient {
       const response = await fetch(urlString, {
         ...fetchOptions,
         headers,
-        body: body ? JSON.stringify(body) : undefined,
+        body: body ? (isFormData ? (body as BodyInit) : JSON.stringify(body)) : undefined,
         signal: controller.signal,
         credentials: 'include', // Ensure HttpOnly cookies are transported
       });
@@ -91,12 +92,13 @@ export class ApiClient {
           window.dispatchEvent(new CustomEvent('auth:unauthorized'));
         }
 
-        const errorData = data as ApiErrorResponse | null;
+        const errorData = data as (ApiErrorResponse & { data?: unknown }) | null;
         throw new ApiError({
           message: errorData?.message || `Request failed with status ${response.status}`,
           statusCode: errorData?.statusCode || response.status,
           code: errorData?.code || 'HTTP_ERROR',
           errors: errorData?.errors,
+          data: errorData?.data,
           correlationId:
             errorData?.correlationId || response.headers.get('x-correlation-id') || undefined,
           timestamp: errorData?.timestamp,
@@ -164,3 +166,4 @@ export class ApiClient {
 }
 
 export const api = new ApiClient();
+export const apiClient = api;

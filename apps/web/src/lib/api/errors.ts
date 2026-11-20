@@ -4,6 +4,7 @@ export class ApiError extends Error {
   public readonly statusCode: number;
   public readonly code: string;
   public readonly errors?: ApiFieldError[];
+  public readonly data?: unknown;
   public readonly correlationId?: string;
   public readonly timestamp?: string;
 
@@ -12,6 +13,7 @@ export class ApiError extends Error {
     statusCode: number;
     code: string;
     errors?: ApiFieldError[];
+    data?: unknown;
     correlationId?: string;
     timestamp?: string;
   }) {
@@ -20,6 +22,7 @@ export class ApiError extends Error {
     this.statusCode = params.statusCode;
     this.code = params.code;
     this.errors = params.errors;
+    this.data = params.data;
     this.correlationId = params.correlationId;
     this.timestamp = params.timestamp;
 
@@ -53,5 +56,9 @@ export class ApiError extends Error {
 
   get isValidationError(): boolean {
     return this.code === 'VALIDATION_ERROR' || (this.errors && this.errors.length > 0) || false;
+  }
+
+  get isEmailNotVerified(): boolean {
+    return this.code === 'EMAIL_NOT_VERIFIED';
   }
 }

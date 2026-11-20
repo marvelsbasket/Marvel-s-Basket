@@ -55,4 +55,18 @@ export const environmentValidationSchema = Joi.object({
   EMAIL_VERIFICATION_MAX_ATTEMPTS: Joi.number().min(1).max(10).default(5),
 
   PASSWORD_RESET_TOKEN_TTL_SECONDS: Joi.number().min(60).max(7200).default(900),
+
+  EMAIL_OTP_ENABLED: Joi.boolean().truthy('true', '1').falsy('false', '0').default(true),
+
+  DEV_LOG_EMAIL_OTP: Joi.boolean().truthy('true', '1').falsy('false', '0').default(true),
+
+  DEV_SEND_REAL_EMAILS: Joi.boolean().truthy('true', '1').falsy('false', '0').default(false),
+
+  CLOUDINARY_CLOUD_NAME: Joi.string().allow('').optional(),
+
+  CLOUDINARY_API_KEY: Joi.string().allow('').optional(),
+
+  CLOUDINARY_API_SECRET: Joi.string().allow('').optional(),
+
+  ENCRYPTION_KEY: Joi.string().min(32).default('marvels-basket-aes256-default-key-32b!'),
 }).unknown(true);

@@ -11,10 +11,11 @@ import { useAuth } from '../context/auth-context';
 interface AuthGuardProps {
   children: React.ReactNode;
   fallback?: React.ReactNode;
+  requiredRoles?: string[];
 }
 
-export function AuthGuard({ children, fallback }: AuthGuardProps) {
-  const { isAuthenticated, isLoading } = useAuth();
+export function AuthGuard({ children, fallback, requiredRoles }: AuthGuardProps) {
+  const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -60,6 +61,32 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
         </div>
       </div>
     );
+  }
+
+  if (requiredRoles && requiredRoles.length > 0) {
+    const hasRequiredRole = requiredRoles.some((role) => user?.roles?.includes(role));
+    if (!hasRequiredRole) {
+      return (
+        <div className="flex min-h-[60vh] items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-divider bg-white p-8 text-center shadow-soft">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-error/10 text-error">
+              <Lock className="h-7 w-7" />
+            </div>
+            <h2 className="text-xl font-bold text-ink">Access Denied</h2>
+            <p className="mt-2 text-sm text-ink-muted">
+              You do not have the required permissions to access this page.
+            </p>
+            <div className="mt-6">
+              <Link href="/" className="inline-block w-full">
+                <Button variant="outline" size="lg" fullWidth>
+                  Back to Home
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      );
+    }
   }
 
   return <>{children}</>;

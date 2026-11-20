@@ -29,11 +29,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let code = ErrorCode.INTERNAL_SERVER_ERROR;
     let message = 'An unexpected internal server error occurred';
     let errors: FieldError[] | undefined = undefined;
+    let data: unknown = undefined;
 
     // 1. NestJS HttpException (including BadRequestException from ValidationPipe)
     if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
       const exceptionResponse = exception.getResponse();
+
+      let hasExplicitCode = false;
 
       if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
@@ -42,10 +45,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message =
           (typeof resp.message === 'string' ? resp.message : undefined) || exception.message;
 
+        if (typeof resp.code === 'string') {
+          code = resp.code as ErrorCode;
+          hasExplicitCode = true;
+        }
+
+        if (resp.data !== undefined) {
+          data = resp.data;
+        }
+
         // Custom validation error format from ValidationPipe
         if (resp.errors && Array.isArray(resp.errors)) {
           errors = resp.errors as FieldError[];
           code = ErrorCode.VALIDATION_ERROR;
+          hasExplicitCode = true;
         } else if (Array.isArray(resp.message)) {
           // Standard class-validator string array
           errors = (resp.message as unknown[]).map((msg) => {
@@ -55,12 +68,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
             return { field, message: strMsg };
           });
           code = ErrorCode.VALIDATION_ERROR;
+          hasExplicitCode = true;
           message = 'Request validation failed';
         }
       }
 
-      // Map standard HTTP status codes to application error codes
-      code = this.mapHttpStatusToErrorCode(statusCode, code);
+      // Map standard HTTP status codes to application error codes if not explicitly set
+      if (!hasExplicitCode) {
+        code = this.mapHttpStatusToErrorCode(statusCode, code);
+      }
     }
     // 2. Prisma Database Known Request Errors
     else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
@@ -97,6 +113,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       statusCode,
       code,
       message,
+      ...(data !== undefined ? { data } : {}),
       ...(errors && errors.length > 0 ? { errors } : {}),
       timestamp,
       path,

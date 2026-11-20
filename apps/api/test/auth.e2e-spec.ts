@@ -108,21 +108,36 @@ describe('Authentication & Authorization (E2E)', () => {
       expect(capturedOtp).toMatch(/^\d{6}$/);
     });
 
-    it('POST /api/v1/auth/register - should reject duplicate email registration with 409 Conflict', async () => {
+    it('POST /api/v1/auth/register - should automatically handle existing unverified account and resend OTP (Scenario A)', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/auth/register')
         .send({
-          name: 'Duplicate Rohan',
+          name: 'Existing Rohan',
           email: testUser.email,
           password: testUser.password,
         })
-        .expect(409);
+        .expect(201);
 
-      expect(response.body.success).toBe(false);
-      expect(response.body.code).toBe('CONFLICT');
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.isExistingUnverified).toBe(true);
+      expect(response.body.data.requiresVerification).toBe(true);
+      expect(response.body.data.email).toBe(testUser.email);
     });
 
-    it('POST /api/v1/auth/login - should reject login before email is verified with 403 Forbidden', async () => {
+    it('POST /api/v1/auth/login - should reject unverified login with incorrect password with 401 Unauthorized', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({
+          email: testUser.email,
+          password: 'IncorrectPassword@999',
+        })
+        .expect(401);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.code).toBe('UNAUTHORIZED');
+    });
+
+    it('POST /api/v1/auth/login - should reject unverified login with correct password with 403 and return EMAIL_NOT_VERIFIED (Scenario B)', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
         .send({
@@ -132,7 +147,9 @@ describe('Authentication & Authorization (E2E)', () => {
         .expect(403);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.message).toContain('verify your email');
+      expect(response.body.code).toBe('EMAIL_NOT_VERIFIED');
+      expect(response.body.data.email).toBe(testUser.email);
+      expect(response.body.data.requiresVerification).toBe(true);
     });
 
     it('POST /api/v1/auth/resend-verification-otp - should reject resend while cooldown is active with 400 Bad Request', async () => {
@@ -173,6 +190,21 @@ describe('Authentication & Authorization (E2E)', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.verified).toBe(true);
+    });
+
+    it('POST /api/v1/auth/register - should reject verified user registration with 409 Conflict', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Verified User Duplicate',
+          email: testUser.email,
+          password: testUser.password,
+        })
+        .expect(409);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.code).toBe('CONFLICT');
+      expect(response.body.message).toContain('already exists');
     });
   });
 

@@ -10,6 +10,8 @@ import { EmailModule } from './modules/email/email.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
+import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
+import { SellersModule } from './modules/sellers/sellers.module';
 import { JwtAuthGuard, RolesGuard, PermissionsGuard } from './modules/auth/guards';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
@@ -31,6 +33,8 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     AuthModule,
     UsersModule,
     AddressesModule,
+    CloudinaryModule,
+    SellersModule,
     HealthModule,
   ],
   providers: [

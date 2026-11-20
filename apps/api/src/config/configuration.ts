@@ -38,5 +38,20 @@ export default (): RootConfig => ({
     ),
     maxAttempts: parseInt(process.env.EMAIL_VERIFICATION_MAX_ATTEMPTS || '5', 10),
     passwordResetTtlSeconds: parseInt(process.env.PASSWORD_RESET_TOKEN_TTL_SECONDS || '900', 10),
+    emailOtpEnabled: process.env.EMAIL_OTP_ENABLED !== 'false',
+    devLogEmailOtp:
+      process.env.NODE_ENV !== 'production' &&
+      (process.env.DEV_LOG_EMAIL_OTP === 'true' ||
+        (process.env.NODE_ENV === 'development' && process.env.DEV_LOG_EMAIL_OTP !== 'false')),
+    devSendRealEmails:
+      process.env.NODE_ENV !== 'production' && process.env.DEV_SEND_REAL_EMAILS === 'true',
+  },
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
+    apiKey: process.env.CLOUDINARY_API_KEY || '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET || '',
+  },
+  security: {
+    encryptionKey: process.env.ENCRYPTION_KEY || 'marvels-basket-aes256-default-key-32b!',
   },
 });

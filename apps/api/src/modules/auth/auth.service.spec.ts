@@ -13,6 +13,7 @@ import * as crypto from 'crypto';
 import { RedisService } from '../../cache/redis.service';
 import { PrismaService } from '../../database/prisma.service';
 import { EmailService } from '../email/email.service';
+import { ErrorCode } from '../../common/constants';
 import { AuthService } from './auth.service';
 
 describe('AuthService', () => {
@@ -186,6 +187,67 @@ describe('AuthService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
+    it('should automatically resend fresh OTP when an existing unverified email registers again (Scenario A)', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce({
+        id: 'existing-unverified-1',
+        name: 'Rohan Sharma',
+        email: 'rohan@example.com',
+        emailVerifiedAt: null,
+      });
+
+      redisService.ttl.mockResolvedValueOnce(-2); // Cooldown expired
+
+      const result = await service.register({
+        name: 'Rohan Sharma',
+        email: 'rohan@example.com',
+        password: 'Password@123',
+      });
+
+      expect(result.userId).toBe('existing-unverified-1');
+      expect(result.isExistingUnverified).toBe(true);
+      expect(result.requiresVerification).toBe(true);
+      expect(result.message).toContain(
+        'An account with this email already exists but is not verified',
+      );
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.verificationToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId: 'existing-unverified-1',
+            usedAt: null,
+          }),
+        }),
+      );
+      expect(emailService.sendVerificationOtpEmail).toHaveBeenCalledWith(
+        'rohan@example.com',
+        'Rohan Sharma',
+        expect.stringMatching(/^\d{6}$/),
+        5,
+      );
+    });
+
+    it('should return active cooldown if existing unverified user registers during cooldown', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce({
+        id: 'existing-unverified-1',
+        name: 'Rohan Sharma',
+        email: 'rohan@example.com',
+        emailVerifiedAt: null,
+      });
+
+      redisService.ttl.mockResolvedValueOnce(45); // 45 seconds remaining
+
+      const result = await service.register({
+        name: 'Rohan Sharma',
+        email: 'rohan@example.com',
+        password: 'Password@123',
+      });
+
+      expect(result.userId).toBe('existing-unverified-1');
+      expect(result.isExistingUnverified).toBe(true);
+      expect(result.cooldownRemainingSeconds).toBe(45);
+      expect(emailService.sendVerificationOtpEmail).not.toHaveBeenCalled();
+    });
+
     it('should successfully verify email with valid OTP', async () => {
       const email = 'rohan@example.com';
       const otp = '123456';
@@ -259,6 +321,186 @@ describe('AuthService', () => {
 
       await expect(service.resendVerificationOtp(email)).rejects.toThrow(BadRequestException);
     });
+
+    it('should NEVER include OTP value in registration API response', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce(null);
+      prisma.user.create.mockResolvedValueOnce({
+        id: 'user-no-otp',
+        name: 'Safe User',
+        email: 'safe@example.com',
+      });
+
+      const result = await service.register({
+        name: 'Safe User',
+        email: 'safe@example.com',
+        password: 'Password@123',
+      });
+
+      expect((result as any).otp).toBeUndefined();
+      expect((result as any).token).toBeUndefined();
+      expect(result.message).toContain('Registration successful');
+    });
+
+    it('should log OTP to terminal in development when devLogEmailOtp is true', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      // Create a service instance with devLogEmailOtp = true and nodeEnv = 'development'
+      configService.get.mockImplementation((key: string) => {
+        const configMap: Record<string, any> = {
+          'app.nodeEnv': 'development',
+          'email.emailOtpEnabled': true,
+          'email.devLogEmailOtp': true,
+          'jwt.accessSecret': 'test-access-secret-minimum-32-characters-long',
+          'jwt.accessExpiresIn': '15m',
+          'jwt.refreshSecret': 'test-refresh-secret-minimum-32-characters-long',
+          'jwt.refreshExpiresIn': '7d',
+          'email.verificationOtpExpirySeconds': 300,
+          'email.verificationCooldownSeconds': 60,
+        };
+        return configMap[key];
+      });
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AuthService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: JwtService, useValue: jwtService },
+          { provide: ConfigService, useValue: configService },
+          { provide: RedisService, useValue: redisService },
+          { provide: EmailService, useValue: emailService },
+        ],
+      }).compile();
+
+      const devAuthService = module.get<AuthService>(AuthService);
+
+      prisma.user.findFirst.mockResolvedValueOnce(null);
+      prisma.user.create.mockResolvedValueOnce({
+        id: 'dev-user-1',
+        name: 'Dev User',
+        email: 'dev@marvelsbasket.com',
+      });
+
+      await devAuthService.register({
+        name: 'Dev User',
+        email: 'dev@marvelsbasket.com',
+        password: 'Password@123',
+      });
+
+      expect(consoleSpy).toHaveBeenCalled();
+      const loggedBox = consoleSpy.mock.calls.find((call) =>
+        String(call[0]).includes('[DEV EMAIL OTP]'),
+      );
+      expect(loggedBox).toBeDefined();
+      expect(loggedBox![0]).toContain('Purpose: Email Verification');
+      expect(loggedBox![0]).toContain('Email: dev@marvelsbasket.com');
+      expect(loggedBox![0]).toMatch(/OTP: \d{6}/);
+
+      consoleSpy.mockRestore();
+    });
+
+    it('CRITICAL: should NEVER log OTP in production even if devLogEmailOtp is misconfigured', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      configService.get.mockImplementation((key: string) => {
+        const configMap: Record<string, any> = {
+          'app.nodeEnv': 'production',
+          'email.emailOtpEnabled': true,
+          'email.devLogEmailOtp': true, // Misconfigured flag in prod!
+          'jwt.accessSecret': 'test-access-secret-minimum-32-characters-long',
+          'jwt.accessExpiresIn': '15m',
+          'jwt.refreshSecret': 'test-refresh-secret-minimum-32-characters-long',
+          'jwt.refreshExpiresIn': '7d',
+          'email.verificationOtpExpirySeconds': 300,
+          'email.verificationCooldownSeconds': 60,
+        };
+        return configMap[key];
+      });
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AuthService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: JwtService, useValue: jwtService },
+          { provide: ConfigService, useValue: configService },
+          { provide: RedisService, useValue: redisService },
+          { provide: EmailService, useValue: emailService },
+        ],
+      }).compile();
+
+      const prodAuthService = module.get<AuthService>(AuthService);
+
+      prisma.user.findFirst.mockResolvedValueOnce(null);
+      prisma.user.create.mockResolvedValueOnce({
+        id: 'prod-user-1',
+        name: 'Prod User',
+        email: 'prod@marvelsbasket.com',
+      });
+
+      await prodAuthService.register({
+        name: 'Prod User',
+        email: 'prod@marvelsbasket.com',
+        password: 'Password@123',
+      });
+
+      const loggedBox = consoleSpy.mock.calls.find((call) =>
+        String(call[0]).includes('[DEV EMAIL OTP]'),
+      );
+      expect(loggedBox).toBeUndefined();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should auto-verify user on registration if emailOtpEnabled is false', async () => {
+      configService.get.mockImplementation((key: string) => {
+        const configMap: Record<string, any> = {
+          'app.nodeEnv': 'development',
+          'email.emailOtpEnabled': false,
+          'email.devLogEmailOtp': false,
+          'jwt.accessSecret': 'test-access-secret-minimum-32-characters-long',
+          'jwt.accessExpiresIn': '15m',
+          'jwt.refreshSecret': 'test-refresh-secret-minimum-32-characters-long',
+          'jwt.refreshExpiresIn': '7d',
+          'email.verificationOtpExpirySeconds': 300,
+          'email.verificationCooldownSeconds': 60,
+        };
+        return configMap[key];
+      });
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AuthService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: JwtService, useValue: jwtService },
+          { provide: ConfigService, useValue: configService },
+          { provide: RedisService, useValue: redisService },
+          { provide: EmailService, useValue: emailService },
+        ],
+      }).compile();
+
+      const noOtpAuthService = module.get<AuthService>(AuthService);
+
+      prisma.user.findFirst.mockResolvedValueOnce(null);
+      prisma.user.create.mockResolvedValueOnce({
+        id: 'no-otp-user',
+        name: 'No Otp User',
+        email: 'nootp@example.com',
+      });
+
+      const result = await noOtpAuthService.register({
+        name: 'No Otp User',
+        email: 'nootp@example.com',
+        password: 'Password@123',
+      });
+
+      expect(result.message).toContain('Email verification is disabled');
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'no-otp-user' },
+          data: expect.objectContaining({ emailVerifiedAt: expect.any(Date) }),
+        }),
+      );
+      expect(emailService.sendVerificationOtpEmail).not.toHaveBeenCalled();
+    });
   });
 
   describe('Login & Session Management', () => {
@@ -285,15 +527,85 @@ describe('AuthService', () => {
       ).rejects.toThrow(UnauthorizedException);
     });
 
-    it('should reject login if email is not verified', async () => {
+    it('should reject login for unverified user with correct password and automatically dispatch OTP (Scenario B)', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce({
+        ...mockUser,
+        emailVerifiedAt: null,
+      });
+
+      redisService.ttl.mockResolvedValueOnce(-2); // Cooldown expired
+
+      let caughtError: any;
+      try {
+        await service.login({ email: 'customer@test.com', password: 'SecurePass@2026!' }, {});
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).toBeInstanceOf(ForbiddenException);
+      const resp = caughtError.getResponse();
+      expect(resp.code).toBe(ErrorCode.EMAIL_NOT_VERIFIED);
+      expect(resp.data.requiresVerification).toBe(true);
+      expect(resp.data.email).toBe('customer@test.com');
+      expect(resp.data.cooldownRemainingSeconds).toBe(60);
+      expect(emailService.sendVerificationOtpEmail).toHaveBeenCalledWith(
+        'customer@test.com',
+        mockUser.name,
+        expect.stringMatching(/^\d{6}$/),
+        5,
+      );
+    });
+
+    it('should NOT dispatch OTP on login if password is incorrect for unverified user', async () => {
       prisma.user.findFirst.mockResolvedValueOnce({
         ...mockUser,
         emailVerifiedAt: null,
       });
 
       await expect(
-        service.login({ email: 'customer@test.com', password: 'SecurePass@2026!' }, {}),
-      ).rejects.toThrow(ForbiddenException);
+        service.login({ email: 'customer@test.com', password: 'WrongPassword@123' }, {}),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(emailService.sendVerificationOtpEmail).not.toHaveBeenCalled();
+    });
+
+    it('should return active cooldown on login for unverified user without dispatching duplicate OTP', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce({
+        ...mockUser,
+        emailVerifiedAt: null,
+      });
+
+      redisService.ttl.mockResolvedValueOnce(35); // 35 seconds cooldown remaining
+
+      let caughtError: any;
+      try {
+        await service.login({ email: 'customer@test.com', password: 'SecurePass@2026!' }, {});
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).toBeInstanceOf(ForbiddenException);
+      const resp = caughtError.getResponse();
+      expect(resp.code).toBe(ErrorCode.EMAIL_NOT_VERIFIED);
+      expect(resp.data.cooldownRemainingSeconds).toBe(35);
+      expect(emailService.sendVerificationOtpEmail).not.toHaveBeenCalled();
+    });
+
+    it('should clean up Redis keys if email delivery fails during OTP dispatch', async () => {
+      emailService.sendVerificationOtpEmail.mockRejectedValueOnce(
+        new Error('Resend delivery failure'),
+      );
+
+      await expect(
+        service.sendOrResendVerificationOtp(
+          { id: mockUser.id, email: 'customer@test.com', name: 'Test Customer' },
+          { checkCooldown: false },
+        ),
+      ).rejects.toThrow('Resend delivery failure');
+
+      expect(redisService.del).toHaveBeenCalledWith('otp:verify-email:customer@test.com');
+      expect(redisService.del).toHaveBeenCalledWith('otp:cooldown:verify-email:customer@test.com');
+      expect(redisService.del).toHaveBeenCalledWith('otp:attempts:verify-email:customer@test.com');
     });
 
     it('should reject login if user account is inactive', async () => {

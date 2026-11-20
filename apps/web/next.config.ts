@@ -19,10 +19,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  devIndicators: {
-    position: 'bottom-left',
-    appIsrStatus: true,
-    buildActivity: true,
+  devIndicators: false,
+  experimental: {
+    devtoolSegmentExplorer: false,
   },
   logging: {
     fetches: {
