@@ -1109,6 +1109,38 @@ In quick-commerce mobile UX, repetitive elements waste critical top-navbar real 
 
 ---
 
+## ADR-051: Master Catalog and Store-Specific Inventory Separation in Aggregator Model
+
+**Status:** Accepted  
+**Date:** 2026-11-20  
+
+### Context
+In Marvel's Basket's Aggregator / Hybrid Marketplace Model, multiple independent physical stores operate across hyperlocal catchments in India. Allowing individual sellers to create unstructured product entries leads to severe catalog fragmentation: duplicate titles, conflicting barcodes, missing FSSAI mandatory declarations, inconsistent pack sizes, and substandard imagery. Conversely, embedding store-level selling prices and stock directly on master product records prevents multiple sellers from listing the same item with distinct local pricing and inventory.
+
+### Decision
+1. **Platform-Owned Master Catalog:** Marvel's Basket centrally owns and curates all master catalog entities (`Category`, `Brand`, `Product`, `ProductVariant`, `ProductImage`, `ProductAttributeDefinition`).
+   - Master products define canonical titles, descriptions, food preferences (`VEG`, `NON_VEG`, `EGG`, `VEGAN`, `NA`), manufacturer/packer legal compliance, shelf life, nutritional breakdown, search synonyms (`searchTags`), and Cloudinary media assets (strictly capped at 5 images per variant).
+   - Variants define packaging units, barcode/EAN, and the legally binding Maximum Retail Price (MRP) ceiling.
+   - Master product publication follows a strict lifecycle: `DRAFT`, `ACTIVE`, `INACTIVE`, `DISCONTINUED`, `ARCHIVED`. Activation requires at least one active variant and a valid category.
+2. **Decoupled Store Inventory:** Store-specific commercial parameters are isolated strictly within `SellerProduct` and `Inventory`.
+   - Sellers map to existing master product variants without ability to mutate canonical catalog metadata.
+   - Store selling prices must satisfy `sellingPrice <= variant.mrp`.
+   - Store prices, discounts, and inventory balances never contaminate master catalog definitions.
+3. **Hyperlocal Store-Scoped Customer Discovery:**
+   - When a customer specifies a delivery location or postal code, the platform resolves the matching serviceable store via `SellerServiceArea` and `Seller` (`APPROVED_ACTIVE` status).
+   - Storefront catalog listings and search join against `sellerProducts` and `inventory` for that specific store, presenting live selling price, local discount savings, and immediate stock availability.
+   - Price sorting (`price_asc`, `price_desc`) and price range filtering operate on store selling prices.
+4. **Quick-Commerce UX Layout & Design Authority:**
+   - Catalog browsing implements quick-commerce ergonomics (Zepto/BigBasket inspired layouts): dual-tier category navigation, vertical subcategory rail, quick food preference filters, pack size selector, and quick ADD counter with direct basket state synchronization.
+   - All visual styling strictly follows the Marvel's Basket Design Authority (`#00873D` forest green, `#006830` emerald, `#F9C70C` accent yellow, ivory backgrounds, dark ink typography).
+
+### Consequences
+- Guarantees high-fidelity, standardized product information, FSSAI regulatory compliance, and consistent customer imagery.
+- Enables seamless multi-seller pricing competition and hyperlocal inventory availability.
+- Cleanly isolates Phase 08 (Master Catalog) from Phase 09 (Seller Listings & Inventory Management).
+
+---
+
 # Part C — Complete Decision Register Summary
 
 | ADR # | Decision Topic | Status | Category | Key Implementation Invariant |
@@ -1163,6 +1195,7 @@ In quick-commerce mobile UX, repetitive elements waste critical top-navbar real 
 | **ADR-048** | Five-Step Seller Onboarding & Admin Verification State Machine | **Accepted** | Business/UX | 5-step wizard, draft resumption, in-app KYC preview, 5-state lifecycle (`DRAFT` to `APPROVED_ACTIVE`) |
 | **ADR-049** | Unified Unverified Account Recovery & Automatic Resend | **Accepted** | Security/Auth | Auto-resend OTP on re-register/login for unverified accounts; Argon2id password-check-first invariant |
 | **ADR-050** | Mobile Navigation Refinement & Delivery Address Prominence | **Accepted** | Frontend/UX | Remove duplicate mobile avatar, add mobile Deliver To selector, promote Orders in bottom nav, unify basket badge |
+| **ADR-051** | Master Catalog & Store-Specific Inventory Separation | **Accepted** | Catalog/Architecture | Platform owns master catalog, variants, and MRP; stores own local selling price & inventory; store-scoped discovery |
 
 ---
 

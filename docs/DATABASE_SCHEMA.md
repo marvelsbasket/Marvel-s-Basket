@@ -78,7 +78,7 @@ The database is divided into the following operational domains:
 | Identity & Auth | `User`, `Role`, `Permission`, `UserRole`, `Session`, `VerificationToken` |
 | Customer | `CustomerProfile`, `CustomerAddress`, `Wishlist`, `WishlistItem` |
 | Seller / Store | `Seller`, `SellerProfile`, `SellerKYC`, `SellerDocument`, `SellerBusinessHours`, `SellerServiceArea` |
-| Catalog | `Category`, `Product`, `ProductImage`, `ProductVariant` |
+| Catalog | `Category`, `Brand`, `Product`, `ProductVariant`, `ProductImage`, `ProductAttributeDefinition` |
 | Store Listings | `SellerProduct` (Store Product Listing) |
 | Inventory | `Inventory`, `InventoryTransaction`, `StockReservation` |
 | Shopping Cart | `Cart`, `CartItem` (Bound to single store) |
@@ -724,95 +724,182 @@ Geospatial coverage can be expanded using PostGIS.
 
 ## 8.1 Category
 
-Supports hierarchical product categories.
+Supports a 2-tier hierarchical product category taxonomy (L1 Department / L2 Subcategory). Platform-owned.
 
-Fields:
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key (`@default(uuid())`) |
+| parentId | UUID? | Self-referential foreign key to parent Category (L1 if null, L2 if set) |
+| name | String | Category title (e.g. 'Dairy, Bread & Eggs') |
+| slug | String | Unique URL slug (`@unique`) |
+| description | String? | Optional long description |
+| iconUrl | String? | Cloudinary icon URL |
+| iconPublicId | String? | Cloudinary public ID for icon asset lifecycle |
+| imageUrl | String? | Cloudinary promotional/banner image URL |
+| imagePublicId | String? | Cloudinary public ID for banner asset lifecycle |
+| displayOrder | Int | Numeric sorting order (`@default(0)`) |
+| isActive | Boolean | Visibility toggle (`@default(true)`) |
+| taxCode | String? | HSN / SAC classification code |
+| defaultGstRate | Decimal? | Default GST tax percentage (`@db.Decimal(5, 2)`) |
+| createdAt | DateTime | Record creation timestamp |
+| updatedAt | DateTime | Automatic update timestamp |
 
-- id
-- parentId
-- name
-- slug
-- description
-- imageUrl
-- displayOrder
-- isActive
-- createdAt
-- updatedAt
+Relationships:
+- `parent`: `Category?` via `parentId`
+- `children`: `Category[]`
+- `products`: `Product[]`
+- `commissionRules`: `CommissionRule[]`
 
-Example:
+Indexes:
+- `@@index([parentId])`
+- `@@index([slug])`
+- `@@index([displayOrder])`
 
-```text
-Groceries
-  ├── Fruits
-  ├── Vegetables
-  ├── Dairy
-  └── Staples
+## 8.2 Brand
 
-Beverages
-  ├── Juices
-  ├── Soft Drinks
-  └── Water
+Platform-owned verified manufacturer and brand catalog.
 
-Personal Care
-  ├── Skin Care
-  └── Hair Care
-```
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key (`@default(uuid())`) |
+| name | String | Brand name (e.g. 'Amul', 'Nestlé') (`@unique`) |
+| slug | String | Unique URL slug (`@unique`) |
+| logoUrl | String? | Cloudinary brand logo URL |
+| logoPublicId | String? | Cloudinary public ID for brand logo |
+| description | String? | Optional brand overview |
+| isActive | Boolean | Brand active flag (`@default(true)`) |
+| createdAt | DateTime | Creation timestamp |
+| updatedAt | DateTime | Update timestamp |
 
-## 8.2 Product
+Relationships:
+- `products`: `Product[]`
 
-Represents the common marketplace catalog item.
+Indexes:
+- `@@index([slug])`
 
-Fields:
+## 8.3 Product (Master Product)
 
-- id
-- categoryId
-- name
-- slug
-- description
-- brand
-- SKU
-- status
-- createdAt
-- updatedAt
-- deletedAt
+Represents the centralized platform-owned catalog product definition. Master products define what the item is (content, imagery, attributes, dietary flags), while individual stores attach pricing and stock through `SellerProduct` and `Inventory`.
 
-A Product does not represent an individual seller's price or stock.
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key (`@default(uuid())`) |
+| categoryId | UUID | Foreign key to Category (`onDelete: Restrict`) |
+| brandId | UUID? | Optional foreign key to Brand (`onDelete: SetNull`) |
+| name | String | Product title |
+| slug | String | Unique URL slug (`@unique`) |
+| shortDescription | String? | Punchy summary / teaser text |
+| description | String? | Detailed product description / overview |
+| brand | String? | Free-text brand fallback name |
+| sku | String? | Master catalog SKU (`@unique`) |
+| foodPreference | FoodPreference | Dietary classification: `VEG`, `NON_VEG`, `EGG`, `VEGAN`, `NA` (`@default(NA)`) |
+| countryOfOrigin | String? | Mandatory compliance field (`@default("India")`) |
+| manufacturerDetails | String? | FSSAI / Legal metrology manufacturer address |
+| packerDetails | String? | FSSAI / Legal metrology packer details |
+| shelfLife | String? | Shelf life duration (e.g. '90 days from mfg') |
+| storageInstructions | String? | Storage recommendations (e.g. 'Store in cool dry place') |
+| ingredients | String? | Ingredients listing |
+| nutritionalInfo | Json? | Structured nutritional data (energy, protein, fat, carbs) |
+| specifications | Json? | Technical / physical specifications |
+| attributes | Json? | Dynamic category-specific key-value attributes |
+| searchTags | String[] | Synonyms & search terms (e.g. ['doodh', 'fresh milk']) |
+| isFeatured | Boolean | Homepage / curated rail promotion flag (`@default(false)`) |
+| status | ProductStatus | Publication state: `DRAFT`, `ACTIVE`, `INACTIVE`, `DISCONTINUED`, `ARCHIVED` |
+| createdAt | DateTime | Creation timestamp |
+| updatedAt | DateTime | Update timestamp |
+| deletedAt | DateTime? | Soft deletion timestamp |
 
-## 8.3 ProductImage
+Relationships:
+- `category`: `Category`
+- `brandRel`: `Brand?`
+- `images`: `ProductImage[]`
+- `variants`: `ProductVariant[]`
+- `sellerProducts`: `SellerProduct[]`
+- `wishlistItems`: `WishlistItem[]`
+- `reviews`: `Review[]`
 
-Fields:
-
-- id
-- productId
-- imageUrl
-- altText
-- displayOrder
-- createdAt
+Indexes:
+- `@@index([categoryId])`
+- `@@index([brandId])`
+- `@@index([status])`
+- `@@index([foodPreference])`
+- `@@index([isFeatured])`
+- `@@index([name])`
 
 ## 8.4 ProductVariant
 
-Represents variations of a catalog product.
+Represents specific packaging sizes, weights, or physical variations of a master product.
 
-Fields:
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key (`@default(uuid())`) |
+| productId | UUID | Foreign key to Product (`onDelete: Cascade`) |
+| name | String | Variant display name (e.g. '500 ml Pouch') |
+| packSize | String? | Standard pack size label (e.g. '500 ml', '1 kg') |
+| unitValue | Decimal? | Numeric unit measurement (`@db.Decimal(10, 2)`) |
+| unitType | String? | Unit code (`ml`, `g`, `kg`, `l`, `pcs`) |
+| mrp | Decimal | Maximum Retail Price ceiling in INR (`@db.Decimal(12, 2)`) |
+| sku | String? | Unique variant barcode/SKU (`@unique`) |
+| barcode | String? | EAN-13 / UPC barcode number |
+| primaryImageUrl | String? | Direct image shortcut URL |
+| primaryImagePublicId | String? | Direct image Cloudinary public ID |
+| isActive | Boolean | Availability toggle (`@default(true)`) |
+| displayOrder | Int | Sorting order within product (`@default(0)`) |
+| attributes | Json? | Variant-level custom attributes |
+| createdAt | DateTime | Creation timestamp |
+| updatedAt | DateTime | Update timestamp |
 
-- id
-- productId
-- name
-- SKU
-- attributes (JSON)
-- createdAt
-- updatedAt
+Relationships:
+- `product`: `Product`
+- `images`: `ProductImage[]`
+- `sellerProducts`: `SellerProduct[]`
 
-Examples:
+Indexes:
+- `@@index([productId])`
+- `@@index([barcode])`
 
-- 500 g.
-- 1 kg.
-- 2 kg.
-- Small.
-- Medium.
-- Large.
+## 8.5 ProductImage
 
-Variant-specific seller listings may have independent pricing and stock.
+Cloudinary-managed high-resolution product photography. A master product enforces a strict maximum of 5 images per variant.
+
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key (`@default(uuid())`) |
+| productId | UUID | Foreign key to Product (`onDelete: Cascade`) |
+| variantId | UUID? | Optional foreign key to ProductVariant (`onDelete: Cascade`) |
+| imageUrl | String | Cloudinary secure delivery URL |
+| publicId | String? | Cloudinary asset public ID for cleanup on deletion |
+| altText | String? | Accessible screen-reader alt text |
+| isPrimary | Boolean | Primary card thumbnail flag (`@default(false)`) |
+| displayOrder | Int | Gallery sequence order (`@default(0)`) |
+| createdAt | DateTime | Creation timestamp |
+
+Relationships:
+- `product`: `Product`
+- `variant`: `ProductVariant?`
+
+Indexes:
+- `@@index([productId])`
+- `@@index([variantId])`
+
+## 8.6 ProductAttributeDefinition
+
+Schema definitions for category-scoped custom product attributes (e.g. fat content for milk, organic certification for grains).
+
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key (`@default(uuid())`) |
+| categoryId | UUID? | Scoped Category (`null` = global attribute) |
+| name | String | Human-readable label (e.g. 'Milk Fat Content') |
+| key | String | Attribute JSON key identifier (e.g. 'fat_percentage') |
+| attributeType | String | Data type: `text`, `number`, `select`, `boolean` |
+| isRequired | Boolean | Mandatory attribute enforcement flag |
+| options | Json? | Selectable dropdown options array |
+| createdAt | DateTime | Creation timestamp |
+| updatedAt | DateTime | Update timestamp |
+
+Constraints:
+- `@@unique([categoryId, key])`
 
 ---
 

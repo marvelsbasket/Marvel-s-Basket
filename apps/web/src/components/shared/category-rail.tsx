@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Apple,
@@ -12,9 +12,11 @@ import {
   ShoppingBag,
   Sparkles,
 } from 'lucide-react';
+import { CategoryTreeItem } from '@marvels-basket/shared';
+import { CatalogService } from '@/features/catalog/services/catalog.service';
 import { cn } from '@/lib/utils';
 
-export interface CategoryItem {
+export interface StaticCategoryItem {
   id: string;
   name: string;
   slug: string;
@@ -22,18 +24,18 @@ export interface CategoryItem {
   bgGradient: string;
 }
 
-export const CATEGORIES: CategoryItem[] = [
+export const FALLBACK_CATEGORIES: StaticCategoryItem[] = [
   {
     id: '1',
     name: 'Groceries',
-    slug: 'groceries',
+    slug: 'groceries-staples',
     icon: <ShoppingBag className="h-7 w-7 text-amber-600" />,
     bgGradient: 'from-amber-100 to-orange-50',
   },
   {
     id: '2',
-    name: 'Fruits & Vegetables',
-    slug: 'fruits-vegetables',
+    name: 'Fruits & Veggies',
+    slug: 'fresh-produce',
     icon: <Apple className="h-7 w-7 text-emerald-600" />,
     bgGradient: 'from-emerald-100 to-green-50',
   },
@@ -46,7 +48,7 @@ export const CATEGORIES: CategoryItem[] = [
   },
   {
     id: '4',
-    name: 'Snacks & Beverages',
+    name: 'Snacks & Drinks',
     slug: 'snacks-beverages',
     icon: <Coffee className="h-7 w-7 text-orange-600" />,
     bgGradient: 'from-orange-100 to-red-50',
@@ -60,8 +62,8 @@ export const CATEGORIES: CategoryItem[] = [
   },
   {
     id: '6',
-    name: 'Home & Cleaning',
-    slug: 'home-cleaning',
+    name: 'Home & Kitchen',
+    slug: 'home-kitchen',
     icon: <Home className="h-7 w-7 text-cyan-600" />,
     bgGradient: 'from-cyan-100 to-teal-50',
   },
@@ -74,22 +76,70 @@ export const CATEGORIES: CategoryItem[] = [
   },
   {
     id: '8',
-    name: 'More',
-    slug: 'all-categories',
+    name: 'All Categories',
+    slug: 'all',
     icon: <MoreHorizontal className="h-7 w-7 text-brand" />,
     bgGradient: 'from-emerald-100 to-lime-50',
   },
 ];
 
 export function CategoryRail() {
+  const [categories, setCategories] = useState<CategoryTreeItem[]>([]);
+
+  useEffect(() => {
+    async function loadCategories() {
+      try {
+        const tree = await CatalogService.getCategoriesTree();
+        if (tree && tree.length > 0) {
+          setCategories(tree.slice(0, 7));
+        }
+      } catch {
+        // Fall back gracefully
+      }
+    }
+    loadCategories();
+  }, []);
+
+  const displayItems =
+    categories.length > 0
+      ? [
+          ...categories.map((c, idx) => ({
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            iconUrl: c.iconUrl,
+            fallbackIcon: FALLBACK_CATEGORIES[idx % (FALLBACK_CATEGORIES.length - 1)].icon,
+            bgGradient: FALLBACK_CATEGORIES[idx % (FALLBACK_CATEGORIES.length - 1)].bgGradient,
+            href: `/categories/${c.slug}`,
+          })),
+          {
+            id: 'more-all',
+            name: 'All Categories',
+            slug: 'categories',
+            iconUrl: null,
+            fallbackIcon: <MoreHorizontal className="h-7 w-7 text-brand" />,
+            bgGradient: 'from-emerald-100 to-lime-50',
+            href: '/categories',
+          },
+        ]
+      : FALLBACK_CATEGORIES.map((c) => ({
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          iconUrl: null,
+          fallbackIcon: c.icon,
+          bgGradient: c.bgGradient,
+          href: c.slug === 'all' ? '/categories' : `/categories/${c.slug}`,
+        }));
+
   return (
     <section aria-label="Product Categories" className="w-full">
       {/* Responsive Grid on desktop, horizontal scroll on mobile */}
       <div className="flex gap-4 overflow-x-auto pb-2 pt-1 no-scrollbar sm:grid sm:grid-cols-4 md:grid-cols-8 sm:overflow-visible sm:pb-0">
-        {CATEGORIES.map((category) => (
+        {displayItems.map((category) => (
           <Link
             key={category.id}
-            href={`/categories/${category.slug}`}
+            href={category.href}
             className="group flex flex-col items-center flex-shrink-0 text-center focus-visible:outline-none"
           >
             {/* Category Icon Tile */}
@@ -101,11 +151,19 @@ export function CategoryRail() {
             >
               <div
                 className={cn(
-                  'flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br shadow-inner transition-transform group-hover:rotate-3',
+                  'flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br shadow-inner transition-transform group-hover:rotate-3 overflow-hidden',
                   category.bgGradient,
                 )}
               >
-                {category.icon}
+                {category.iconUrl ? (
+                  <img
+                    src={category.iconUrl}
+                    alt={category.name}
+                    className="h-9 w-9 object-contain"
+                  />
+                ) : (
+                  category.fallbackIcon
+                )}
               </div>
             </div>
 

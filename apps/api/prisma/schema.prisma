@@ -77,6 +77,14 @@ enum ProductStatus {
   ACTIVE
   INACTIVE
   ARCHIVED
+  DISCONTINUED
+}
+
+enum FoodPreference {
+  VEG
+  NON_VEG
+  VEGAN
+  NA
 }
 
 enum SellerProductStatus {
@@ -561,20 +569,25 @@ model SellerServiceArea {
 }
 
 // ==============================================================================
-// 6. MASTER PRODUCT CATALOG
+// 6. MASTER PRODUCT CATALOG & BRANDS
 // ==============================================================================
 
 model Category {
-  id           String   @id @default(uuid()) @db.Uuid
-  parentId     String?  @map("parent_id") @db.Uuid
-  name         String
-  slug         String   @unique
-  description  String?
-  imageUrl     String?  @map("image_url")
-  displayOrder Int      @default(0) @map("display_order")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  parentId       String?  @map("parent_id") @db.Uuid
+  name           String
+  slug           String   @unique
+  description    String?
+  iconUrl        String?  @map("icon_url")
+  iconPublicId   String?  @map("icon_public_id")
+  imageUrl       String?  @map("image_url")
+  imagePublicId  String?  @map("image_public_id")
+  displayOrder   Int      @default(0) @map("display_order")
+  isActive       Boolean  @default(true) @map("is_active")
+  taxCode        String?  @map("tax_code")
+  defaultGstRate Decimal? @map("default_gst_rate") @db.Decimal(5, 2)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   parent          Category?        @relation("CategoryToCategory", fields: [parentId], references: [id], onDelete: SetNull)
   children        Category[]       @relation("CategoryToCategory")
@@ -583,23 +596,56 @@ model Category {
 
   @@index([parentId])
   @@index([slug])
+  @@index([displayOrder])
   @@map("categories")
 }
 
+model Brand {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @unique
+  slug         String   @unique
+  logoUrl      String?  @map("logo_url")
+  logoPublicId String?  @map("logo_public_id")
+  description  String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  products Product[]
+
+  @@index([slug])
+  @@map("brands")
+}
+
 model Product {
-  id          String        @id @default(uuid()) @db.Uuid
-  categoryId  String        @map("category_id") @db.Uuid
-  name        String
-  slug        String        @unique
-  description String?
-  brand       String?
-  sku         String?       @unique
-  status      ProductStatus @default(DRAFT)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  deletedAt   DateTime?     @map("deleted_at")
+  id                  String         @id @default(uuid()) @db.Uuid
+  categoryId          String         @map("category_id") @db.Uuid
+  brandId             String?        @map("brand_id") @db.Uuid
+  name                String
+  slug                String         @unique
+  shortDescription    String?        @map("short_description")
+  description         String?
+  brand               String?
+  sku                 String?        @unique
+  foodPreference      FoodPreference @default(NA) @map("food_preference")
+  countryOfOrigin     String?        @default("India") @map("country_of_origin")
+  manufacturerDetails String?        @map("manufacturer_details")
+  packerDetails       String?        @map("packer_details")
+  shelfLife           String?        @map("shelf_life")
+  storageInstructions String?        @map("storage_instructions")
+  ingredients         String?
+  nutritionalInfo     Json?          @map("nutritional_info")
+  specifications      Json?
+  attributes          Json?
+  searchTags          String[]       @default([]) @map("search_tags")
+  isFeatured          Boolean        @default(false) @map("is_featured")
+  status              ProductStatus  @default(DRAFT)
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  deletedAt           DateTime?      @map("deleted_at")
 
   category       Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brandRel       Brand?           @relation(fields: [brandId], references: [id], onDelete: SetNull)
   images         ProductImage[]
   variants       ProductVariant[]
   sellerProducts SellerProduct[]
@@ -607,39 +653,73 @@ model Product {
   reviews        Review[]
 
   @@index([categoryId])
+  @@index([brandId])
   @@index([status])
+  @@index([foodPreference])
+  @@index([isFeatured])
   @@index([name])
   @@map("products")
+}
+
+model ProductVariant {
+  id                   String   @id @default(uuid()) @db.Uuid
+  productId            String   @map("product_id") @db.Uuid
+  name                 String
+  packSize             String?  @map("pack_size")
+  unitValue            Decimal? @map("unit_value") @db.Decimal(10, 2)
+  unitType             String?  @map("unit_type")
+  mrp                  Decimal  @default(0.00) @map("mrp") @db.Decimal(12, 2)
+  sku                  String?  @unique
+  barcode              String?
+  primaryImageUrl      String?  @map("primary_image_url")
+  primaryImagePublicId String?  @map("primary_image_public_id")
+  isActive             Boolean  @default(true) @map("is_active")
+  displayOrder         Int      @default(0) @map("display_order")
+  attributes           Json?
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  images         ProductImage[]
+  sellerProducts SellerProduct[]
+
+  @@index([productId])
+  @@index([barcode])
+  @@map("product_variants")
 }
 
 model ProductImage {
   id           String   @id @default(uuid()) @db.Uuid
   productId    String   @map("product_id") @db.Uuid
+  variantId    String?  @map("variant_id") @db.Uuid
   imageUrl     String   @map("image_url")
+  publicId     String?  @map("public_id")
   altText      String?  @map("alt_text")
+  isPrimary    Boolean  @default(false) @map("is_primary")
   displayOrder Int      @default(0) @map("display_order")
   createdAt    DateTime @default(now()) @map("created_at")
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@index([productId])
+  @@index([variantId])
   @@map("product_images")
 }
 
-model ProductVariant {
-  id         String   @id @default(uuid()) @db.Uuid
-  productId  String   @map("product_id") @db.Uuid
-  name       String
-  sku        String?  @unique
-  attributes Json?
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+model ProductAttributeDefinition {
+  id            String   @id @default(uuid()) @db.Uuid
+  categoryId    String?  @map("category_id") @db.Uuid
+  name          String
+  key           String
+  attributeType String   @map("attribute_type")
+  isRequired    Boolean  @default(false) @map("is_required")
+  options       Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sellerProducts SellerProduct[]
-
-  @@index([productId])
-  @@map("product_variants")
+  @@unique([categoryId, key])
+  @@map("product_attribute_definitions")
 }
 
 // ==============================================================================

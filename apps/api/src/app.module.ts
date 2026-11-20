@@ -12,6 +12,9 @@ import { UsersModule } from './modules/users/users.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { CloudinaryModule } from './modules/cloudinary/cloudinary.module';
 import { SellersModule } from './modules/sellers/sellers.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { BrandsModule } from './modules/brands/brands.module';
+import { ProductsModule } from './modules/products/products.module';
 import { JwtAuthGuard, RolesGuard, PermissionsGuard } from './modules/auth/guards';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
@@ -35,6 +38,9 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     AddressesModule,
     CloudinaryModule,
     SellersModule,
+    CategoriesModule,
+    BrandsModule,
+    ProductsModule,
     HealthModule,
   ],
   providers: [

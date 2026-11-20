@@ -4,9 +4,9 @@
 
 **Project:** Marvel's Basket  
 **Organization:** Marvel's Techworks  
-**Document Version:** 2.6  
-**Current Phase:** Phase 07 — Seller Onboarding & Management  
-**Phase Status:** Completed (Phase 07 Verified; Ready for Phase 08)  
+**Document Version:** 2.7  
+**Current Phase:** Phase 08 — Product Catalog & Categories  
+**Phase Status:** Completed (Phase 08 Verified; Ready for Phase 09)  
 **Last Updated:** 20 November 2026
 
 ---
@@ -127,19 +127,19 @@ Phase 06 delivered the complete customer profile and delivery address management
 
 ## 7. Documentation Status Matrix
 
-| # | Document | Version | Status | Key Updates in Phase 00, 01, 02, 03, 04, 05, 06 & 07 |
+| # | Document | Version | Status | Key Updates in Phase 00–08 |
 |---|---|---|---|---|
 | 1 | `PROJECT_CONTEXT.md` | 1.1 | Updated | Aligned core business model to single-store checkout and hybrid catalog. |
 | 2 | `PROJECT_REQUIREMENTS.md` | 2.3 | Updated | Added Section 4.11 Seller Onboarding & KYC, 5-step registration, admin verification state machine. |
-| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.6 | Updated | Documented SellersModule, CloudinaryModule, AES-256-GCM encryption, authenticated document preview. |
-| 4 | `DATABASE_SCHEMA.md` | 2.4 | Updated | Documented SellerStatus, VerificationStatus, Seller, SellerProfile, SellerDocument, SellerDocumentReview, SellerStatusHistory. |
-| 5 | `PROJECT_DECISIONS.md` | 2.7 | Updated | Added **ADR-047** (Cloudinary Private Delivery & AES-256-GCM Bank Encryption) and **ADR-048** (5-Step Seller Onboarding & Verification). |
-| 6 | `IMPLEMENTATION_PHASES.md` | 2.7 | Updated | Phase 07 marked Completed; Phase 08 (Product Catalog & Categories) unblocked. |
-| 7 | `PROJECT_STATUS.md` | 2.6 | Updated | Phase 07 completed; seller registration, KYC, and admin verification verified; ready for Phase 08. |
-| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.3 | Updated | Section 18 added documenting seller landing page, 5-step onboarding wizard, document upload component, and admin review UI. |
-| 9 | `README.md` | 2.6 | Updated | Added Seller Onboarding & KYC architecture overview and verified API endpoints. |
+| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.7 | Updated | Documented Aggregator / Hybrid Master Catalog architecture, store-scoped discovery, and Indian grocery search tags. |
+| 4 | `DATABASE_SCHEMA.md` | 2.5 | Updated | Documented Category (2-tier), Brand, Product, ProductVariant, ProductImage, ProductAttributeDefinition. |
+| 5 | `PROJECT_DECISIONS.md` | 2.8 | Updated | Added **ADR-051** (Master Catalog & Store-Specific Inventory Separation in Aggregator Model). |
+| 6 | `IMPLEMENTATION_PHASES.md` | 2.8 | Updated | Phase 08 marked Completed; Phase 09 (Seller Listings & Inventory) unblocked. |
+| 7 | `PROJECT_STATUS.md` | 2.7 | Updated | Phase 08 completed; master catalog, categories, variants, and storefront discovery verified; ready for Phase 09. |
+| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.4 | Updated | Section 19 added documenting Zepto/BigBasket quick-commerce card ergonomics, PDP gallery, and subcategory navigation. |
+| 9 | `README.md` | 2.7 | Updated | Added Product Catalog & Category architecture overview and verified API endpoints. |
 | 10 | `infrastructure/docker/README.md`| 1.0 | Created | Dedicated Docker architecture, volume lifecycle, health probes, and safety commands. |
-| 11 | `apps/api/README.md` | 1.4 | Updated | Added Sellers and AdminSellers module documentation and endpoints. |
+| 11 | `apps/api/README.md` | 1.5 | Updated | Added Categories, Brands, Products, and AdminProducts module documentation. |
 
 ---
 
@@ -155,8 +155,8 @@ Phase 06 delivered the complete customer profile and delivery address management
 | **Phase 05** | Frontend Foundation & Design System | High | **Completed** | Design tokens, official logos, dual-tier navbar, CVA UI library, API client. Build & checks passing. |
 | **Phase 06** | User & Profile Management | High | **Completed** | Customer profile, address CRUD, atomic default address, mobile nav, Basket terminology. 107/107 tests passing. |
 | **Phase 07** | Seller Onboarding & KYC | High | **Completed** | Footer discovery, 5-step onboarding wizard, draft saving, AES-256-GCM bank encryption, Cloudinary authenticated KYC, admin inspection & review, state machine (DRAFT -> APPROVED_ACTIVE), Resend notifications. 137 unit + 59 E2E + 10 DB tests passing. |
-| **Phase 08** | Product Catalog & Categories | High | **Ready to Start** | Unblocked by Phase 07. |
-| **Phase 09** | Seller Listings & Inventory | High | Not Started | Dependent on Phase 08. |
+| **Phase 08** | Product Catalog & Categories | High | **Completed** | Platform master catalog, 2-tier categories, brands, variants, max-5 images, store-scoped catalog discovery, Indian search synonyms, admin wizard & management, responsive storefront PDP & category rails. 151 unit + 75 E2E + 8 web tests passing. |
+| **Phase 09** | Seller Listings & Inventory | High | **Ready to Start** | Unblocked by Phase 08. |
 | **Phase 10** | Customer Shopping Experience | High | Not Started | Dependent on Phase 08 & 09. |
 | **Phase 11** | Cart & Checkout (Single Store) | Critical | Not Started | Dependent on Phase 09 & 10. |
 | **Phase 12** | Order Management | Critical | Not Started | Dependent on Phase 11. |
@@ -176,9 +176,10 @@ Phase 06 delivered the complete customer profile and delivery address management
 
 ## 9. Immediate Next Steps
 
-1. Transition to **Phase 08 — Product Catalog & Categories**:
-   - Implement category tree management (L1 Category, L2 Subcategory) with icon/banner images via Cloudinary.
-   - Implement master product catalog with brand management, barcode/UPC scanning support, tax slab classification (GST 0%, 5%, 12%, 18%), and standard nutritional/dietary attributes.
-   - Prepare store-level listing models for Phase 09.
+1. Transition to **Phase 09 — Seller Listings & Inventory**:
+   - Implement Seller Storefront Inventory Mapping (`SellerProduct` & `Inventory`).
+   - Seller-specific selling price configuration (enforcing `<= MRP` ceiling) and localized promotional discounts.
+   - Real-time stock management, low-stock threshold alerts, and batch inventory updates.
+   - Store inventory CSV/Excel bulk upload and reconciliation.
 
 **Document End — PROJECT_STATUS.md**
