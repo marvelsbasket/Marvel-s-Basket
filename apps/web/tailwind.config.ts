@@ -14,9 +14,15 @@ const config: Config = {
         brand: {
           DEFAULT: '#15803D',
           dark: '#0B5D2A',
+          forest: '#0B5D2A',
           leaf: '#22A047',
           lime: '#84CC16',
           light: '#E8F5E9',
+        },
+        citrus: {
+          DEFAULT: '#F4E022',
+          light: '#FDF7C3',
+          hover: '#E5D118',
         },
         cta: {
           DEFAULT: '#F4E022',

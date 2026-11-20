@@ -7,8 +7,8 @@ import {
 } from '@marvels-basket/shared';
 
 export interface SellerStatusOverview {
-  sellerId: string;
-  status: string;
+  sellerId: string | null;
+  status: string | null;
   isSubmitted: boolean;
   submittedAt: string | null;
   approvalDate: string | null;
@@ -115,9 +115,13 @@ export class SellerService {
   /**
    * Retrieve application review and verification status overview.
    */
-  static async getMyStatus(): Promise<SellerStatusOverview> {
-    const res = await apiClient.get<SellerStatusOverview>(ENDPOINTS.SELLERS.STATUS);
-    return res.data!;
+  static async getMyStatus(): Promise<SellerStatusOverview | null> {
+    try {
+      const res = await apiClient.get<SellerStatusOverview>(ENDPOINTS.SELLERS.STATUS);
+      return res.data || null;
+    } catch {
+      return null;
+    }
   }
 
   /**

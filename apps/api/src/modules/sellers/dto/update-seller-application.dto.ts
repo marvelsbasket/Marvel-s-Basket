@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsInt,
   IsNumber,
@@ -11,6 +12,19 @@ import {
   MinLength,
 } from 'class-validator';
 
+/**
+ * Transforms empty or whitespace-only strings to undefined so class-validator @IsOptional()
+ * skips validation rules instead of rejecting empty strings against regex or min-length.
+ */
+const EmptyToUndefined = () =>
+  Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed === '' ? undefined : trimmed;
+    }
+    return value;
+  });
+
 export class UpdateSellerApplicationDto {
   @ApiPropertyOptional({ description: 'Current step in onboarding form (1-5)', example: 2 })
   @IsOptional()
@@ -22,6 +36,7 @@ export class UpdateSellerApplicationDto {
   // Step 1: Personal profile
   @ApiPropertyOptional({ description: 'Owner or signatory full name', example: 'Rajesh Gupta' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @MinLength(2)
   @MaxLength(100)
@@ -29,6 +44,7 @@ export class UpdateSellerApplicationDto {
 
   @ApiPropertyOptional({ description: '10-digit Indian mobile number', example: '9876543210' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @Matches(/^[6-9]\d{9}$/, {
     message: 'Mobile number must be a valid 10-digit Indian number starting with 6-9',
@@ -37,12 +53,14 @@ export class UpdateSellerApplicationDto {
 
   @ApiPropertyOptional({ description: 'Profile avatar URL' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   profilePhotoUrl?: string;
 
   // Step 2: Store information
   @ApiPropertyOptional({ description: 'Public store display name', example: 'Gupta Supermart' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @MinLength(2)
   @MaxLength(100)
@@ -50,6 +68,7 @@ export class UpdateSellerApplicationDto {
 
   @ApiPropertyOptional({ description: 'Store Category', example: 'GROCERY' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   storeCategory?: string;
 
@@ -58,42 +77,49 @@ export class UpdateSellerApplicationDto {
     example: 'Shop #4, Main Market',
   })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @MaxLength(200)
   addressLine1?: string;
 
   @ApiPropertyOptional({ description: 'Street / locality line 2', example: 'Civil Lines' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @MaxLength(200)
   addressLine2?: string;
 
   @ApiPropertyOptional({ description: 'Prominent landmark', example: 'Near Clock Tower' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @MaxLength(100)
   landmark?: string;
 
   @ApiPropertyOptional({ description: 'City', example: 'Azamgarh' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @MaxLength(100)
   city?: string;
 
   @ApiPropertyOptional({ description: 'State', example: 'Uttar Pradesh' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @MaxLength(100)
   state?: string;
 
   @ApiPropertyOptional({ description: '6-digit Indian PIN code', example: '276001' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @Matches(/^\d{6}$/, { message: 'Postal code must be a valid 6-digit Indian PIN code' })
   postalCode?: string;
 
   @ApiPropertyOptional({ description: 'Country', default: 'India' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   country?: string;
 
@@ -120,28 +146,33 @@ export class UpdateSellerApplicationDto {
 
   @ApiPropertyOptional({ description: 'Store opening time (HH:MM)', example: '07:00' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'Opening time must be in HH:MM format' })
   openingTime?: string;
 
   @ApiPropertyOptional({ description: 'Store closing time (HH:MM)', example: '22:00' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'Closing time must be in HH:MM format' })
   closingTime?: string;
 
   @ApiPropertyOptional({ description: 'Weekly off days (e.g. None or Sunday)', example: 'None' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   weeklyOffDays?: string;
 
   @ApiPropertyOptional({ description: 'Storefront photo URL' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   storefrontPhotoUrl?: string;
 
   @ApiPropertyOptional({ description: 'Store interior photo URL' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   storeInteriorPhotoUrl?: string;
 
@@ -151,6 +182,7 @@ export class UpdateSellerApplicationDto {
     example: 'Gupta Enterprises LLP',
   })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @MinLength(2)
   @MaxLength(150)
@@ -158,11 +190,13 @@ export class UpdateSellerApplicationDto {
 
   @ApiPropertyOptional({ description: 'Business entity structure', example: 'SOLE_PROPRIETORSHIP' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   businessEntityType?: string;
 
   @ApiPropertyOptional({ description: '10-character PAN number', example: 'ABCDE1234F' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @Matches(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, {
     message: 'PAN must be a valid 10-character alphanumeric Indian PAN code (e.g. ABCDE1234F)',
@@ -174,6 +208,7 @@ export class UpdateSellerApplicationDto {
     example: '09ABCDE1234F1Z5',
   })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @Matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, {
     message: 'GSTIN must be a valid 15-character Indian GST identification number',
@@ -185,6 +220,7 @@ export class UpdateSellerApplicationDto {
     example: '12345678901234',
   })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @Matches(/^\d{14}$/, {
     message: 'FSSAI License number must be exactly 14 digits',
@@ -196,17 +232,20 @@ export class UpdateSellerApplicationDto {
     example: '2028-12-31',
   })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   fssaiExpiryDate?: string;
 
   @ApiPropertyOptional({ description: 'Shop and Establishment license number' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   shopEstablishmentNumber?: string;
 
   // Step 4: Bank & Settlement
   @ApiPropertyOptional({ description: 'Bank account beneficiary name', example: 'Rajesh Gupta' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @MinLength(2)
   @MaxLength(100)
@@ -217,6 +256,7 @@ export class UpdateSellerApplicationDto {
     example: '12345678901234',
   })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @Matches(/^\d{9,18}$/, {
     message: 'Bank account number must be between 9 and 18 digits',
@@ -227,11 +267,13 @@ export class UpdateSellerApplicationDto {
     description: 'Confirm bank account number (must match bankAccountNumber)',
   })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   confirmBankAccountNumber?: string;
 
   @ApiPropertyOptional({ description: '11-character Indian IFSC code', example: 'SBIN0001234' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @Matches(/^[A-Z]{4}0[A-Z0-9]{6}$/, {
     message: 'IFSC must be a valid 11-character Indian code (e.g. SBIN0001234)',
@@ -240,16 +282,19 @@ export class UpdateSellerApplicationDto {
 
   @ApiPropertyOptional({ description: 'Bank Name', example: 'State Bank of India' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   bankName?: string;
 
   @ApiPropertyOptional({ description: 'Account Type', example: 'CURRENT' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   bankAccountType?: string;
 
   @ApiPropertyOptional({ description: 'UPI ID (optional)', example: 'rajesh@sbi' })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @Matches(/^[\w.-]+@[\w.-]+$/, {
     message: 'UPI ID must be a valid handle (e.g. username@bank)',

@@ -1,5 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+
+const EmptyToUndefined = () =>
+  Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed === '' ? undefined : trimmed;
+    }
+    return value;
+  });
 
 export class CreateSellerApplicationDto {
   @ApiPropertyOptional({
@@ -7,6 +17,7 @@ export class CreateSellerApplicationDto {
     example: 'Gupta Daily Mart',
   })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   @MinLength(2)
   @MaxLength(100)
@@ -17,6 +28,7 @@ export class CreateSellerApplicationDto {
     example: 'GROCERY',
   })
   @IsOptional()
+  @EmptyToUndefined()
   @IsString()
   storeCategory?: string;
 }

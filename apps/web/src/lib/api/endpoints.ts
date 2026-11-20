@@ -107,4 +107,30 @@ export const ENDPOINTS = {
       `/admin/products/${id}/variants/${variantId}/images/${imageId}`,
     STORE_LISTINGS: (id: string) => `/admin/products/${id}/store-listings`,
   },
+  SELLER_CATALOG: {
+    BROWSE: '/seller/catalog/products',
+  },
+  INVENTORY: {
+    SELLER_LISTINGS: (storeId: string) => `/seller/stores/${storeId}/listings`,
+    SELLER_LISTING_DETAIL: (storeId: string, listingId: string) =>
+      `/seller/stores/${storeId}/listings/${listingId}`,
+    SELLER_LISTING_PRICE: (storeId: string, listingId: string) =>
+      `/seller/stores/${storeId}/listings/${listingId}/price`,
+    SELLER_LISTING_STATUS: (storeId: string, listingId: string) =>
+      `/seller/stores/${storeId}/listings/${listingId}/status`,
+    SELLER_OVERVIEW: (storeId: string) => `/seller/stores/${storeId}/inventory`,
+    LISTING_INVENTORY: (storeId: string, listingId: string) =>
+      `/seller/stores/${storeId}/inventory/${listingId}`,
+    ADJUST_STOCK: (storeId: string, listingId: string) =>
+      `/seller/stores/${storeId}/inventory/${listingId}/adjustments`,
+    HISTORY: (storeId: string, listingId: string) =>
+      `/seller/stores/${storeId}/inventory/${listingId}/history`,
+    RECONCILE: (storeId: string) => `/seller/stores/${storeId}/inventory/reconcile`,
+    REVALIDATE_CART: '/inventory/revalidate-cart',
+    RESERVATIONS: '/inventory/reservations',
+    RELEASE_RESERVATION: (reservationId: string) =>
+      `/inventory/reservations/${reservationId}/release`,
+    COMMIT_RESERVATION: (reservationId: string) =>
+      `/inventory/reservations/${reservationId}/commit`,
+  },
 } as const;

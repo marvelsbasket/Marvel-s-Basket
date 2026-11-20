@@ -61,12 +61,23 @@ export default function SellerProfilePage() {
                 Manage your active store parameters, operating hours, and contact information.
               </p>
             </div>
-            <Link href="/seller/store">
-              <Button size="sm" className="bg-brand text-white font-bold text-xs">
-                Edit Store Settings
-                <ArrowRight className="w-3.5 h-3.5 ml-1" />
-              </Button>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href="/seller/inventory">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="font-bold text-xs border-border bg-white text-ink"
+                >
+                  Manage Inventory &amp; Stock
+                </Button>
+              </Link>
+              <Link href="/seller/store">
+                <Button size="sm" className="bg-brand text-white font-bold text-xs">
+                  Edit Store Settings
+                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                </Button>
+              </Link>
+            </div>
           </div>
 
           {loading ? (
