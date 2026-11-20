@@ -107,6 +107,21 @@ export enum DeliveryStatus {
   FAILED = 'FAILED',
 }
 
+export enum ProductStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  ARCHIVED = 'ARCHIVED',
+  DISCONTINUED = 'DISCONTINUED',
+}
+
+export enum FoodPreference {
+  VEG = 'VEG',
+  NON_VEG = 'NON_VEG',
+  VEGAN = 'VEGAN',
+  NA = 'NA',
+}
+
 export enum DeliveryProvider {
   INTERNAL = 'INTERNAL',
   EXTERNAL_PORTER = 'EXTERNAL_PORTER',

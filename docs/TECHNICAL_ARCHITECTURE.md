@@ -836,6 +836,33 @@ Module interactions should use clearly defined service interfaces and events whe
 - Accessible at `/api/docs` (Swagger UI) and `/api/docs-json` (OpenAPI 3.0 specification).
 - Controlled by `SWAGGER_ENABLED` environment variable. Includes Bearer JWT auth definitions and tagged endpoints.
 
+## 5.6 Aggregator / Hybrid Marketplace Catalog Architecture (Phase 08)
+
+Marvel's Basket implements an **Aggregator / Hybrid Marketplace Model** separating platform-owned master catalog definitions from store-specific inventory and pricing:
+
+### 1. Separation of Concerns
+- **Platform-Owned Master Catalog (`Product`, `ProductVariant`, `Category`, `Brand`, `ProductImage`, `ProductAttributeDefinition`):**
+  - Defines the single source of truth for product identity: canonical name, slug, descriptions, dietary classification (`VEG`, `NON_VEG`, `EGG`, `VEGAN`, `NA`), brand, HSN tax codes, default GST rates, nutritional breakdown, legal compliance info (FSSAI, country of origin, manufacturer/packer details), and Cloudinary images (enforced max 5 images per variant).
+  - Maintains the Maximum Retail Price (MRP) ceiling.
+  - Controls publication status: `DRAFT`, `ACTIVE`, `INACTIVE`, `DISCONTINUED`, `ARCHIVED`.
+- **Store-Specific Inventory (`SellerProduct`, `Inventory`):**
+  - Represents an individual seller/store's listing for a specific master product or variant.
+  - Stores local selling price, local discount, available quantity, stock thresholds, and store-specific active status.
+  - Store selling prices MUST NEVER exceed the master product variant's MRP.
+  - Store-specific pricing and stock NEVER pollute or mutate master product records.
+
+### 2. Location-Scoped Customer Catalog Discovery
+- Customers discover products filtered strictly by their serviceable store, resolved via delivery PIN code (`postalCode`) or explicit `storeId`:
+  - When a customer specifies a postal code, the platform queries `SellerServiceArea` and `Seller` (`APPROVED_ACTIVE` status) to resolve the primary serviceable store.
+  - Catalog queries join `sellerProducts` and `inventory` using the serviceable `storeId`.
+  - Products display the store's dynamic selling price, local discount savings, and real-time stock availability (`IN_STOCK` vs `OUT_OF_STOCK`).
+  - Price sorting (`price_asc`, `price_desc`) and price range filtering operate on the seller's store selling price, preserving the master catalog's integrity.
+  - If a customer browses without a delivery location, products display the catalog MRP with an indicator to select a delivery address for store availability.
+
+### 3. Quick-Commerce Indian Grocery Search
+- Master products support `searchTags` array containing localized names and colloquial grocery synonyms (e.g., `["doodh", "milk", "toned milk", "amul doodh"]`).
+- Autocomplete search queries match across product names, brand names, category titles, and search tags.
+
 ---
 
 # 6. DATABASE ARCHITECTURE
@@ -913,12 +940,13 @@ Production schema changes must be applied through reviewed migrations.
 
 ### Catalog
 
-- Category.
-- Product.
-- ProductImage.
-- ProductVariant.
-- SellerProduct.
-- ProductAttribute.
+- Category (2-tier taxonomy: L1 Department, L2 Subcategory).
+- Brand (Platform-managed verified brand registry).
+- Product (Platform master product definition).
+- ProductVariant (Pack sizes, weights, barcodes, MRP ceiling).
+- ProductImage (Cloudinary photography, max 5 images per variant).
+- ProductAttributeDefinition (Category-scoped custom specifications).
+- SellerProduct (Store-specific inventory, selling price, discounts).
 
 ### Inventory
 

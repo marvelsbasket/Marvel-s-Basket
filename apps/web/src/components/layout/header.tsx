@@ -287,13 +287,30 @@ export function Header({
                 </button>
               }
             >
-              <DropdownItem>Groceries & Staples</DropdownItem>
-              <DropdownItem>Fruits & Vegetables</DropdownItem>
-              <DropdownItem>Dairy, Bread & Eggs</DropdownItem>
-              <DropdownItem>Snacks & Beverages</DropdownItem>
-              <DropdownItem>Personal Care</DropdownItem>
-              <DropdownItem>Home & Cleaning</DropdownItem>
-              <DropdownItem>Baby Care</DropdownItem>
+              <Link href="/categories/groceries-staples">
+                <DropdownItem>Groceries & Staples</DropdownItem>
+              </Link>
+              <Link href="/categories/fresh-produce">
+                <DropdownItem>Fresh Produce</DropdownItem>
+              </Link>
+              <Link href="/categories/dairy-bakery">
+                <DropdownItem>Dairy & Bakery</DropdownItem>
+              </Link>
+              <Link href="/categories/snacks-beverages">
+                <DropdownItem>Snacks & Beverages</DropdownItem>
+              </Link>
+              <Link href="/categories/personal-care">
+                <DropdownItem>Personal Care</DropdownItem>
+              </Link>
+              <Link href="/categories/home-cleaning">
+                <DropdownItem>Home & Cleaning</DropdownItem>
+              </Link>
+              <DropdownDivider />
+              <Link href="/categories">
+                <DropdownItem className="font-bold text-brand">
+                  Explore All Categories →
+                </DropdownItem>
+              </Link>
             </DropdownMenu>
 
             {/* Navigation Links matching design reference */}

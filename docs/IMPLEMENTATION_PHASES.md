@@ -499,46 +499,51 @@ Merchants can discover seller registration, save incomplete applications as draf
 # 10. Phase 08 — Product Catalog & Categories
 
 **Priority:** High  
-**Status:** Not Started
+**Status:** Completed  
+**Completed Date:** 20 November 2026
 
 ### Objective
 
-Build the platform product catalog and category management system.
+Build the platform master product catalog and category management system under the Aggregator / Hybrid Marketplace Model. Marvel's Basket owns the centralized product definitions, categories, brands, variants, imagery, and MRP ceilings, while store inventory and pricing are decoupled and resolved based on customer serviceability.
 
 ### Tasks
 
-- [ ] Implement category management.
-- [ ] Implement product creation.
-- [ ] Implement product updates.
-- [ ] Implement product descriptions.
-- [ ] Implement product images.
-- [ ] Implement product attributes.
-- [ ] Implement product variants if required.
-- [ ] Implement product status management.
-- [ ] Implement product search.
-- [ ] Implement product filtering.
-- [ ] Implement product sorting.
-- [ ] Build category pages.
-- [ ] Build product detail pages.
-- [ ] Build admin catalog management.
+- [x] Implement category management (2-tier taxonomy: L1 Department, L2 Subcategory, icon and banner image uploads via Cloudinary, display ordering).
+- [x] Implement brand registry management (verified brand list, logos, slugs, active toggles).
+- [x] Implement master product creation with multi-step wizard (`/admin/products/new`).
+- [x] Implement master product updates, dossier inspection, and store inventory partner mapping view (`/admin/products/[id]`).
+- [x] Implement product descriptions, legal metrology (country of origin, manufacturer/packer details, shelf life, storage instructions).
+- [x] Implement Cloudinary product imagery with max-5 images per variant constraint.
+- [x] Implement product attributes and JSON specifications.
+- [x] Implement product variants with pack sizes, units, barcode/EAN-13, and legally binding MRP ceiling.
+- [x] Implement product status lifecycle management (`DRAFT`, `ACTIVE`, `INACTIVE`, `DISCONTINUED`, `ARCHIVED`).
+- [x] Implement customer product search with Indian grocery colloquial synonyms (`searchTags`) and autocomplete suggestions.
+- [x] Implement store-scoped customer catalog discovery with dynamic store selling prices and real-time stock availability.
+- [x] Implement product filtering (category, subcategory, brand, food preference, price range, in-stock).
+- [x] Implement product sorting (`price_asc`, `price_desc`, `name_asc`, `popular`, `newest`).
+- [x] Build responsive category department grid (`/categories`) and subcategory rail page (`/categories/[slug]`) following Zepto/BigBasket ergonomics.
+- [x] Build rich Product Detail Page (`/products/[slug]`) with image gallery, pack size selector, dietary badges, and tabs.
+- [x] Build admin catalog management tables, filters, and status modal (`/admin/products`, `/admin/categories`).
+- [x] Automated unit and E2E testing for Categories, Brands, Products, and AdminProducts services.
 
 ### Deliverables
 
-- Product catalog APIs.
-- Category management.
-- Product discovery interfaces.
-- Product detail interfaces.
+- Backend Modules: `CategoriesModule`, `BrandsModule`, `ProductsModule`, `AdminProductsModule`.
+- Database Models & Migration: `Category`, `Brand`, `Product`, `ProductVariant`, `ProductImage`, `ProductAttributeDefinition` in migration `20261120052417_product_catalog_and_categories`.
+- Customer Storefront: Responsive Category Rail, Department Explorer, Quick-Commerce Product Card with ADD counter, 2-column Product Detail Page.
+- Admin Dashboard: Category hierarchy tree view, Master Product table, 9-section master product wizard, dossier manager.
+- Quality Gates: 151 API unit tests passing, 75 API E2E tests passing, 8 Web unit tests passing, 0 TypeScript errors, clean production Next.js build.
 
 ### Completion Criteria
 
-Approved product catalog workflows must support creation, management, discovery, and retrieval.
+Approved platform master catalog workflows support creation, editing, variant management, publication state transitions, store inventory inspection, and store-scoped customer discovery.
 
 ---
 
 # 11. Phase 09 — Seller Listings & Inventory
 
 **Priority:** High  
-**Status:** Not Started
+**Status:** Ready to Start
 
 ### Objective
 

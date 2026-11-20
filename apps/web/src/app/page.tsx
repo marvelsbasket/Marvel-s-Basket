@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CategoryRail, FeaturedSellers, HeroBanner } from '@/components/shared';
+import { CategoryRail, FeaturedSellers, HeroBanner, TrendingProducts } from '@/components/shared';
 import { StorefrontLayout } from '@/components/layout/storefront-layout';
 import {
   Badge,
@@ -50,6 +50,11 @@ export default function HomePage() {
         {/* 3. FEATURED SELLERS NEAR YOU                                       */}
         {/* =================================================================== */}
         <FeaturedSellers />
+
+        {/* =================================================================== */}
+        {/* 4. TRENDING PRODUCTS NEAR YOU (PHASE 08 CATALOG)                   */}
+        {/* =================================================================== */}
+        <TrendingProducts />
 
         {/* =================================================================== */}
         {/* 4. DESIGN SYSTEM & REUSABLE COMPONENT SHOWCASE                      */}

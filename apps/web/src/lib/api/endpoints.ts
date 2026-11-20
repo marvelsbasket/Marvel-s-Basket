@@ -58,4 +58,53 @@ export const ENDPOINTS = {
     REACTIVATE: (id: string) => `/admin/sellers/${id}/reactivate`,
     HISTORY: (id: string) => `/admin/sellers/${id}/history`,
   },
+  CATEGORIES: {
+    TREE: '/categories',
+    BY_SLUG: (slug: string) => `/categories/${slug}`,
+  },
+  BRANDS: {
+    LIST: '/brands',
+    DETAIL: (id: string) => `/brands/${id}`,
+  },
+  PRODUCTS: {
+    LIST: '/products',
+    BY_SLUG: (slug: string) => `/products/${slug}`,
+    SEARCH_SUGGESTIONS: '/products/search/suggestions',
+  },
+  ADMIN_CATEGORIES: {
+    LIST: '/admin/categories',
+    DETAIL: (id: string) => `/admin/categories/${id}`,
+    CREATE: '/admin/categories',
+    UPDATE: (id: string) => `/admin/categories/${id}`,
+    DELETE: (id: string) => `/admin/categories/${id}`,
+    REORDER: '/admin/categories/reorder',
+    UPLOAD_ICON: (id: string) => `/admin/categories/${id}/icon`,
+    UPLOAD_IMAGE: (id: string) => `/admin/categories/${id}/image`,
+  },
+  ADMIN_BRANDS: {
+    LIST: '/admin/brands',
+    DETAIL: (id: string) => `/admin/brands/${id}`,
+    CREATE: '/admin/brands',
+    UPDATE: (id: string) => `/admin/brands/${id}`,
+    DELETE: (id: string) => `/admin/brands/${id}`,
+    UPLOAD_LOGO: (id: string) => `/admin/brands/${id}/logo`,
+  },
+  ADMIN_PRODUCTS: {
+    LIST: '/admin/products',
+    DETAIL: (id: string) => `/admin/products/${id}`,
+    CREATE: '/admin/products',
+    UPDATE: (id: string) => `/admin/products/${id}`,
+    STATUS: (id: string) => `/admin/products/${id}/status`,
+    DELETE: (id: string) => `/admin/products/${id}`,
+    ADD_VARIANT: (id: string) => `/admin/products/${id}/variants`,
+    UPDATE_VARIANT: (id: string, variantId: string) =>
+      `/admin/products/${id}/variants/${variantId}`,
+    DELETE_VARIANT: (id: string, variantId: string) =>
+      `/admin/products/${id}/variants/${variantId}`,
+    UPLOAD_VARIANT_IMAGE: (id: string, variantId: string) =>
+      `/admin/products/${id}/variants/${variantId}/images`,
+    DELETE_VARIANT_IMAGE: (id: string, variantId: string, imageId: string) =>
+      `/admin/products/${id}/variants/${variantId}/images/${imageId}`,
+    STORE_LISTINGS: (id: string) => `/admin/products/${id}/store-listings`,
+  },
 } as const;
