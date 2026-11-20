@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, LayoutGrid, MapPin, ShoppingBag, User } from 'lucide-react';
+import { Home, LayoutGrid, Package, ShoppingBag, User } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import { cn } from '@/lib/utils';
 
@@ -36,17 +36,19 @@ export function MobileBottomNav({ basketItemCount = 0 }: MobileBottomNavProps) {
       isActive: pathname.startsWith('/basket') || pathname.startsWith('/cart'),
     },
     {
-      label: 'Addresses',
-      href: '/addresses',
-      icon: MapPin,
-      isActive: pathname.startsWith('/addresses'),
+      label: 'Orders',
+      href: '/orders',
+      icon: Package,
+      isActive: pathname.startsWith('/orders') || pathname.startsWith('/track-order'),
     },
     {
       label: isAuthenticated ? 'Profile' : 'Login',
       href: isAuthenticated ? '/profile' : '/login',
       icon: User,
       isActive: isAuthenticated
-        ? pathname.startsWith('/profile') || pathname.startsWith('/account')
+        ? pathname.startsWith('/profile') ||
+          pathname.startsWith('/account') ||
+          pathname.startsWith('/addresses')
         : pathname === '/login',
     },
   ];

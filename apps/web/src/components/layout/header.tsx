@@ -9,6 +9,7 @@ import {
   LogOut,
   MapPin,
   Menu,
+  Package,
   Percent,
   Search,
   ShoppingBag,
@@ -73,13 +74,38 @@ export function Header({
       {/* TIER 1: PRIMARY NAVIGATION BAR                                     */}
       {/* =================================================================== */}
       <div className="border-b border-border">
-        <div className="mx-auto flex h-20 max-w-container items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-20 max-w-container items-center justify-between gap-1.5 sm:gap-4 px-3 sm:px-6 lg:px-8">
           {/* 1. Brand Logo */}
           <div className="flex-shrink-0">
             <Logo variant="compact" />
           </div>
 
-          {/* 2. Hyperlocal Location Selector (Desktop/Tablet) */}
+          {/* 2a. Hyperlocal Location Selector (Mobile < md) */}
+          <div className="flex md:hidden items-center flex-1 min-w-0 mx-1">
+            <button
+              type="button"
+              onClick={() => setIsLocationModalOpen(true)}
+              className="group flex items-center gap-1.5 rounded-lg py-1 px-1 text-left transition-colors hover:bg-surface focus-visible:outline-none max-w-full"
+              aria-label={`Delivery location: ${selectedLocation}. Click to change.`}
+            >
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-brand transition-colors group-hover:bg-brand group-hover:text-white">
+                <MapPin className="h-4 w-4" />
+              </div>
+              <div className="flex flex-col min-w-0 leading-tight">
+                <span className="text-[10px] font-medium text-ink-muted leading-none">
+                  Deliver to
+                </span>
+                <div className="flex items-center gap-0.5 font-bold text-ink text-xs leading-tight">
+                  <span className="truncate max-w-[85px] min-[360px]:max-w-[110px] min-[390px]:max-w-[140px] sm:max-w-[180px]">
+                    {selectedLocation || 'Select location'}
+                  </span>
+                  <ChevronDown className="h-3 w-3 shrink-0 text-ink-muted transition-transform group-hover:translate-y-0.5" />
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* 2b. Hyperlocal Location Selector (Desktop/Tablet >= md) */}
           <div className="hidden md:flex items-center">
             <button
               type="button"
@@ -100,7 +126,7 @@ export function Header({
             </button>
           </div>
 
-          {/* 3. Global Pill Search Bar (Center) */}
+          {/* 3. Global Pill Search Bar (Center, Desktop/Tablet >= sm) */}
           <form onSubmit={handleSearchSubmit} className="hidden sm:flex flex-1 max-w-xl mx-2">
             <div className="relative flex w-full items-center">
               <Search className="pointer-events-none absolute left-4 h-4 w-4 text-ink-muted" />
@@ -124,70 +150,89 @@ export function Header({
             </div>
           </form>
 
-          {/* 4. User Actions (Login & Cart) */}
-          <div className="flex items-center gap-2 sm:gap-4">
-            {/* Account / Login Action */}
-            {isAuthenticated && user ? (
-              <DropdownMenu
-                align="right"
-                trigger={
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                  >
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand">
-                      {user.name ? user.name[0].toUpperCase() : 'U'}
-                    </div>
-                    <span className="hidden lg:inline max-w-[120px] truncate">
-                      {user.name || 'Account'}
-                    </span>
-                  </button>
-                }
-              >
-                <div className="px-3 py-2">
-                  <p className="text-xs font-bold text-ink truncate">{user.name || 'Customer'}</p>
-                  <p className="text-[11px] text-ink-muted truncate">{user.email}</p>
-                </div>
-                <DropdownDivider />
-                <DropdownItem href="/profile">My Profile</DropdownItem>
-                <DropdownItem href="/addresses">Delivery Addresses</DropdownItem>
-                <DropdownItem href="/account">Account Settings</DropdownItem>
-                <DropdownDivider />
-                <DropdownItem href="/seller/login" className="text-brand font-bold">
-                  Seller Portal
-                </DropdownItem>
-                <DropdownDivider />
-                <DropdownItem
-                  destructive
-                  icon={<LogOut className="h-4 w-4" />}
-                  onClick={() => logout()}
+          {/* 4. User Actions */}
+          <div className="flex items-center gap-1 sm:gap-4 shrink-0">
+            {/* Desktop Account / Login Action (strictly hidden on mobile < sm to eliminate avatar duplicate) */}
+            <div className="hidden sm:flex items-center">
+              {isAuthenticated && user ? (
+                <DropdownMenu
+                  align="right"
+                  trigger={
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    >
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand">
+                        {user.name ? user.name[0].toUpperCase() : 'U'}
+                      </div>
+                      <span className="hidden lg:inline max-w-[120px] truncate">
+                        {user.name || 'Account'}
+                      </span>
+                    </button>
+                  }
                 >
-                  Sign Out
-                </DropdownItem>
-              </DropdownMenu>
-            ) : (
-              <Link
-                href="/login"
-                className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-              >
-                <User className="h-5 w-5 text-ink" />
-                <span className="hidden lg:inline">Login</span>
-              </Link>
-            )}
+                  <div className="px-3 py-2">
+                    <p className="text-xs font-bold text-ink truncate">{user.name || 'Customer'}</p>
+                    <p className="text-[11px] text-ink-muted truncate">{user.email}</p>
+                  </div>
+                  <DropdownDivider />
+                  <DropdownItem href="/profile">My Profile</DropdownItem>
+                  <DropdownItem href="/orders">My Orders</DropdownItem>
+                  <DropdownItem href="/addresses">Delivery Addresses</DropdownItem>
+                  <DropdownItem href="/account">Account Settings</DropdownItem>
+                  <DropdownDivider />
+                  <DropdownItem href="/seller/login" className="text-brand font-bold">
+                    Seller Portal
+                  </DropdownItem>
+                  <DropdownDivider />
+                  <DropdownItem
+                    destructive
+                    icon={<LogOut className="h-4 w-4" />}
+                    onClick={() => logout()}
+                  >
+                    Sign Out
+                  </DropdownItem>
+                </DropdownMenu>
+              ) : (
+                <Link
+                  href="/login"
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-ink transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                >
+                  <User className="h-5 w-5 text-ink" />
+                  <span className="hidden lg:inline">Login</span>
+                </Link>
+              )}
+            </div>
 
-            {/* Basket Action */}
+            {/* Desktop Basket Action (sm and above, unchanged) */}
             <Link
               href="/basket"
-              className="relative flex items-center gap-2 rounded-xl bg-brand/10 px-3.5 py-2 text-sm font-bold text-brand transition-all hover:bg-brand hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              className="relative hidden sm:flex items-center gap-2 rounded-xl bg-brand/10 px-3.5 py-2 text-sm font-bold text-brand transition-all hover:bg-brand hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               aria-label={`Shopping basket with ${itemCount} items`}
             >
               <ShoppingBag className="h-5 w-5" />
-              <span className="hidden sm:inline">Basket</span>
+              <span>Basket</span>
               {itemCount > 0 && (
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cta text-xs font-black text-ink shadow-xs">
                   {itemCount}
                 </span>
               )}
+            </Link>
+
+            {/* Mobile Basket Action (< sm, visually consistent with bottom nav badge) */}
+            <Link
+              href="/basket"
+              className="relative flex sm:hidden items-center justify-center p-2 rounded-xl text-ink hover:text-brand focus-visible:outline-none"
+              aria-label={`Shopping basket with ${itemCount} items`}
+            >
+              <div className="relative">
+                <ShoppingBag className="h-6 w-6 text-brand" />
+                {itemCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-cta px-1 text-[10px] font-black text-ink shadow-xs">
+                    {itemCount}
+                  </span>
+                )}
+              </div>
             </Link>
 
             {/* Mobile Hamburger Menu Toggle */}
@@ -336,6 +381,14 @@ export function Header({
                 >
                   <User className="h-4 w-4 text-brand" />
                   <span>My Profile & Account</span>
+                </Link>
+                <Link
+                  href="/orders"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5 rounded-lg p-2 hover:bg-surface"
+                >
+                  <Package className="h-4 w-4 text-brand" />
+                  <span>My Orders</span>
                 </Link>
                 <Link
                   href="/addresses"

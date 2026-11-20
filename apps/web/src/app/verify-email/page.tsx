@@ -3,7 +3,15 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, KeyRound, Mail, RefreshCw, ShieldCheck } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Info,
+  KeyRound,
+  Mail,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react';
 import { Logo } from '@/components/shared';
 import { Button, Input } from '@/components/ui';
 import { Spinner } from '@/components/feedback';
@@ -13,22 +21,46 @@ function VerifyEmailForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const emailParam = searchParams.get('email') || '';
+  const noticeParam = searchParams.get('notice');
+  const cooldownParam = searchParams.get('cooldown');
 
   const { verifyEmail, resendOtp } = useAuth();
 
   const [email, setEmail] = useState(emailParam);
   const [otp, setOtp] = useState('');
-  const [cooldown, setCooldown] = useState(60);
+  const [cooldown, setCooldown] = useState(() => {
+    if (cooldownParam) {
+      const parsed = parseInt(cooldownParam, 10);
+      return !isNaN(parsed) && parsed > 0 ? parsed : 60;
+    }
+    return 60;
+  });
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const noticeBanner =
+    noticeParam === 'existing_unverified'
+      ? "An account with this email already exists but is not verified. We've sent you a new verification code."
+      : noticeParam === 'login_unverified'
+        ? "Your email is not verified yet. We've sent you a new verification code. Please verify your email to continue."
+        : null;
 
   useEffect(() => {
     if (emailParam) {
       setEmail(emailParam);
     }
   }, [emailParam]);
+
+  useEffect(() => {
+    if (cooldownParam) {
+      const parsed = parseInt(cooldownParam, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        setCooldown(parsed);
+      }
+    }
+  }, [cooldownParam]);
 
   useEffect(() => {
     if (cooldown > 0) {
@@ -108,6 +140,13 @@ function VerifyEmailForm() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
         <div className="rounded-3xl border border-border bg-white p-6 sm:p-8 shadow-card">
+          {noticeBanner && (
+            <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 p-3.5 text-xs font-medium text-blue-800 animate-in fade-in duration-200">
+              <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-600" />
+              <span>{noticeBanner}</span>
+            </div>
+          )}
+
           {errorMessage && (
             <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-700 animate-in fade-in duration-200">
               {errorMessage}

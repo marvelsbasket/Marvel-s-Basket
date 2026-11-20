@@ -18,6 +18,7 @@ import { Logo } from '@/components/shared';
 import { Button, Input } from '@/components/ui';
 import { Spinner } from '@/components/feedback';
 import { useAuth } from '@/features/auth';
+import { ApiError } from '@/lib/api';
 
 function RegisterForm() {
   const router = useRouter();
@@ -47,14 +48,35 @@ function RegisterForm() {
     setErrorMessage(null);
 
     try {
-      await register({
+      const res = await register({
         name,
         email,
         password,
         phone: phone ? `+91${phone.replace(/\D/g, '')}` : undefined,
       });
-      router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+
+      const noticeParam = res?.isExistingUnverified ? '&notice=existing_unverified' : '';
+      const cooldownParam = res?.cooldownRemainingSeconds
+        ? `&cooldown=${res.cooldownRemainingSeconds}`
+        : '';
+
+      router.push(`/verify-email?email=${encodeURIComponent(email)}${noticeParam}${cooldownParam}`);
     } catch (err: unknown) {
+      if (
+        err instanceof ApiError &&
+        (err.code === 'EMAIL_NOT_VERIFIED' || err.isEmailNotVerified)
+      ) {
+        const errData = err.data as
+          { email?: string; cooldownRemainingSeconds?: number } | undefined;
+        const targetEmail = errData?.email || email;
+        const cooldownParam = errData?.cooldownRemainingSeconds
+          ? `&cooldown=${errData.cooldownRemainingSeconds}`
+          : '';
+        router.push(
+          `/verify-email?email=${encodeURIComponent(targetEmail)}&notice=existing_unverified${cooldownParam}`,
+        );
+        return;
+      }
       const msg =
         err instanceof Error
           ? err.message

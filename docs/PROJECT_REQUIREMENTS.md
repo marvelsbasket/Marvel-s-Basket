@@ -189,11 +189,20 @@ Requirements:
 - User registers with full name, email, and strong password (min 8 characters, requiring uppercase, lowercase, number, and special character).
 - System dispatches a cryptographically secure 6-digit numeric OTP (`crypto.randomInt(100000, 1000000)`) via **Resend** transactional email.
 - Unverified users are rejected at login with HTTP 403 Forbidden until email verification is complete.
+- **Development OTP Visibility:** In local development (`NODE_ENV=development`), generated verification OTPs are displayed directly in the backend terminal console in a structured banner, allowing developers to copy-paste the code into the verification UI without requiring live email delivery (`DEV_LOG_EMAIL_OTP=true`, `DEV_SEND_REAL_EMAILS=false`). This visibility is strictly suppressed in production.
 - OTP expiry: exactly 5 minutes (300 seconds TTL).
 - Resend cooldown: minimum 60 seconds before requesting a fresh OTP.
 - Maximum attempts: 5 incorrect attempts before the OTP is permanently invalidated in Redis.
 - OTP storage: Stored in Redis as a SHA-256 hash (`otp:verify-email:<email>`). Plaintext OTPs are never stored in databases or cache.
 - Auditing: A persistent audit record is logged in PostgreSQL `verification_tokens` table (`type: EMAIL_VERIFICATION`).
+
+### 3.2.1 Unified Unverified Account Recovery & Automatic Resend
+
+To eliminate registration and login dead ends for users who fail to complete email verification on their first visit, a unified recovery workflow is enforced across backend and frontend:
+
+- **Scenario A (Registration Recovery):** When an unverified account attempts to register again with the same email, the backend does not throw `409 Conflict` and does not create a duplicate user. It invalidates older unused tokens in DB and Redis, checks cooldown (60s), generates and dispatches a fresh OTP via Resend (or dev console), and returns an actionable response with `{ isExistingUnverified: true, requiresVerification: true, cooldownRemainingSeconds }`. The frontend automatically navigates to `/verify-email?email=...&notice=existing_unverified` with prepopulated email and notice banner.
+- **Scenario B (Login Recovery):** When an unverified user attempts to log in, the backend strictly verifies the user's password using Argon2id first. If the password is invalid, it throws `401 Unauthorized` without revealing account existence or triggering OTP delivery (strict timing-safe anti-enumeration protection). If the password is correct, it triggers automatic OTP resend (respecting the 60s cooldown window), invalidates older tokens, and returns `403 Forbidden` with `code: 'EMAIL_NOT_VERIFIED'` and `data: { email, requiresVerification: true, cooldownRemainingSeconds }`. The frontend intercepts this error without storing the password and redirects to `/verify-email?email=...&notice=login_unverified`.
+- **Shared Implementation & Failure Recovery:** All OTP dispatch flows (registration, login recovery, and explicit `/api/v1/auth/resend-verification-otp`) share the centralized `sendOrResendVerificationOtp` method in `AuthService`. If transactional email delivery fails, Redis keys (`otpKey`, `cooldownKey`, `attemptsKey`) are purged immediately so the user is not locked by an unreachable verification code. Verified accounts attempting duplicate registration continue to be rejected with `409 Conflict`.
 
 ## 3.3 Session Management & Token Rotation Workflow
 
@@ -465,51 +474,60 @@ Requirements:
 
 Module ID: SELLER
 
-## 5.1 Seller Registration & KYC Submission
+## 5.1 Seller Registration, Discovery & KYC Submission (Phase 07)
 
-The platform supports admin-verified seller onboarding for independent grocery stores and supermarkets.
+The platform supports self-service, admin-verified seller onboarding for independent grocery stores, kirana stores, and supermarkets.
 
-Required registration information:
-- Business & Shop Name (Store trade name).
-- Owner Details (Full name, phone, email).
-- Physical Shop Address (Address line, landmark, city, state, postal PIN code, and geographic coordinates).
-- Permanent Account Number (PAN) of business / proprietor.
-- Goods and Services Tax Identification Number (GSTIN) where legally applicable (with threshold/exemption declaration where exempt).
-- Food Safety and Standards Authority of India (FSSAI) registration/license (mandatory for food and grocery sellers under Indian food safety regulations).
-- Bank Account Details for settlements (Bank name, account number, IFSC code, account holder name, and verification proof such as cancelled cheque or bank statement).
-- Supporting Business Documents (ID proof, address proof, trade license).
+### 5.1.1 Public Discovery & Entry Point
+- Accessible via the storefront footer under the **PARTNER** section with a dedicated **Sell on Marvel's Basket** link (`/sell-on-marvels-basket`).
+- Public landing page provides merchant value propositions (0% onboarding fee, 2-day payouts, 3-5 km local reach, dedicated store dashboard), onboarding prerequisite checklists, FAQ accordion, and dynamic status-aware CTAs ("Start Application", "Resume Application", "Check Status", "Go to Store Profile").
 
-Security & Compliance:
-- Document access and sensitive bank account details must be encrypted and restricted to authorized Super Admins.
-- Unapproved sellers must not publish product listings or accept customer orders.
+### 5.1.2 Five-Step Onboarding Form Wizard
+1. **Step 1: Personal Profile:** Merchant full name, business contact phone, verified owner email (must match authenticated account email).
+2. **Step 2: Store Information:** Store display name, primary retail category (Groceries, Fruits & Veg, Meat & Dairy, Bakery, etc.), complete physical store address, GPS location capture with coordinates, service radius (km), operating hours (opening/closing), and weekly off days.
+3. **Step 3: Business & Tax Details:** Legal business name, registered entity type (Sole Proprietorship, Partnership, LLP, Pvt Ltd, Other), PAN number, GSTIN (optional/conditional), FSSAI license number (mandatory for food and grocery categories under Indian food safety regulations), FSSAI expiry date, and Shop & Establishment certificate number.
+4. **Step 4: Bank & Settlement Details:** Account holder name, bank account number with confirmation, IFSC code with auto-bank resolution, account type (Current / Savings), and optional UPI ID.
+5. **Step 5: Document Uploads & Final Review:** Secure upload of PAN card copy, bank account proof (cancelled cheque / passbook), store address proof, conditional FSSAI certificate (mandatory for grocery), and conditional GST certificate. Includes in-app document preview modal and final legal submission confirmation.
 
-## 5.2 Seller Onboarding Lifecycle & Approval
+### 5.1.3 Draft Saving & Resumption
+- Sellers can pause and resume incomplete applications at any point without data loss.
+- Auto-save persists draft changes to PostgreSQL upon advancing between wizard steps or on explicit "Save Draft" action.
+- Application status is initialized as `DRAFT` with `currentStep` tracking.
 
-Seller onboarding must strictly enforce the following administrative state machine:
+### 5.1.4 Security & Data Protection Invariants
+- **Private KYC Storage:** Documents are stored in Cloudinary with `type: 'authenticated'` and `access_mode: 'authenticated'`. Files cannot be accessed publicly without HMAC-SHA1 signed parameters or authenticated backend proxying.
+- **Bank Detail Encryption:** Bank account numbers are encrypted at rest using AES-256-GCM (`iv:authTag:ciphertext`). Plaintext is never persisted in PostgreSQL or logged. All UI and API responses return masked account numbers (`••••••••1234`).
+- **Store Activation Gate:** Unapproved or suspended sellers cannot accept customer orders. Admin approval is mandatory before a store becomes active.
+
+## 5.2 Seller Onboarding Lifecycle & Admin Verification (Phase 07)
+
+Seller onboarding strictly enforces the following administrative state machine:
 
 ```text
-DRAFT ──> PENDING ──> UNDER_REVIEW ──┬──> APPROVED (Active) ──> SUSPENDED
-                                     └──> REJECTED
+DRAFT ──> PENDING_VERIFICATION ──┬──> APPROVED_ACTIVE ──> SUSPENDED ──> APPROVED_ACTIVE
+                                └──> REJECTED ──> DRAFT (Correction & Resubmission)
 ```
 
-- `DRAFT`: Seller has registered and is completing their profile and document uploads.
-- `PENDING`: Seller has submitted application for admin review.
-- `UNDER_REVIEW`: Admin is actively evaluating KYC documents and verifying store details.
-- `APPROVED`: Admin has verified credentials and approved the seller; store is active and can publish listings.
-- `REJECTED`: Application rejected with mandatory administrative reason; seller may correct and resubmit.
-- `SUSPENDED`: Temporarily deactivated by Admin due to compliance, non-performance, or dispute issues. While suspended, listings are hidden and order placement is disabled.
+- `DRAFT`: Seller is actively completing their 5-step registration and uploading documents.
+- `PENDING_VERIFICATION`: Seller has submitted their complete application for admin review.
+- `APPROVED_ACTIVE`: Admin has verified credentials and approved the seller; store is activated (`Store.isActive = true`) and the user account is assigned the `SELLER` role.
+- `REJECTED`: Application rejected with mandatory administrative feedback notes; seller can log back in, correct flagged information/documents, and resubmit.
+- `SUSPENDED`: Temporarily deactivated by Admin due to compliance, non-performance, or dispute issues. While suspended, the store is deactivated (`Store.isActive = false`) and order placement is disabled.
 
-Rules:
-- Super Admin possesses final approval authority.
-- Every state change, rejection reason, and approval action must be recorded in an immutable audit log.
+### 5.2.1 Admin Inspection Console (`/admin/sellers`)
+- Queue overview with search (business name, store name, phone, email, PAN, GSTIN), lifecycle status filtering, category filtering, and pagination.
+- Detailed dossier view (`/admin/sellers/:id`) displaying complete merchant identity, business details, operational parameters, and masked bank information.
+- In-app document inspection modal supporting PDF pagination/viewing and image zoom/pan without forcing external downloads.
+- Document review controls allowing admins to mark individual documents `VERIFIED` or `REJECTED` with specific feedback notes.
+- Complete audit logging via `seller_status_history` and `seller_document_reviews`.
+- Automated transactional emails dispatched via Resend for application submission, document rejection, approval/activation, rejection with correction notes, suspension, and reactivation.
 
-## 5.3 Shop Management
+## 5.3 Shop Management (Phase 07)
 
-Sellers must be able to:
-- Manage store profile (shop banner, logo, display name, contact phone).
-- Configure weekly business hours (opening time, closing time per day, and a manual emergency "Store Closed" toggle).
-- Manage store delivery radius (e.g., 3–5 km) and serviceable PIN codes.
-- View real-time operational status (Open / Closed / Busy).
+Approved sellers have access to dedicated operational management interfaces:
+- `/seller/profile`: Overview of approved store parameters, merchant contact details, operating schedule, and delivery coverage.
+- `/seller/store`: Settings editor for store display name, operating hours (opening and closing), weekly off schedule, delivery radius, and order preparation time.
+- `/seller/application`: Real-time status tracker for submitted, rejected, or suspended applications with contextual instructions and support contact links.
 
 ## 5.4 Hybrid Product Catalog Management
 

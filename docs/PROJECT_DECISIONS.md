@@ -1003,6 +1003,112 @@ When unauthenticated users visited protected customer routes (such as `/profile`
 
 ---
 
+---
+
+## ADR-047: Cloudinary Private Asset Delivery & AES-256-GCM Bank Details Encryption
+
+**Status:** Accepted  
+**Date:** 2026-11-20  
+
+### Context
+Sellers must upload identity documents, address proofs, tax certificates, and bank account proofs during onboarding. Storing these files on public CDN URLs exposes sensitive merchant documents to web crawlers, search indexation, and unauthorized access. Additionally, storing bank account numbers in plaintext in PostgreSQL presents critical financial and compliance vulnerabilities (DPDP Act).
+
+### Decision
+1. **Authenticated Cloudinary KYC Storage:**
+   - All KYC documents (`PAN_CARD`, `GST_CERTIFICATE`, `FSSAI_CERTIFICATE`, `BANK_PROOF`, `ADDRESS_PROOF`) are uploaded using Cloudinary with `type: 'authenticated'` and `access_mode: 'authenticated'` under the `sellers/kyc/<sellerId>/` asset directory.
+   - Files are never publicly readable. Access is exclusively granted through time-limited cryptographic signed URLs (60-minute expiry) or authenticated backend streaming via `/api/v1/admin/sellers/:sellerId/documents/:documentId/preview`.
+   - Storefront branding images (logo, banner, storefront/interior photos) use standard optimized delivery with automated WebP format and responsiveness.
+2. **AES-256-GCM Bank Encryption at Rest:**
+   - Bank account numbers are encrypted at rest using AES-256-GCM (`iv:authTag:ciphertext` representation) using a secure 32-byte hex master key (`SECURITY_ENCRYPTION_KEY`).
+   - Plaintext account numbers are strictly ephemeral: never persisted in PostgreSQL, never logged, and never returned in standard API responses.
+   - The database stores `bankAccountNumberEncrypted` and `bankAccountNumberMasked` (`••••••••1234`). Only the masked format is exposed across customer, seller, and admin interfaces.
+
+### Consequences
+- KYC documents are tamper-evident, encrypted in transit and at rest, and completely unindexed.
+- Database leaks or unauthorized dumps cannot expose merchant bank accounts without the master environment key.
+
+---
+
+## ADR-048: Five-Step Seller Onboarding Wizard with Draft Resumption & Admin Verification State Machine
+
+**Status:** Accepted  
+**Date:** 2026-11-20  
+
+### Context
+A quick-commerce marketplace requires validated merchants with legitimate physical locations, valid tax credentials, and FSSAI licenses for food handling. Self-service registration must be comprehensive yet forgiving, allowing merchants to save draft progress across devices before formal submission, while platform operators require a centralized admin verification workflow to approve, reject, suspend, or reactivate stores.
+
+### Decision
+1. **Public Discovery Entry Point:**
+   - Added a **PARTNER** section in the storefront footer with a **Sell on Marvel's Basket** link routing to `/sell-on-marvels-basket`.
+   - Created a conversion-focused landing page explaining merchant benefits, mandatory onboarding prerequisites, FAQ accordion, and dynamic status-aware CTAs.
+2. **5-Step Client-Side Onboarding Wizard:**
+   - Step 1: Personal Profile (Owner Name, Verified Email, Phone).
+   - Step 2: Store Information (Display Name, Category, Address, Geolocation with GPS capture, Delivery Radius, Operating Hours).
+   - Step 3: Business & Tax Details (Legal Name, Entity Type, PAN, GSTIN, conditional FSSAI for food/grocery categories, Shop & Establishment #).
+   - Step 4: Bank & Settlement Details (Account Holder, Account Number with confirmation, IFSC Code with auto-bank lookup, Account Type, UPI ID).
+   - Step 5: Document Uploads & Review (PAN card, Bank proof, Address proof, conditional FSSAI & GST certificates with in-app preview).
+3. **Persistent Draft State & Resumption:**
+   - Onboarding applications persist directly to the database in real time (`currentStep`, `isDraft: true`). Merchants can leave and resume registration seamlessly at their last completed step.
+4. **5-State Seller Lifecycle State Machine:**
+   - State progression: `DRAFT` ➔ `PENDING_VERIFICATION` ➔ `APPROVED_ACTIVE` | `REJECTED` | `SUSPENDED`.
+   - Admin approval activates the merchant's store (`Store.isActive = true`) and assigns the `SELLER` role to the user account in an atomic transaction.
+   - Rejection requires specific administrative feedback; merchants can log back in, correct flagged information/documents, and resubmit (`REJECTED` ➔ `PENDING_VERIFICATION`).
+   - Suspension prevents active stores from accepting customer orders while preserving store listings and financial history.
+5. **In-App Document Inspection & Document Verification:**
+   - Administrators review applications at `/admin/sellers` and `/admin/sellers/:id`.
+   - PDF and image documents can be inspected inside an in-app preview modal with zoom/pan and external tab fallback.
+   - Individual documents are marked `VERIFIED` or `REJECTED` with review notes recorded in `seller_document_reviews`.
+6. **Automated Branded Notifications:**
+   - Resend email templates dispatch transactional emails for application submission, document rejection, approval/activation, application rejection with guidance, suspension, and reactivation.
+
+### Consequences
+- Merchants experience a guided, robust registration process with clear progress indicators.
+- Administrator verification guarantees zero unverified or unlicensed food sellers operate on Marvel's Basket.
+- Complete auditability across state transitions via `seller_status_history`.
+
+---
+
+## ADR-049: Unified Unverified Account Recovery & Automatic Resend
+
+**Status:** Accepted  
+**Date:** 2026-11-20  
+
+### Context
+Users registering with an email address who left the application before completing 6-digit OTP email verification were trapped in a dead end:
+1. Re-registering with the same email threw `409 Conflict` ('An account with this email exists but is unverified...').
+2. Attempting to log in threw `403 Forbidden` ('Please verify your email address before logging in.').
+Users had no accessible path to request a new OTP or complete verification.
+
+### Decision
+1. **Scenario A (Registration Recovery):** When an unverified user registers again, do NOT throw `409 Conflict` and do NOT create duplicate user records. Invalidate previous unused DB tokens (`usedAt: now()`), check the 60s cooldown, generate and dispatch a fresh OTP via Resend (or dev console), and return `{ isExistingUnverified: true, requiresVerification: true, cooldownRemainingSeconds }`. The frontend automatically navigates to `/verify-email?email=...&notice=existing_unverified`.
+2. **Scenario B (Login Recovery):** When an unverified user attempts to log in, strictly verify their password using Argon2id first. An invalid password immediately returns `401 Unauthorized` without dispatching an OTP (eliminating account enumeration and unauthorized OTP spamming). A valid password triggers an automatic OTP dispatch (respecting 60s cooldown) and throws `403 Forbidden` with `code: 'EMAIL_NOT_VERIFIED'` and `data: { email, requiresVerification: true, cooldownRemainingSeconds }`. The frontend intercepts this error and redirects to `/verify-email?email=...&notice=login_unverified`.
+3. **Shared Service Method:** Centralize all OTP dispatch logic in `AuthService.sendOrResendVerificationOtp`. If email delivery fails, immediately delete generated OTP keys from Redis to prevent dead-code lockout.
+4. **Verified Account Invariant:** Once an account has `emailVerifiedAt !== null`, duplicate registration strictly throws `409 Conflict` ('An account with this email address already exists. Please log in.').
+
+### Consequences
+- Eliminates registration drop-off and user lockouts.
+- Preserves timing-safe credential verification and anti-enumeration security.
+- Eliminates code duplication across registration, login, and explicit resend endpoints.
+
+---
+
+## ADR-050: Mobile Navigation Refinement & Delivery Address Hyperlocal Prominence
+
+**Status:** Accepted  
+**Date:** 2026-11-20  
+
+### Context
+In quick-commerce mobile UX, repetitive elements waste critical top-navbar real estate. The mobile header previously duplicated the customer profile avatar despite a dedicated Profile tab in the persistent bottom navigation, while omitting the delivery address selector available on desktop. Furthermore, customer post-purchase behavior requires rapid access to live order status and history ("Orders"), whereas address configuration is a lower-frequency management action.
+
+### Decision
+1. **Remove Duplicate Profile Avatar from Mobile Header:** Restrict the top-navbar profile avatar to tablet and desktop screens (`hidden sm:flex`). On mobile devices (`< sm`), user profile and account settings are accessed exclusively via the persistent bottom navigation `Profile` tab.
+2. **Promote Delivery Address Selector to Mobile Header:** Add a compact hyperlocal location selector (`flex md:hidden`) adjacent to the logo in the top navbar (`📍 Deliver to / <Location> ⌄`), triggering the existing location selection modal on tap. Apply responsive truncation across mobile viewports (320px–430px) to guarantee zero horizontal overflow.
+3. **Elevate Orders to Bottom Navigation:** Replace the `Addresses` tab in `apps/web/src/components/layout/mobile-bottom-nav.tsx` with `Orders` (linking to `/orders`, active on `/orders` and `/track-order`, represented by `Package` icon). Address management remains accessible through `Profile` (`/profile`, `/account`, `/addresses`), the mobile drawer menu, and the header location selector.
+4. **Unify Mobile Basket Badges:** Synchronize the mobile top-navbar Basket badge with the bottom navigation badge (`absolute -top-1.5 -right-2.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-cta px-1 text-[10px] font-black text-ink shadow-xs`).
+5. **Strict Desktop Layout Preservation:** Retain the approved desktop navigation layout, search bar, profile dropdown, and basket pill button without modification.
+
+---
+
 # Part C — Complete Decision Register Summary
 
 | ADR # | Decision Topic | Status | Category | Key Implementation Invariant |
@@ -1053,6 +1159,10 @@ When unauthenticated users visited protected customer routes (such as `/profile`
 | **ADR-044** | Atomic Default Address Management & Auto-Reassignment | **Accepted** | Database/Logic | Prisma `$transaction`, automatic promotion of remaining address upon deletion |
 | **ADR-045** | Customer-Facing Basket Terminology Standardization | **Accepted** | Frontend/UX | 100% elimination of Cart in UI; `/cart` redirects to `/basket` |
 | **ADR-046** | Frontend Route Authorization & Reactive AuthGuard | **Accepted** | Frontend/Security | `<AuthGuard>`, reactive 401 token invalidation, dynamic Login/Account nav |
+| **ADR-047** | Cloudinary Private Asset Delivery & AES-256-GCM Bank Encryption | **Accepted** | Storage/Security | Authenticated Cloudinary delivery for KYC; AES-256-GCM encryption for bank account # |
+| **ADR-048** | Five-Step Seller Onboarding & Admin Verification State Machine | **Accepted** | Business/UX | 5-step wizard, draft resumption, in-app KYC preview, 5-state lifecycle (`DRAFT` to `APPROVED_ACTIVE`) |
+| **ADR-049** | Unified Unverified Account Recovery & Automatic Resend | **Accepted** | Security/Auth | Auto-resend OTP on re-register/login for unverified accounts; Argon2id password-check-first invariant |
+| **ADR-050** | Mobile Navigation Refinement & Delivery Address Prominence | **Accepted** | Frontend/UX | Remove duplicate mobile avatar, add mobile Deliver To selector, promote Orders in bottom nav, unify basket badge |
 
 ---
 

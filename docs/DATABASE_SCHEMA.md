@@ -552,102 +552,167 @@ Historical orders must retain address snapshots rather than depending exclusivel
 
 ## 7.1 Seller
 
-Represents a registered marketplace seller.
+Represents a registered marketplace seller and holds onboarding draft progress, legal/tax registration details, bank accounts, and verification states.
 
 Fields:
 
-- id
-- ownerUserId
-- businessName
-- slug
-- businessEmail
-- businessPhone
-- GSTIN (optional)
-- PAN (optional)
-- status
-- approvalDate
-- rejectionReason
-- suspensionReason
-- createdAt
-- updatedAt
-- deletedAt
+- `id` (UUID, PK)
+- `userId` (UUID, FK -> users.id, Unique)
+- `businessName` (String)
+- `storeDisplayName` (String, Optional)
+- `storeCategory` (String, Optional)
+- `legalBusinessName` (String, Optional)
+- `businessEntityType` (String, Optional: SOLE_PROPRIETORSHIP, PARTNERSHIP, LLP, PRIVATE_LIMITED, OTHER)
+- `slug` (String, Unique)
+- `businessEmail` (String)
+- `businessPhone` (String)
+- `pan` (String, Optional)
+- `gstin` (String, Optional)
+- `fssaiNumber` (String, Optional, Mandatory for food/grocery sellers)
+- `fssaiExpiryDate` (Date, Optional)
+- `shopEstablishmentNumber` (String, Optional)
+- `bankAccountHolderName` (String, Optional)
+- `bankAccountNumberEncrypted` (String, Optional, AES-256-GCM encrypted ciphertext)
+- `bankAccountNumberMasked` (String, Optional, e.g. `••••••••1234`)
+- `bankIfscCode` (String, Optional)
+- `bankName` (String, Optional)
+- `bankAccountType` (String, Optional: CURRENT, SAVINGS)
+- `upiId` (String, Optional)
+- `currentStep` (Int, Default: 1, Tracks 1–5 onboarding wizard progress)
+- `isSubmitted` (Boolean, Default: false)
+- `submittedAt` (DateTime, Optional)
+- `status` (Enum `SellerStatus`: `DRAFT`, `PENDING_VERIFICATION`, `UNDER_REVIEW`, `APPROVED_ACTIVE`, `REJECTED`, `SUSPENDED`)
+- `approvalDate` (DateTime, Optional)
+- `rejectionReason` (String, Optional)
+- `suspensionReason` (String, Optional)
+- `reviewedBy` (UUID, Optional, FK -> users.id)
+- `reviewedAt` (DateTime, Optional)
+- `createdAt` (DateTime)
+- `updatedAt` (DateTime)
+- `deletedAt` (DateTime, Optional)
 
-Constraints:
+Constraints & Security:
 
-- Seller slug must be unique.
-- Seller ownership must be validated.
-- Seller approval requires administrative authorization.
+- `userId` is unique (1:1 relationship with User account).
+- `slug` is unique across the platform.
+- `bankAccountNumberEncrypted` stores AES-256-GCM encrypted data; plaintext is never persisted or logged.
+- `status` enforces the 5-state lifecycle state machine.
+- Approval atomically sets `status = APPROVED_ACTIVE`, activates associated store (`Store.isActive = true`), and assigns `SELLER` role to the user.
 
 ## 7.2 SellerProfile
 
+Stores extended operational settings, service parameters, and branding imagery.
+
 Fields:
 
-- id
-- sellerId
-- logoUrl
-- bannerUrl
-- description
-- addressLine1
-- addressLine2
-- landmark
-- city
-- state
-- postalCode
-- country
-- latitude
-- longitude
-- openingTime
-- closingTime
-- preparationTime
-- createdAt
-- updatedAt
+- `id` (UUID, PK)
+- `sellerId` (UUID, FK -> sellers.id, Unique)
+- `logoUrl` (String, Optional)
+- `bannerUrl` (String, Optional)
+- `storefrontPhotoUrl` (String, Optional)
+- `storefrontPhotoPublicId` (String, Optional)
+- `storeInteriorPhotoUrl` (String, Optional)
+- `storeInteriorPhotoPublicId` (String, Optional)
+- `description` (String, Optional)
+- `serviceRadiusKm` (Decimal(5, 2), Default: 5.00)
+- `weeklyOffDays` (String, Default: "None")
+- `addressLine1` (String)
+- `addressLine2` (String, Optional)
+- `landmark` (String, Optional)
+- `city` (String)
+- `state` (String)
+- `postalCode` (String)
+- `country` (String, Default: "IN")
+- `latitude` (Decimal(10, 8), Optional)
+- `longitude` (Decimal(11, 8), Optional)
+- `openingTime` (String, Default: "07:00")
+- `closingTime` (String, Default: "22:00")
+- `preparationTime` (Int, Default: 15 minutes)
+- `createdAt` (DateTime)
+- `updatedAt` (DateTime)
 
 ## 7.3 SellerDocument
 
-Stores KYC and verification documents.
+Stores KYC and compliance verification documents securely managed via authenticated Cloudinary private delivery.
 
 Fields:
 
-- id
-- sellerId
-- documentType
-- documentUrl
-- verificationStatus
-- verifiedBy
-- verifiedAt
-- rejectionReason
-- createdAt
-- updatedAt
+- `id` (UUID, PK)
+- `sellerId` (UUID, FK -> sellers.id)
+- `documentType` (Enum `SellerDocumentType`: `PAN_CARD`, `GST_CERTIFICATE`, `FSSAI_CERTIFICATE`, `BANK_PROOF`, `ADDRESS_PROOF`, `SHOP_ESTABLISHMENT`)
+- `documentUrl` (String, Authenticated delivery URL)
+- `cloudinaryPublicId` (String, Optional, e.g. `sellers/kyc/<sellerId>/...`)
+- `originalFilename` (String, Optional)
+- `mimeType` (String, Optional: image/jpeg, image/png, image/webp, application/pdf)
+- `fileSize` (Int, Optional, Max: 10MB)
+- `expiryDate` (Date, Optional)
+- `verificationStatus` (Enum `VerificationStatus`: `PENDING`, `PENDING_REVIEW`, `VERIFIED`, `REJECTED`, `NEEDS_RESUBMISSION`)
+- `verifiedBy` (UUID, Optional, FK -> users.id)
+- `verifiedAt` (DateTime, Optional)
+- `rejectionReason` (String, Optional)
+- `createdAt` (DateTime)
+- `updatedAt` (DateTime)
 
-Private document storage is mandatory.
+Constraints:
 
-## 7.4 SellerBusinessHours
+- KYC documents are uploaded as authenticated private assets; public reading without a signed URL or admin session is strictly forbidden.
+- Max file size: 10MB; allowed MIME types: `application/pdf`, `image/jpeg`, `image/png`, `image/webp`.
+
+## 7.4 SellerDocumentReview
+
+Maintains an append-only audit trail of individual KYC document inspection, status transitions, and administrative feedback notes.
 
 Fields:
 
-- id
-- sellerId
-- dayOfWeek
-- openingTime
-- closingTime
-- isClosed
+- `id` (UUID, PK)
+- `documentId` (UUID, FK -> seller_documents.id)
+- `reviewedBy` (UUID, FK -> users.id)
+- `previousStatus` (Enum `VerificationStatus`)
+- `newStatus` (Enum `VerificationStatus`)
+- `notes` (String, Optional)
+- `createdAt` (DateTime)
 
-Unique constraint:
+## 7.5 SellerStatusHistory
 
-`sellerId + dayOfWeek`
+Maintains an immutable historical audit log of overall seller onboarding and operational lifecycle transitions (`DRAFT`, `PENDING_VERIFICATION`, `APPROVED_ACTIVE`, `REJECTED`, `SUSPENDED`).
 
-## 7.5 SellerServiceArea
+Fields:
+
+- `id` (UUID, PK)
+- `sellerId` (UUID, FK -> sellers.id)
+- `previousStatus` (Enum `SellerStatus`)
+- `newStatus` (Enum `SellerStatus`)
+- `reason` (String, Optional)
+- `changedBy` (UUID, Optional, FK -> users.id)
+- `createdAt` (DateTime)
+
+## 7.6 SellerBusinessHours
+
+Fields:
+
+- `id` (UUID, PK)
+- `sellerId` (UUID, FK -> sellers.id)
+- `dayOfWeek` (Int, 0=Sunday..6=Saturday)
+- `openingTime` (String)
+- `closingTime` (String)
+- `isClosed` (Boolean, Default: false)
+
+Unique constraint: `sellerId + dayOfWeek`
+
+## 7.7 SellerServiceArea
 
 Defines seller delivery coverage.
 
 Fields:
 
-- id
-- sellerId
-- postalCode
-- radiusKm (optional)
-- latitude (optional)
-- longitude (optional)
+- `id` (UUID, PK)
+- `sellerId` (UUID, FK -> sellers.id)
+- `postalCode` (String)
+- `radiusKm` (Decimal(5, 2), Optional)
+- `latitude` (Decimal(10, 8), Optional)
+- `longitude` (Decimal(11, 8), Optional)
+- `isActive` (Boolean, Default: true)
+- `createdAt` (DateTime)
 - isActive
 - createdAt
 

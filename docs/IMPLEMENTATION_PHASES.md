@@ -449,36 +449,50 @@ Customers are able to view and manage their own profiles, delivery addresses, an
 # 9. Phase 07 — Seller Onboarding & Management
 
 **Priority:** High  
-**Status:** Not Started
+**Status:** Completed  
+**Completed Date:** 20 November 2026
 
 ### Objective
 
-Implement seller registration, verification, and account management.
+Implement complete seller registration, business onboarding, KYC document management, admin verification, and store activation workflows.
 
 ### Tasks
 
-- [ ] Build seller registration.
-- [ ] Implement seller profile.
-- [ ] Implement store information.
-- [ ] Implement business details.
-- [ ] Implement document submission if required.
-- [ ] Implement verification workflow.
-- [ ] Implement admin approval.
-- [ ] Implement seller activation and suspension.
-- [ ] Build seller onboarding screens.
-- [ ] Build seller profile screens.
-- [ ] Test seller permissions.
+- [x] Build public seller discovery entry point in storefront footer (`PARTNER -> Sell on Marvel's Basket`).
+- [x] Build conversion-focused landing page (`/sell-on-marvels-basket`) with value props, requirements, FAQ, and dynamic CTAs.
+- [x] Implement 5-step seller onboarding form wizard (`/seller/onboarding`) with client and server validation.
+- [x] Implement real-time draft saving and seamless step resumption without data loss.
+- [x] Implement Step 1: Personal profile & merchant contact details with verified email validation.
+- [x] Implement Step 2: Store information, category selection, physical address, geolocation capture, service radius, and operating hours.
+- [x] Implement Step 3: Business & tax details with PAN, GSTIN, and conditional mandatory FSSAI for food/grocery categories.
+- [x] Implement Step 4: Bank & settlement details with AES-256-GCM encryption at rest, masked representation, and IFSC validation.
+- [x] Implement Step 5: Document uploads with Cloudinary authenticated private storage (PDF, JPEG, PNG, WebP) and final review.
+- [x] Implement seller application status tracking page (`/seller/application`) with state-driven feedback banners.
+- [x] Implement admin seller application queue (`/admin/sellers`) with search, status filtering, category filtering, and pagination.
+- [x] Implement admin inspection console (`/admin/sellers/:id`) with in-app PDF and image document preview.
+- [x] Implement document review workflow (VERIFIED, REJECTED with feedback notes).
+- [x] Implement 5-state lifecycle state machine (`DRAFT` ➔ `PENDING_VERIFICATION` ➔ `APPROVED_ACTIVE` | `REJECTED` | `SUSPENDED`).
+- [x] Implement atomic store activation and `SELLER` role assignment on approval.
+- [x] Implement rejection with feedback notes and merchant re-drafting capability.
+- [x] Implement store suspension and reactivation controls with full audit history (`seller_status_history`).
+- [x] Implement operational seller profile (`/seller/profile`) and store settings (`/seller/store`) management.
+- [x] Integrate Resend transactional email notifications for submission, approval, rejection, suspension, and reactivation.
+- [x] Add comprehensive test coverage: 18 unit tests, 22 live database E2E tests, 7 web service unit tests.
 
 ### Deliverables
 
-- Seller onboarding workflow.
-- Seller profiles.
-- Seller approval system.
-- Seller management APIs.
+- `apps/api/src/modules/sellers/`: SellersModule, SellersController, AdminSellersController, SellersService, AdminSellersService, DTOs.
+- `apps/api/src/modules/cloudinary/`: CloudinaryModule, CloudinaryService with authenticated private upload & signed preview generation.
+- `apps/api/src/common/utils/encryption.util.ts`: AES-256-GCM bank details encryption & masking utility.
+- `apps/api/src/modules/email/templates/seller-lifecycle.template.ts`: Branded transactional email templates.
+- `apps/web/src/features/seller/`: Multi-step form components, document upload with in-app preview, seller and admin API client services.
+- `apps/web/src/app/`: `/sell-on-marvels-basket`, `/seller/onboarding`, `/seller/application`, `/seller/profile`, `/seller/store`, `/admin/sellers`, `/admin/sellers/[id]`.
+- Prisma Migration: `20261120024133_seller_onboarding_and_kyc`.
+- Complete test suites: 95 unit tests in API, 42 unit tests in Web, 59 E2E tests passing.
 
 ### Completion Criteria
 
-The approved seller onboarding workflow must operate correctly with appropriate administrative controls.
+Merchants can discover seller registration, save incomplete applications as drafts, submit complete profiles with KYC documents, inspect status, manage operational parameters, while administrators can review applications, inspect documents inside the application, approve stores with automatic role assignment, reject with correction guidance, and suspend/reactivate stores with complete audit logging.
 
 ---
 

@@ -31,6 +31,7 @@ export interface ApiErrorResponse {
   code: string;
   message: string;
   errors?: ApiFieldError[];
+  data?: unknown;
   timestamp: string;
   path: string;
   correlationId: string;

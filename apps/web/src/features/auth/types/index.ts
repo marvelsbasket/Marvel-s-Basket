@@ -8,6 +8,15 @@ export type {
   VerifyEmailRequest,
 } from '@marvels-basket/shared';
 
+export interface RegisterResponseData {
+  message: string;
+  userId: string;
+  email: string;
+  requiresVerification?: boolean;
+  isExistingUnverified?: boolean;
+  cooldownRemainingSeconds?: number;
+}
+
 export interface AuthState {
   user: import('@marvels-basket/shared').AuthUser | null;
   isLoading: boolean;
@@ -17,7 +26,9 @@ export interface AuthState {
 
 export interface AuthContextType extends AuthState {
   login: (credentials: import('@marvels-basket/shared').LoginRequest) => Promise<void>;
-  register: (data: import('@marvels-basket/shared').RegisterRequest) => Promise<void>;
+  register: (
+    data: import('@marvels-basket/shared').RegisterRequest,
+  ) => Promise<RegisterResponseData | void>;
   verifyEmail: (data: import('@marvels-basket/shared').VerifyEmailRequest) => Promise<void>;
   resendOtp: (email: string) => Promise<void>;
   logout: () => Promise<void>;

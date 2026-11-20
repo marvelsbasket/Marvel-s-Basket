@@ -134,6 +134,41 @@ describe('ApiClient', () => {
     }
   });
 
+  it('parses EMAIL_NOT_VERIFIED error with payload data', async () => {
+    const errorBody = {
+      success: false,
+      statusCode: 403,
+      message: 'Your email is not verified.',
+      code: 'EMAIL_NOT_VERIFIED',
+      data: {
+        email: 'unverified@example.com',
+        requiresVerification: true,
+        cooldownRemainingSeconds: 45,
+      },
+    };
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => errorBody,
+    });
+
+    try {
+      await client.post('/auth/login', {
+        email: 'unverified@example.com',
+        password: 'Password@123',
+      });
+    } catch (err: unknown) {
+      expect(err).toBeInstanceOf(ApiError);
+      const apiErr = err as ApiError;
+      expect(apiErr.statusCode).toBe(403);
+      expect(apiErr.code).toBe('EMAIL_NOT_VERIFIED');
+      expect(apiErr.isEmailNotVerified).toBe(true);
+      expect(apiErr.data).toEqual(errorBody.data);
+    }
+  });
+
   it('throws ApiError with code REQUEST_TIMEOUT when request aborts', async () => {
     const abortError = new Error('The operation was aborted');
     abortError.name = 'AbortError';

@@ -8,6 +8,7 @@ import { Logo } from '@/components/shared';
 import { Button, Input } from '@/components/ui';
 import { Spinner } from '@/components/feedback';
 import { useAuth } from '@/features/auth';
+import { ApiError } from '@/lib/api';
 
 function LoginForm() {
   const router = useRouter();
@@ -43,6 +44,21 @@ function LoginForm() {
       await login({ email, password });
       router.replace(redirectPath);
     } catch (err: unknown) {
+      if (
+        err instanceof ApiError &&
+        (err.code === 'EMAIL_NOT_VERIFIED' || err.isEmailNotVerified)
+      ) {
+        const errorData = err.data as
+          | { email?: string; requiresVerification?: boolean; cooldownRemainingSeconds?: number }
+          | undefined;
+        const targetEmail = errorData?.email || email;
+        const cooldown = errorData?.cooldownRemainingSeconds;
+        const cooldownParam = cooldown ? `&cooldown=${cooldown}` : '';
+        router.push(
+          `/verify-email?email=${encodeURIComponent(targetEmail)}&notice=login_unverified${cooldownParam}`,
+        );
+        return;
+      }
       const msg =
         err instanceof Error ? err.message : 'Invalid email address or password. Please try again.';
       setErrorMessage(msg);

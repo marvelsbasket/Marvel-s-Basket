@@ -1,3 +1,4 @@
+import configuration from './configuration';
 import { environmentValidationSchema } from './validation.schema';
 
 describe('Environment Validation Schema', () => {
@@ -59,5 +60,56 @@ describe('Environment Validation Schema', () => {
     expect(value.API_PREFIX).toBe('api');
     expect(value.API_VERSION).toBe('1');
     expect(value.SWAGGER_ENABLED).toBe(true);
+    expect(value.EMAIL_OTP_ENABLED).toBe(true);
+    expect(value.DEV_LOG_EMAIL_OTP).toBe(true);
+    expect(value.DEV_SEND_REAL_EMAILS).toBe(false);
+  });
+
+  describe('Central Configuration Production Safety (configuration.ts)', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      jest.resetModules();
+      process.env = { ...originalEnv };
+    });
+
+    afterAll(() => {
+      process.env = originalEnv;
+    });
+
+    it('CRITICAL: must NEVER allow devLogEmailOtp in production even if DEV_LOG_EMAIL_OTP=true', () => {
+      process.env.NODE_ENV = 'production';
+      process.env.DEV_LOG_EMAIL_OTP = 'true';
+      process.env.JWT_SECRET = 'a_very_long_secret_key_minimum_32_characters_length_requirement';
+      process.env.DATABASE_URL = 'postgresql://localhost:5432/db';
+
+      const config = configuration();
+
+      expect(config.app.nodeEnv).toBe('production');
+      expect(config.email.devLogEmailOtp).toBe(false);
+    });
+
+    it('should enable devLogEmailOtp by default in development', () => {
+      process.env.NODE_ENV = 'development';
+      delete process.env.DEV_LOG_EMAIL_OTP;
+      process.env.JWT_SECRET = 'a_very_long_secret_key_minimum_32_characters_length_requirement';
+      process.env.DATABASE_URL = 'postgresql://localhost:5432/db';
+
+      const config = configuration();
+
+      expect(config.app.nodeEnv).toBe('development');
+      expect(config.email.devLogEmailOtp).toBe(true);
+    });
+
+    it('should allow disabling devLogEmailOtp in development when DEV_LOG_EMAIL_OTP=false', () => {
+      process.env.NODE_ENV = 'development';
+      process.env.DEV_LOG_EMAIL_OTP = 'false';
+      process.env.JWT_SECRET = 'a_very_long_secret_key_minimum_32_characters_length_requirement';
+      process.env.DATABASE_URL = 'postgresql://localhost:5432/db';
+
+      const config = configuration();
+
+      expect(config.email.devLogEmailOtp).toBe(false);
+    });
   });
 });

@@ -201,6 +201,22 @@ npm run dev:api
 - **PostgreSQL Database:** `localhost:5433` (`marvels_basket_dev`)
 - **Redis Cache:** `localhost:6380`
 
+### Development Email OTP Visibility
+
+During local development (`NODE_ENV=development`), verification codes are logged directly to the backend terminal:
+
+```text
+==================================================
+[DEV EMAIL OTP]
+Purpose: Email Verification
+Email: developer@example.com
+OTP: 483921
+Expires At: 2026-11-20 09:35:00
+==================================================
+```
+
+This enables frictionless local registration and verification without live email delivery (`DEV_LOG_EMAIL_OTP=true`, `DEV_SEND_REAL_EMAILS=false`). This feature is strictly disabled in production.
+
 ---
 
 ## 8. Build, Linting & Verification Commands
@@ -313,7 +329,22 @@ npm run db:test
 
 ---
 
-## 10. Troubleshooting
+## 10. Seller Onboarding & KYC Management (Phase 07)
+
+Marvel's Basket supports self-service, admin-verified merchant onboarding with enterprise security standards:
+
+- **Public Discovery:** Storefront footer includes a **PARTNER** section linking to `/sell-on-marvels-basket`.
+- **5-Step Onboarding Wizard:** `/seller/onboarding` guides merchants through Personal Details, Store & Geolocation, Business & Tax, Bank Details, and KYC Uploads.
+- **Persistent Draft Resumption:** Application progress auto-saves to PostgreSQL in real time; merchants can resume incomplete drafts seamlessly.
+- **AES-256-GCM Bank Encryption:** Bank account numbers are encrypted at rest using AES-256-GCM (`iv:authTag:ciphertext`). API and UI expose only masked accounts (`••••••••1234`).
+- **Cloudinary Authenticated KYC Storage:** Identity and compliance documents (`PAN_CARD`, `BANK_PROOF`, `ADDRESS_PROOF`, `FSSAI_CERTIFICATE`, `GST_CERTIFICATE`) are stored with authenticated access only, inspected via 60-minute cryptographic signed URLs.
+- **Admin Verification Console:** `/admin/sellers` and `/admin/sellers/[id]` allow administrators to inspect documents in-app (PDF iframe & image viewer), verify/reject individual documents with feedback notes, and control store lifecycle (`Approve Store`, `Reject Application`, `Suspend Store`, `Reactivate Store`).
+- **State Machine & Automation:** Enforces strict state transitions (`DRAFT` ➔ `PENDING_VERIFICATION` ➔ `APPROVED_ACTIVE` | `REJECTED` | `SUSPENDED`). Approving a store automatically activates the store and assigns the `SELLER` role to the merchant.
+- **Transactional Notifications:** Resend email integration dispatches branded HTML updates on application submission, approval, rejection with correction notes, suspension, and reactivation.
+
+---
+
+## 11. Troubleshooting
 
 ### Port Conflicts
 

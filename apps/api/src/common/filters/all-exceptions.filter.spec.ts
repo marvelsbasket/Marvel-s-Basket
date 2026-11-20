@@ -69,6 +69,27 @@ describe('AllExceptionsFilter', () => {
     );
   });
 
+  it('should preserve explicit custom error code and data payload from HttpException', () => {
+    const exception = new BadRequestException({
+      statusCode: HttpStatus.FORBIDDEN,
+      code: ErrorCode.EMAIL_NOT_VERIFIED,
+      message: 'Your email is not verified.',
+      data: { email: 'user@example.com', requiresVerification: true },
+    });
+
+    filter.catch(exception, mockHost);
+
+    expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.BAD_REQUEST);
+    expect(mockResponse.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        code: ErrorCode.EMAIL_NOT_VERIFIED,
+        message: 'Your email is not verified.',
+        data: { email: 'user@example.com', requiresVerification: true },
+      }),
+    );
+  });
+
   it('should handle unhandled Error with 500 status and INTERNAL_SERVER_ERROR code', () => {
     const exception = new Error('Unexpected database failure');
 

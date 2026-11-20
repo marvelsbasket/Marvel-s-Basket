@@ -4,10 +4,10 @@
 
 **Project:** Marvel's Basket  
 **Organization:** Marvel's Techworks  
-**Document Version:** 2.5  
-**Current Phase:** Phase 06 — Customer User & Profile Management  
-**Phase Status:** Completed (Phase 06 Verified; Ready for Phase 07)  
-**Last Updated:** 19 November 2026
+**Document Version:** 2.6  
+**Current Phase:** Phase 07 — Seller Onboarding & Management  
+**Phase Status:** Completed (Phase 07 Verified; Ready for Phase 08)  
+**Last Updated:** 20 November 2026
 
 ---
 
@@ -127,19 +127,19 @@ Phase 06 delivered the complete customer profile and delivery address management
 
 ## 7. Documentation Status Matrix
 
-| # | Document | Version | Status | Key Updates in Phase 00, 01, 02, 03, 04, 05 & 06 |
+| # | Document | Version | Status | Key Updates in Phase 00, 01, 02, 03, 04, 05, 06 & 07 |
 |---|---|---|---|---|
 | 1 | `PROJECT_CONTEXT.md` | 1.1 | Updated | Aligned core business model to single-store checkout and hybrid catalog. |
-| 2 | `PROJECT_REQUIREMENTS.md` | 2.2 | Updated | Added Section 4.9 & 4.10 customer profile, address management, and Basket terminology. |
-| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.5 | Updated | Documented Users and Addresses modules, data isolation, and mobile bottom navigation. |
-| 4 | `DATABASE_SCHEMA.md` | 2.3 | Updated | Documented CustomerAddress constraints, single default address invariant, and preferences. |
-| 5 | `PROJECT_DECISIONS.md` | 2.6 | Updated | Added **ADR-042** (Mobile-First Bottom Navigation) and **ADR-043** (Atomic Default Address Promotion). |
-| 6 | `IMPLEMENTATION_PHASES.md` | 2.6 | Updated | Phase 06 marked Completed; Phase 07 (Seller Onboarding & KYC) unblocked. |
-| 7 | `PROJECT_STATUS.md` | 2.5 | Updated | Phase 06 completed; customer profile & address management verified; ready for Phase 07. |
-| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.2 | Updated | Section 17 added documenting mobile bottom navigation and customer profile patterns. |
-| 9 | `README.md` | 2.5 | Updated | Added Customer Profile & Address management architecture overview. |
+| 2 | `PROJECT_REQUIREMENTS.md` | 2.3 | Updated | Added Section 4.11 Seller Onboarding & KYC, 5-step registration, admin verification state machine. |
+| 3 | `TECHNICAL_ARCHITECTURE.md` | 2.6 | Updated | Documented SellersModule, CloudinaryModule, AES-256-GCM encryption, authenticated document preview. |
+| 4 | `DATABASE_SCHEMA.md` | 2.4 | Updated | Documented SellerStatus, VerificationStatus, Seller, SellerProfile, SellerDocument, SellerDocumentReview, SellerStatusHistory. |
+| 5 | `PROJECT_DECISIONS.md` | 2.7 | Updated | Added **ADR-047** (Cloudinary Private Delivery & AES-256-GCM Bank Encryption) and **ADR-048** (5-Step Seller Onboarding & Verification). |
+| 6 | `IMPLEMENTATION_PHASES.md` | 2.7 | Updated | Phase 07 marked Completed; Phase 08 (Product Catalog & Categories) unblocked. |
+| 7 | `PROJECT_STATUS.md` | 2.6 | Updated | Phase 07 completed; seller registration, KYC, and admin verification verified; ready for Phase 08. |
+| 8 | `PROJECT_DESIGN_SYSTEM.md` | 1.3 | Updated | Section 18 added documenting seller landing page, 5-step onboarding wizard, document upload component, and admin review UI. |
+| 9 | `README.md` | 2.6 | Updated | Added Seller Onboarding & KYC architecture overview and verified API endpoints. |
 | 10 | `infrastructure/docker/README.md`| 1.0 | Created | Dedicated Docker architecture, volume lifecycle, health probes, and safety commands. |
-| 11 | `apps/api/README.md` | 1.3 | Updated | Added Users and Addresses module documentation and endpoints. |
+| 11 | `apps/api/README.md` | 1.4 | Updated | Added Sellers and AdminSellers module documentation and endpoints. |
 
 ---
 
@@ -150,12 +150,12 @@ Phase 06 delivered the complete customer profile and delivery address management
 | **Phase 00** | Business Rules & Technical Finalization | Critical | **Completed** | Technical baseline locked; commercial parameters documented in ADRs. |
 | **Phase 01** | Monorepo & Development Environment | Critical | **Completed** | Monorepo initialized, Docker active, all checks passing. |
 | **Phase 02** | Backend Foundation | Critical | **Completed** | NestJS architecture, Prisma/Redis services, Swagger, tests passing. |
-| **Phase 03** | Database Implementation | Critical | **Completed** | 54 tables, 21 enums, 3 migrations, seed data, 10/10 DB tests passing. |
-| **Phase 04** | Authentication & Authorization | Critical | **Completed** | Argon2id, Resend email OTP, dual-token rotation, reuse detection, RBAC. 77/77 tests passing. |
+| **Phase 03** | Database Implementation | Critical | **Completed** | 54 tables, 21 enums, 4 migrations, seed data, 10/10 DB tests passing. |
+| **Phase 04** | Authentication & Authorization | Critical | **Completed** | Argon2id, Resend email OTP, dual-token rotation, reuse detection, RBAC. Unverified account auto-resend recovery (ADR-049) verified. |
 | **Phase 05** | Frontend Foundation & Design System | High | **Completed** | Design tokens, official logos, dual-tier navbar, CVA UI library, API client. Build & checks passing. |
 | **Phase 06** | User & Profile Management | High | **Completed** | Customer profile, address CRUD, atomic default address, mobile nav, Basket terminology. 107/107 tests passing. |
-| **Phase 07** | Seller Onboarding & KYC | High | **Ready to Start** | Unblocked by Phase 04, 05 & 06. |
-| **Phase 08** | Product Catalog & Categories | High | Not Started | Dependent on Phase 07. |
+| **Phase 07** | Seller Onboarding & KYC | High | **Completed** | Footer discovery, 5-step onboarding wizard, draft saving, AES-256-GCM bank encryption, Cloudinary authenticated KYC, admin inspection & review, state machine (DRAFT -> APPROVED_ACTIVE), Resend notifications. 137 unit + 59 E2E + 10 DB tests passing. |
+| **Phase 08** | Product Catalog & Categories | High | **Ready to Start** | Unblocked by Phase 07. |
 | **Phase 09** | Seller Listings & Inventory | High | Not Started | Dependent on Phase 08. |
 | **Phase 10** | Customer Shopping Experience | High | Not Started | Dependent on Phase 08 & 09. |
 | **Phase 11** | Cart & Checkout (Single Store) | Critical | Not Started | Dependent on Phase 09 & 10. |
@@ -174,13 +174,11 @@ Phase 06 delivered the complete customer profile and delivery address management
 
 ---
 
-## 8. Immediate Next Steps
+## 9. Immediate Next Steps
 
-1. Transition to **Phase 06 — User & Profile Management**:
-   - Implement backend profile endpoints (GET/PATCH `/api/v1/users/me`, address management `/api/v1/users/addresses`).
-   - Implement frontend account dashboard, address management forms, and profile settings in `apps/web`.
-2. Alternatively, proceed to **Phase 07 — Seller Onboarding & KYC** to implement seller registration and document submission workflows.
-
----
+1. Transition to **Phase 08 — Product Catalog & Categories**:
+   - Implement category tree management (L1 Category, L2 Subcategory) with icon/banner images via Cloudinary.
+   - Implement master product catalog with brand management, barcode/UPC scanning support, tax slab classification (GST 0%, 5%, 12%, 18%), and standard nutritional/dietary attributes.
+   - Prepare store-level listing models for Phase 09.
 
 **Document End — PROJECT_STATUS.md**

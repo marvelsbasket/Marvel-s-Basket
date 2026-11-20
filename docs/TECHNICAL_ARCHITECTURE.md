@@ -1074,6 +1074,26 @@ Marvel's Basket implements a secure, production-grade authentication and authori
      - Brute-force protection: attempt counter (`otp:attempts:verify-email:<email>`). Max 5 failed attempts locks and deletes the OTP immediately.
    - **Mobile Verification Status:** Mobile/SMS OTP is explicitly deferred and kept out of scope for Phase 04 to prioritize a resilient, vendor-independent email verification flow.
 
+### 7.1.1 Development Email OTP Visibility & Simulation
+
+To accelerate local development without requiring live transactional email delivery or third-party quota consumption, a development-only OTP visibility mechanism is implemented:
+
+- **Structured Terminal Logging:** When `NODE_ENV=development` and `DEV_LOG_EMAIL_OTP=true`, generated email verification OTPs are printed directly to the terminal stdout immediately upon generation:
+  ```text
+  ==================================================
+  [DEV EMAIL OTP]
+  Purpose: Email Verification
+  Email: user@example.com
+  OTP: 483921
+  Expires At: 2026-11-20 09:35:00
+  ==================================================
+  ```
+- **Live Email Dispatch Control:**
+  - `DEV_SEND_REAL_EMAILS=false` (default): Live email delivery is skipped in development; `EmailService` logs simulated delivery.
+  - `DEV_SEND_REAL_EMAILS=true`: Real emails are delivered via Resend in development while retaining terminal OTP visibility.
+- **Strict Production Safety Invariant:** Under `NODE_ENV=production`, `devLogEmailOtp` is unconditionally forced to `false` in central configuration and enforced in `logDevEmailOtp()`. Setting `DEV_LOG_EMAIL_OTP=true` in production has no effect. OTP values are never exposed in logs, error traces, or API responses.
+- **Uncompromised Security Pipeline:** All security mechanisms remain active (Argon2id hashing, SHA-256 OTP hashing in Redis, 5-minute TTL, 60-second cooldown, max 5 failed attempts lockout).
+
 ## 7.2 Dual-Token Architecture & RFC 6749 Token Family Rotation
 
 The API implements a dual-token architecture combining stateless JWT access tokens with rotating stateful refresh tokens:
@@ -1262,6 +1282,60 @@ Business logic must remain in NestJS.
 1. **Server-Derived Identity:** Customer identity is derived exclusively from the verified JWT payload (`@CurrentUser('id')`). Request body or query parameters specifying `userId` are strictly forbidden.
 2. **404 Over 403 on Cross-Tenant Access:** Accessing or mutating another user's address throws `NotFoundException` (HTTP 404) rather than `ForbiddenException` (HTTP 403) to prevent resource ID enumeration.
 3. **Single Default Invariant:** Customer addresses are managed inside `$transaction` blocks ensuring at most one default address exists per customer at any point in time.
+
+## 8.7 Seller Onboarding, KYC & Management APIs (Phase 07)
+
+### 8.7.1 Seller Registration & Self-Service Endpoints
+| Method | Path | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/sellers/application` | Authenticated | Retrieves the current user's seller application draft, status, step progress, and uploaded documents. |
+| `POST` | `/api/v1/sellers/application` | Authenticated | Initializes a new seller application draft or returns the existing active application. |
+| `PATCH` | `/api/v1/sellers/application` | Authenticated | Incremental update for any onboarding step (1–5) with draft saving and bank encryption. |
+| `POST` | `/api/v1/sellers/application/submit` | Authenticated | Submits application for admin review (`DRAFT` ➔ `PENDING_VERIFICATION`). Validates all mandatory fields, bank details, and required KYC documents. |
+| `GET` | `/api/v1/sellers/status` | Authenticated | Lightweight polling endpoint returning application lifecycle status, step progress, and feedback notes. |
+| `POST` | `/api/v1/sellers/documents` | Authenticated | Uploads a KYC document to Cloudinary authenticated storage with MIME and 10MB size validation. |
+| `DELETE` | `/api/v1/sellers/documents/:id` | Authenticated | Deletes an uploaded KYC document from Cloudinary and PostgreSQL before final submission. |
+| `GET` | `/api/v1/sellers/profile` | Authenticated (`SELLER`) | Retrieves operational seller profile (branding, address, operating hours, delivery radius). |
+| `PATCH` | `/api/v1/sellers/profile` | Authenticated (`SELLER`) | Updates operational seller profile parameters. |
+| `GET` | `/api/v1/sellers/store` | Authenticated (`SELLER`) | Retrieves active store details and operating parameters. |
+| `PATCH` | `/api/v1/sellers/store` | Authenticated (`SELLER`) | Updates active store operating hours, preparation time, and delivery radius. |
+
+### 8.7.2 Admin Verification & Seller Management Endpoints
+| Method | Path | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/admin/sellers` | Admin (`ADMIN`, `SUPER_ADMIN`) | Lists seller applications with search, status filter (`DRAFT`, `PENDING_VERIFICATION`, `APPROVED_ACTIVE`, etc.), category filter, and pagination. |
+| `GET` | `/api/v1/admin/sellers/:id` | Admin (`ADMIN`, `SUPER_ADMIN`) | Retrieves complete application dossier, business details, masked bank details, and KYC documents with review histories. |
+| `POST` | `/api/v1/admin/sellers/:id/documents/:docId/review` | Admin (`ADMIN`, `SUPER_ADMIN`) | Sets individual KYC document status (`VERIFIED`, `REJECTED`, `NEEDS_RESUBMISSION`) with feedback notes. |
+| `GET` | `/api/v1/admin/sellers/:id/documents/:docId/preview` | Admin (`ADMIN`, `SUPER_ADMIN`) | Generates a 60-minute cryptographic signed URL for in-app PDF and image inspection. |
+| `POST` | `/api/v1/admin/sellers/:id/approve` | Admin (`ADMIN`, `SUPER_ADMIN`) | Approves application: transitions seller to `APPROVED_ACTIVE`, activates store, assigns `SELLER` role to user, and dispatches approval email. |
+| `POST` | `/api/v1/admin/sellers/:id/reject` | Admin (`ADMIN`, `SUPER_ADMIN`) | Rejects application with specific feedback notes: transitions to `REJECTED`, dispatches rejection guidance email, and allows merchant revision. |
+| `POST` | `/api/v1/admin/sellers/:id/suspend` | Admin (`ADMIN`, `SUPER_ADMIN`) | Suspends an active seller: sets `status = SUSPENDED`, deactivates store (`Store.isActive = false`), and dispatches suspension notification. |
+| `POST` | `/api/v1/admin/sellers/:id/reactivate` | Admin (`ADMIN`, `SUPER_ADMIN`) | Reactivates a suspended seller: sets `status = APPROVED_ACTIVE`, restores store activity, and dispatches reactivation notification. |
+
+### 8.7.3 Cloudinary Authenticated Media Architecture
+1. **Authenticated Storage for KYC Documents:**
+   - Uploaded with `type: 'authenticated'` and `access_mode: 'authenticated'` to `sellers/kyc/<sellerId>/`.
+   - Files cannot be accessed publicly without HMAC-SHA1 signed authentication parameters.
+   - Admin in-app inspection generates time-limited signed URLs (`expires_at = now + 3600`) rendered in secure iframe or img elements.
+2. **Public Optimization for Storefront Assets:**
+   - Storefront logos, banners, and store exterior/interior photos use standard delivery with auto-format (`f_auto`), quality (`q_auto`), and responsive width scaling (`w_auto`).
+
+### 8.7.4 AES-256-GCM Bank Details Security
+- Bank account numbers are encrypted at rest using AES-256-GCM with a 12-byte initialization vector (`iv`), 16-byte authentication tag (`authTag`), and ciphertext formatted as `iv:authTag:ciphertext`.
+- Masked bank account numbers are generated at persistence time (`••••••••1234`) and stored in `bankAccountNumberMasked`.
+- Plaintext account numbers are never logged, never returned in standard API responses, and never stored in memory longer than the immediate request cycle.
+
+### 8.7.5 5-State Seller Lifecycle State Machine
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT: Merchant Registers
+    DRAFT --> PENDING_VERIFICATION: Merchant Submits Application
+    PENDING_VERIFICATION --> APPROVED_ACTIVE: Admin Approves (Activates Store + Assigns SELLER Role)
+    PENDING_VERIFICATION --> REJECTED: Admin Rejects (Provides Feedback)
+    REJECTED --> DRAFT: Merchant Edits Application
+    APPROVED_ACTIVE --> SUSPENDED: Admin Suspends (Deactivates Store)
+    SUSPENDED --> APPROVED_ACTIVE: Admin Reactivates (Restores Store)
+```
 
 ---
 

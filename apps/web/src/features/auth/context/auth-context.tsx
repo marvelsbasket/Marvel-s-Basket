@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
-      await authService.register(data);
+      return await authService.register(data);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed.';
       setError(msg);
