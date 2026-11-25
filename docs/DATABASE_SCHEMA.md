@@ -2036,6 +2036,13 @@ IDENTITY
 
 ---
 
+## Phase 12 Addendum — Order Management & Complaints
+
+- Extended `Order` with `checkout_session_id` (unique), `idempotency_key` (unique), `coupon_id`, `coupon_code`, `payment_method`, `store_name_snapshot`, `confirmed_at`, `dispatched_at`, `cancelled_by`, and `rejection_reason`.
+- Extended `OrderItem` with `product_id_snapshot`, `variant_id_snapshot`, `brand_snapshot`, `image_url_snapshot`, `discount_amount`, and `tax_amount`.
+- Extended `OrderStatusHistory` with `actor_role`.
+- Added `OrderComplaintCategory`, `OrderComplaintStatus`, and `order_complaints` table (`20261125110500_phase12_order_management`).
+
 # 31. RELATED DOCUMENTATION
 
 1. PROJECT_CONTEXT.md

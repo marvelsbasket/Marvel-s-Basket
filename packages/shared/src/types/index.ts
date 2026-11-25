@@ -1111,3 +1111,169 @@ export interface StoreSwitchComparison {
   priceChangesCount: number;
   unavailableCount: number;
 }
+
+// ==============================================================================
+// PHASE 12 — ORDER MANAGEMENT & COMPLAINTS
+// ==============================================================================
+
+export type OrderStatusType =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'PACKED'
+  | 'OUT_FOR_DELIVERY'
+  | 'DELIVERED'
+  | 'CANCELLED'
+  | 'REJECTED'
+  | 'FAILED'
+  | 'RETURN_REQUESTED'
+  | 'REFUNDED';
+
+export type PaymentMethodType = 'RAZORPAY' | 'COD';
+export type PaymentStatusType =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'REFUND_PENDING'
+  | 'PARTIALLY_REFUNDED'
+  | 'REFUNDED';
+
+export type DeliveryStatusType =
+  | 'PENDING'
+  | 'ASSIGNED'
+  | 'ACCEPTED'
+  | 'PICKED_UP'
+  | 'IN_TRANSIT'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export type OrderComplaintCategoryType =
+  | 'MISSING_ITEM'
+  | 'WRONG_ITEM'
+  | 'DAMAGED_ITEM'
+  | 'SPOILED_PERISHABLE'
+  | 'INCORRECT_QUANTITY'
+  | 'OTHER';
+
+export type OrderComplaintStatusType =
+  'OPEN' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'RESOLVED';
+
+export interface OrderItemSnapshotDto {
+  id: string;
+  sellerProductId: string;
+  productIdSnapshot: string | null;
+  variantIdSnapshot: string | null;
+  productNameSnapshot: string;
+  brandSnapshot: string | null;
+  variantNameSnapshot: string | null;
+  skuSnapshot: string | null;
+  imageUrlSnapshot: string | null;
+  unitPrice: number;
+  mrp: number | null;
+  discountAmount: number;
+  taxAmount: number;
+  quantity: number;
+  totalAmount: number;
+}
+
+export interface OrderStatusHistoryItem {
+  id: string;
+  previousStatus: OrderStatusType;
+  newStatus: OrderStatusType;
+  note: string | null;
+  changedBy: string | null;
+  actorRole: string | null;
+  createdAt: string;
+}
+
+export interface OrderComplaintItem {
+  id: string;
+  orderId: string;
+  orderNumber?: string;
+  orderItemId: string | null;
+  customerId: string;
+  category: OrderComplaintCategoryType;
+  status: OrderComplaintStatusType;
+  description: string;
+  evidenceUrls: string[];
+  adminNote: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+export interface OrderSummaryItem {
+  id: string;
+  orderNumber: string;
+  sellerId: string;
+  storeName: string;
+  storeSlug?: string | null;
+  customerName?: string | null;
+  status: OrderStatusType;
+  paymentMethod: PaymentMethodType;
+  paymentStatus: PaymentStatusType;
+  deliveryStatus: DeliveryStatusType;
+  subtotal: number;
+  deliveryFee: number;
+  discountAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+  itemCount: number;
+  totalUnits: number;
+  itemsPreview: Array<{
+    productName: string;
+    variantName: string | null;
+    quantity: number;
+    imageUrl: string | null;
+  }>;
+  createdAt: string;
+  confirmedAt: string | null;
+  packedAt: string | null;
+  dispatchedAt: string | null;
+  deliveredAt: string | null;
+  cancelledAt: string | null;
+}
+
+export interface OrderDetailResponse extends OrderSummaryItem {
+  customerId: string;
+  checkoutSessionId: string | null;
+  couponCode: string | null;
+  notes: string | null;
+  cancellationReason: string | null;
+  rejectionReason: string | null;
+  addressSnapshot: CheckoutAddressSnapshot;
+  items: OrderItemSnapshotDto[];
+  statusHistory: OrderStatusHistoryItem[];
+  complaints: OrderComplaintItem[];
+  canCancel: boolean;
+  canComplain: boolean;
+}
+
+export interface PaginatedOrdersResponse {
+  items: OrderSummaryItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  statusCounts?: Record<string, number>;
+}
+
+export interface OrderTrackingMilestone {
+  status: OrderStatusType;
+  label: string;
+  completed: boolean;
+  timestamp: string | null;
+}
+
+export interface OrderTrackingResponse {
+  orderId: string;
+  orderNumber: string;
+  status: OrderStatusType;
+  deliveryStatus: DeliveryStatusType;
+  storeName: string;
+  milestones: OrderTrackingMilestone[];
+  history: OrderStatusHistoryItem[];
+}

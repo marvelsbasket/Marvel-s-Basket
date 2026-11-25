@@ -1235,6 +1235,7 @@ In high-velocity grocery quick-commerce, multiple customers frequently attempt t
 | **ADR-053** | Strict Location Serviceability & Single-Store Basket Switching | **Accepted** | Frontend/Backend UX | No fallback to arbitrary flagship stores when location is unset/unserviceable; pre-switch `compare-store` diff & modal confirmation |
 | **ADR-054** | Interactive Center-Pin Map, Server Geocoding Proxy & Single-Default Address Index | **Accepted** | Maps/Addresses | Browser Leaflet/OSM interactive center-pin map + server-side Google Maps/Nominatim geocoding proxy (zero exposed API keys) + PostgreSQL partial unique default address index |
 | **ADR-055** | CheckoutSession Snapshots, Paise-Exact Pricing & BullMQ 15-Minute Reservation Expiration | **Accepted** | Cart/Checkout | `CheckoutSession` immutable snapshots, integer-paise `PricingService` reading `PlatformSetting` (MOV, distance tiers, coupons), guarded `StockReservation` state transitions, BullMQ `reservation-expiration` delayed jobs + 60s DB recovery sweep |
+| **ADR-056** | Single-Store Order Lifecycle, ACID Reservation Commit & Idempotent Stock Restoration | **Accepted** | Orders | `OrdersModule` single-store order creation from `CheckoutSession`, `commitReservationInTx`, `restoreOrderStockInTx` with per-item idempotency keys, `OrderStateMachine`, `OrderComplaint` workflow |
 
 ---
 

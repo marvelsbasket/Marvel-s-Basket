@@ -1661,6 +1661,11 @@ No major scope change should be silently introduced into the project.
 - Server-authoritative cart & checkout pricing, MOV progress (`Add ₹X more to unlock delivery`), distance-tiered delivery fee, and platform coupon validation (`/api/v1/cart/coupon`).
 - Atomic 15-minute inventory reservation (`StockReservation` + `CheckoutSession`) with BullMQ auto-release and `/checkout` server-synced countdown UI.
 
+## Phase 12 Verification — Order Management
+
+- Customer endpoints (`/api/v1/orders/*`), Seller fulfillment endpoints (`/api/v1/seller/orders/*`), and Admin endpoints (`/api/v1/admin/orders/*`, `/api/v1/admin/complaints/*`) with strict RBAC and store-scoping.
+- Customer `/orders` & `/orders/[id]` (milestone tracker, pre-pack cancel, post-delivery complaint), Seller `/seller/orders`, and Admin `/admin/orders` UIs.
+
 # 26. DOCUMENT MAINTENANCE
 
 This document must be updated whenever approved functional or non-functional requirements change.
