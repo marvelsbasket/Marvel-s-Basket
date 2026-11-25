@@ -3,3 +3,4 @@ export * from './hero-banner';
 export * from './category-rail';
 export * from './featured-sellers';
 export * from './trending-products';
+export * from './category-product-rail';

@@ -1232,6 +1232,8 @@ In high-velocity grocery quick-commerce, multiple customers frequently attempt t
 | **ADR-050** | Mobile Navigation Refinement & Delivery Address Prominence | **Accepted** | Frontend/UX | Remove duplicate mobile avatar, add mobile Deliver To selector, promote Orders in bottom nav, unify basket badge |
 | **ADR-051** | Master Catalog & Store-Specific Inventory Separation | **Accepted** | Catalog/Architecture | Platform owns master catalog, variants, and MRP; stores own local selling price & inventory; store-scoped discovery |
 | **ADR-052** | Store Inventory Engine, Concurrency Safety & Reservations | **Accepted** | Inventory/Engine | Parameterized conditional SQL update (no overselling), ascending row-lock ordering (no deadlocks), Redis lock TTL cleanup |
+| **ADR-053** | Strict Location Serviceability & Single-Store Basket Switching | **Accepted** | Frontend/Backend UX | No fallback to arbitrary flagship stores when location is unset/unserviceable; pre-switch `compare-store` diff & modal confirmation |
+| **ADR-054** | Interactive Center-Pin Map, Server Geocoding Proxy & Single-Default Address Index | **Accepted** | Maps/Addresses | Browser Leaflet/OSM interactive center-pin map + server-side Google Maps/Nominatim geocoding proxy (zero exposed API keys) + PostgreSQL partial unique default address index |
 
 ---
 

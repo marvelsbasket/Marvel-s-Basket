@@ -17,6 +17,15 @@ export interface ApiResponse<T = unknown> {
   timestamp: string;
 }
 
+export interface CatalogMetaInfo {
+  hasLocationContext: boolean;
+  isServiceable: boolean;
+  storeId: string | null;
+  storeName: string | null;
+  storeSlug?: string | null;
+  catalogTotalCount?: number;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -25,6 +34,7 @@ export interface PaginatedResponse<T> {
   totalPages: number;
   hasNext: boolean;
   hasPrevious: boolean;
+  metaInfo?: CatalogMetaInfo;
 }
 
 export interface HealthStatusResponse {
@@ -122,15 +132,20 @@ export interface AccountOverviewResponse {
   totalAddresses: number;
 }
 
+export type AddressType = 'HOME' | 'OFFICE' | 'OTHER';
+
 export interface CustomerAddressResponse {
   id: string;
   userId: string;
+  addressType?: AddressType;
   label: string;
   recipientName: string;
   phone: string;
+  forSomeoneElse?: boolean;
   addressLine1: string;
   addressLine2: string | null;
   landmark: string | null;
+  locality?: string | null;
   city: string;
   state: string;
   postalCode: string;
@@ -143,12 +158,15 @@ export interface CustomerAddressResponse {
 }
 
 export interface CreateAddressRequest {
+  addressType?: AddressType;
   label: string;
   recipientName: string;
   phone: string;
+  forSomeoneElse?: boolean;
   addressLine1: string;
   addressLine2?: string | null;
   landmark?: string | null;
+  locality?: string | null;
   city: string;
   state: string;
   postalCode: string;
@@ -159,12 +177,15 @@ export interface CreateAddressRequest {
 }
 
 export interface UpdateAddressRequest {
+  addressType?: AddressType;
   label?: string;
   recipientName?: string;
   phone?: string;
+  forSomeoneElse?: boolean;
   addressLine1?: string;
   addressLine2?: string | null;
   landmark?: string | null;
+  locality?: string | null;
   city?: string;
   state?: string;
   postalCode?: string;
@@ -405,6 +426,8 @@ export interface ProductVariantItem {
   isAvailable?: boolean;
   discountPercent?: number;
   sellerProductId?: string;
+  lowStockThreshold?: number;
+  isLowStock?: boolean;
 }
 
 export interface ProductCardItem {
@@ -419,12 +442,25 @@ export interface ProductCardItem {
   defaultVariant: ProductVariantItem;
 
   // Selected store context
-  store: { id: string; name: string; slug?: string; deliveryTimeMinutes?: number } | null;
+  store: {
+    id: string;
+    name: string;
+    slug?: string;
+    deliveryTimeMinutes?: number | null;
+    deliveryEtaLabel?: string | null;
+    isOpen?: boolean;
+    isAcceptingOrders?: boolean;
+    operationalStatusLabel?: string;
+    minimumOrderValue?: number | null;
+  } | null;
   mrp: number;
   sellingPrice: number;
   discountPercent: number;
   availableQuantity: number;
   isAvailable: boolean;
+  lowStockThreshold?: number;
+  isLowStock?: boolean;
+  searchTags?: string[];
 }
 
 export interface ProductDetailItem {
@@ -459,7 +495,16 @@ export interface ProductDetailItem {
   searchTags: string[];
   status: string;
   variants: ProductVariantItem[];
-  store: { id: string; name: string; slug?: string; deliveryTimeMinutes?: number } | null;
+  store: {
+    id: string;
+    name: string;
+    slug?: string;
+    deliveryTimeMinutes?: number | null;
+    deliveryEtaLabel?: string | null;
+    isOpen?: boolean;
+    isAcceptingOrders?: boolean;
+    minimumOrderValue?: number | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -785,4 +830,213 @@ export interface PickerShortageWriteOffRequest {
   reason: string;
   pickerId: string;
   idempotencyKey: string;
+}
+
+// ==============================================================================
+// PHASE 10: CUSTOMER SHOPPING EXPERIENCE (LOCATION, STORES, SEARCH, BASKET)
+// ==============================================================================
+
+export type LocationSource = 'SAVED_ADDRESS' | 'CURRENT_LOCATION' | 'MANUAL' | 'QUICK_CITY';
+
+export interface DeliveryLocation {
+  label?: string;
+  addressId?: string | null;
+  displayLocation: string;
+  fullAddress?: string | null;
+  city: string;
+  state?: string | null;
+  postalCode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  source: LocationSource;
+}
+
+export interface StoreBusinessHourItem {
+  dayOfWeek: number;
+  openingTime: string;
+  closingTime: string;
+  isClosed: boolean;
+}
+
+export interface PublicStoreCategorySummary {
+  id: string;
+  name: string;
+  slug: string;
+  productCount: number;
+}
+
+export interface PublicStoreItem {
+  id: string;
+  slug: string;
+  name: string;
+  storeCategory: string | null;
+  description: string | null;
+  logoUrl: string | null;
+  bannerUrl: string | null;
+  storefrontPhotoUrl: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  addressLine1: string;
+  latitude: number | null;
+  longitude: number | null;
+  serviceRadiusKm: number;
+  distanceKm: number | null;
+  deliveryTimeMinutes: number | null;
+  deliveryEtaLabel: string | null;
+  isOpen: boolean;
+  isAcceptingOrders: boolean;
+  isClosingSoon: boolean;
+  closingSoonMinutes?: number | null;
+  operationalStatusLabel: string;
+  openingTime: string | null;
+  closingTime: string | null;
+  weeklyOffDays: string | null;
+  rating: number | null;
+  reviewCount: number;
+  minimumOrderValue: number | null;
+  activeProductCount?: number;
+  categories?: PublicStoreCategorySummary[];
+  businessHours?: StoreBusinessHourItem[];
+}
+
+export interface LocationSuggestionItem {
+  label: string;
+  displayLocation: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  latitude: number | null;
+  longitude: number | null;
+  storeCount: number;
+}
+
+export interface ServiceabilityResolutionResponse {
+  isServiceable: boolean;
+  locationSummary: string;
+  activeStore: PublicStoreItem | null;
+  nearbyStores: PublicStoreItem[];
+  suggestedLocations: LocationSuggestionItem[];
+}
+
+export interface ReverseGeocodeResponse {
+  formattedAddress: string;
+  displayLocation: string;
+  locality?: string | null;
+  street?: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  landmark?: string | null;
+  latitude: number;
+  longitude: number;
+  provider: string;
+}
+
+export interface PlaceSuggestionItem {
+  id: string;
+  primaryText: string;
+  secondaryText: string;
+  fullAddress: string;
+  locality: string;
+  street: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  latitude: number;
+  longitude: number;
+  storeCount?: number;
+  provider: string;
+}
+
+export interface SearchSuggestionProductItem {
+  id: string;
+  name: string;
+  slug: string;
+  brand: string | null;
+  primaryImageUrl: string | null;
+  defaultVariantId?: string;
+  packSize?: string | null;
+  mrp: number;
+  sellingPrice: number;
+  discountPercent: number;
+  availableQuantity: number;
+  isAvailable: boolean;
+  sellerProductId?: string;
+  storeId?: string | null;
+  storeName?: string | null;
+}
+
+export interface SearchSuggestionsResponse {
+  products: SearchSuggestionProductItem[];
+  categories: { name: string; slug: string }[];
+  brands: { name: string; slug: string }[];
+}
+
+export interface BasketStoreInfo {
+  id: string;
+  name: string;
+  slug: string;
+  deliveryTimeMinutes?: number | null;
+  deliveryEtaLabel?: string | null;
+  isOpen?: boolean;
+  isAcceptingOrders?: boolean;
+  operationalStatusLabel?: string;
+  minimumOrderValue?: number | null;
+}
+
+export interface BasketItem {
+  id?: string;
+  sellerProductId: string;
+  productId: string;
+  variantId: string;
+  productName: string;
+  productSlug: string;
+  brand: string | null;
+  packSize: string | null;
+  imageUrl: string | null;
+  quantity: number;
+  unitPrice: number;
+  mrp: number;
+  discountPercent: number;
+  availableQuantity: number;
+  isAvailable: boolean;
+  priceChanged?: boolean;
+  originalUnitPrice?: number;
+  statusMessage?: string;
+}
+
+export interface BasketStateResponse {
+  cartId?: string | null;
+  sellerId: string | null;
+  store: BasketStoreInfo | null;
+  items: BasketItem[];
+  itemCount: number;
+  totalUnits: number;
+  subtotal: number;
+  totalMrp: number;
+  totalSavings: number;
+  hasUnavailableItems?: boolean;
+  hasPriceChanges?: boolean;
+}
+
+export interface StoreSwitchComparison {
+  newStore: PublicStoreItem | null;
+  currentStore: BasketStoreInfo;
+  isServiceable: boolean;
+  compatibleItems: Array<{
+    item: BasketItem;
+    newSellerProductId: string;
+    newUnitPrice: number;
+    newMrp: number;
+    newAvailableQuantity: number;
+    priceChanged: boolean;
+    quantityAdjusted: number;
+  }>;
+  unavailableItems: Array<{
+    item: BasketItem;
+    reason: string;
+  }>;
+  priceChangesCount: number;
+  unavailableCount: number;
 }

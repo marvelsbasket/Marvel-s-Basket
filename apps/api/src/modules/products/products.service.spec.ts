@@ -75,6 +75,20 @@ describe('ProductsService', () => {
       const resolved = await service.resolveServiceableStore({ postalCode: '560038' });
       expect(resolved).toEqual(mockStore);
     });
+
+    it('should return null when no location or storeId is provided (never fabricate a default store)', async () => {
+      const resolved = await service.resolveServiceableStore({});
+      expect(resolved).toBeNull();
+      expect(mockPrisma.seller.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('should return null for unserviceable postalCode instead of falling back to an arbitrary store', async () => {
+      mockPrisma.sellerServiceArea.findFirst.mockResolvedValue(null);
+      mockPrisma.seller.findFirst.mockResolvedValue(null);
+
+      const resolved = await service.resolveServiceableStore({ postalCode: '999999' });
+      expect(resolved).toBeNull();
+    });
   });
 
   describe('getCatalogProducts', () => {

@@ -8,22 +8,21 @@ import { EmptyState } from '@/components/feedback/empty-state';
 import { ErrorState } from '@/components/feedback/error-state';
 import { Skeleton } from '@/components/feedback/skeleton';
 import { Button } from '@/components/ui/button';
+import { AddressCard, DeleteAddressDialog, addressService } from '@/features/addresses';
 import {
-  AddressCard,
-  AddressFormModal,
-  DeleteAddressDialog,
-  addressService,
-} from '@/features/addresses';
+  toDeliveryLocationFromAddress,
+  useLocation,
+} from '@/features/location/context/location-context';
+import { useBasket } from '@/features/basket/context/basket-context';
 
 export default function AddressesPage() {
+  const { location, openAddressFlow, refreshSavedAddresses, clearLocation } = useLocation();
+  const { requestLocationSwitch } = useBasket();
+
   const [addresses, setAddresses] = useState<CustomerAddressResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
-
-  // Modal / Dialog States
-  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [editingAddress, setEditingAddress] = useState<CustomerAddressResponse | null>(null);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingAddress, setDeletingAddress] = useState<CustomerAddressResponse | null>(null);
@@ -51,17 +50,28 @@ export default function AddressesPage() {
 
   const showFeedback = (msg: string) => {
     setFeedbackMessage(msg);
-    setTimeout(() => setFeedbackMessage(null), 3000);
+    setTimeout(() => setFeedbackMessage(null), 3500);
   };
 
   const handleOpenAddModal = () => {
-    setEditingAddress(null);
-    setIsFormModalOpen(true);
+    openAddressFlow({
+      mode: 'profile-add',
+      onSavedAddress: async () => {
+        showFeedback('New delivery address added and set as active.');
+        await fetchAddresses();
+      },
+    });
   };
 
   const handleOpenEditModal = (addr: CustomerAddressResponse) => {
-    setEditingAddress(addr);
-    setIsFormModalOpen(true);
+    openAddressFlow({
+      mode: 'profile-edit',
+      editingAddress: addr,
+      onSavedAddress: async () => {
+        showFeedback('Address updated successfully.');
+        await fetchAddresses();
+      },
+    });
   };
 
   const handleOpenDeleteDialog = (addr: CustomerAddressResponse) => {
@@ -71,13 +81,26 @@ export default function AddressesPage() {
 
   const handleConfirmDelete = async () => {
     if (!deletingAddress) return;
+    const deletedId = deletingAddress.id;
     setIsDeleting(true);
     try {
-      await addressService.delete(deletingAddress.id);
+      await addressService.delete(deletedId);
       showFeedback('Address deleted successfully.');
       setIsDeleteDialogOpen(false);
       setDeletingAddress(null);
-      await fetchAddresses();
+
+      const remaining = await refreshSavedAddresses();
+      setAddresses(remaining);
+
+      // Keep navbar and store context synchronized if the active/default address was removed
+      if (location?.addressId === deletedId) {
+        const nextDefault = remaining.find((a) => a.isDefault) || remaining[0] || null;
+        if (nextDefault) {
+          await requestLocationSwitch(toDeliveryLocationFromAddress(nextDefault));
+        } else {
+          clearLocation();
+        }
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to delete address.';
       setError(msg);
@@ -89,20 +112,17 @@ export default function AddressesPage() {
   const handleSetDefault = async (addressId: string) => {
     setIsSettingDefault(true);
     try {
-      await addressService.setDefault(addressId);
+      const updated = await addressService.setDefault(addressId);
       showFeedback('Default delivery address updated.');
       await fetchAddresses();
+      await refreshSavedAddresses();
+      await requestLocationSwitch(toDeliveryLocationFromAddress(updated));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to set default address.';
       setError(msg);
     } finally {
       setIsSettingDefault(false);
     }
-  };
-
-  const handleFormSuccess = async () => {
-    showFeedback(editingAddress ? 'Address updated successfully.' : 'New address added.');
-    await fetchAddresses();
   };
 
   return (
@@ -179,15 +199,7 @@ export default function AddressesPage() {
         </div>
       )}
 
-      {/* 4. Add / Edit Address Modal */}
-      <AddressFormModal
-        isOpen={isFormModalOpen}
-        onClose={() => setIsFormModalOpen(false)}
-        onSuccess={handleFormSuccess}
-        initialAddress={editingAddress}
-      />
-
-      {/* 5. Delete Address Confirmation Dialog */}
+      {/* 4. Delete Address Confirmation Dialog */}
       <DeleteAddressDialog
         isOpen={isDeleteDialogOpen}
         onClose={() => {

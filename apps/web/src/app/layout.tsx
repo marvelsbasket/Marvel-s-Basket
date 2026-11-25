@@ -1,6 +1,8 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { AuthProvider } from '@/features/auth';
+import { LocationProvider } from '@/features/location/context/location-context';
+import { BasketProvider } from '@/features/basket/context/basket-context';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -21,7 +23,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-screen bg-white text-ink antialiased">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <LocationProvider>
+            <BasketProvider>{children}</BasketProvider>
+          </LocationProvider>
+        </AuthProvider>
       </body>
     </html>
   );

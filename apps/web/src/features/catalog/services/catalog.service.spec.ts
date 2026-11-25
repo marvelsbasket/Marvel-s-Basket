@@ -51,6 +51,20 @@ describe('CatalogService', () => {
       params: { storeId: 'store-1' },
     });
   });
+
+  it('getSearchSuggestions passes location context alongside search query', async () => {
+    const mockSuggestions = { products: [], categories: [], brands: [] };
+    (apiClient.get as jest.Mock).mockResolvedValue({ data: mockSuggestions });
+
+    await CatalogService.getSearchSuggestions('doodh', {
+      storeId: 'store-1',
+      postalCode: '560038',
+    });
+
+    expect(apiClient.get).toHaveBeenCalledWith('/products/search/suggestions', {
+      params: { q: 'doodh', storeId: 'store-1', postalCode: '560038' },
+    });
+  });
 });
 
 describe('AdminCatalogService', () => {

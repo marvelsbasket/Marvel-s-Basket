@@ -1,9 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Minus, Plus } from 'lucide-react';
+import { ChevronDown, MapPin, Minus, Plus } from 'lucide-react';
 import { ProductCardItem, ProductVariantItem } from '@marvels-basket/shared';
+import { useLocation } from '@/features/location/context/location-context';
+import { useBasket } from '@/features/basket/context/basket-context';
+import { calculateDiscountPercent, calculateSavings, formatINR } from '@/lib/utils/currency';
+import { getOptimizedProductImage } from '@/lib/utils/cloudinary';
 import { cn } from '@/lib/utils';
 
 export interface MobileSplitPaneProductCardProps {
@@ -15,10 +19,18 @@ export function MobileSplitPaneProductCard({
   product,
   onOpenVariantDrawer,
 }: MobileSplitPaneProductCardProps) {
-  const [selectedVariantId, setSelectedVariantId] = useState<string>(
-    product.defaultVariant?.id || product.variants[0]?.id || '',
-  );
-  const [quantity, setQuantity] = useState(0);
+  const { openLocationModal, hasLocationContext, activeStore } = useLocation();
+  const { addItem, updateQuantity, getItemQuantity } = useBasket();
+
+  const initialVariantId = useMemo(() => {
+    if (product.defaultVariant?.id) return product.defaultVariant.id;
+    const firstAvail = product.variants?.find(
+      (v) => v.isAvailable !== false && (v.availableQuantity ?? 0) > 0,
+    );
+    return firstAvail?.id || product.variants[0]?.id || '';
+  }, [product.defaultVariant?.id, product.variants]);
+
+  const [selectedVariantId] = useState<string>(initialVariantId);
   const [imageError, setImageError] = useState(false);
 
   const activeVariant: ProductVariantItem | undefined =
@@ -29,31 +41,89 @@ export function MobileSplitPaneProductCard({
   const mrp = activeVariant?.mrp ?? product.mrp;
   const sellingPrice = activeVariant?.sellingPrice ?? product.sellingPrice;
   const discountPercent =
-    activeVariant?.discountPercent ??
-    product.discountPercent ??
-    (mrp > sellingPrice && mrp > 0 ? Math.round(((mrp - sellingPrice) / mrp) * 100) : 0);
+    activeVariant?.discountPercent ?? calculateDiscountPercent(mrp, sellingPrice);
+  const savingsAmount = calculateSavings(mrp, sellingPrice);
 
-  const availableQuantity = activeVariant?.availableQuantity ?? product.availableQuantity ?? 99;
-  const isOutOfStock = availableQuantity <= 0 || activeVariant?.isAvailable === false;
+  const resolvedStore =
+    product.store ??
+    (activeStore
+      ? {
+          id: activeStore.id,
+          name: activeStore.name,
+          slug: activeStore.slug,
+          deliveryEtaLabel: activeStore.deliveryEtaLabel,
+          deliveryTimeMinutes: activeStore.deliveryTimeMinutes,
+          isOpen: activeStore.isOpen,
+          isAcceptingOrders: activeStore.isAcceptingOrders,
+          minimumOrderValue: activeStore.minimumOrderValue,
+        }
+      : null);
 
-  const imageUrl =
-    !imageError && (activeVariant?.primaryImageUrl || product.primaryImageUrl)
-      ? activeVariant?.primaryImageUrl || product.primaryImageUrl
-      : '/placeholder-product.png';
+  const hasStoreOffer = Boolean(resolvedStore && activeVariant?.sellerProductId);
+  const availableQuantity = activeVariant?.availableQuantity ?? 0;
+  const lowStockThreshold = activeVariant?.lowStockThreshold ?? product.lowStockThreshold ?? 5;
+  const isAvailable =
+    hasStoreOffer && activeVariant?.isAvailable !== false && availableQuantity > 0;
+  const isLowStock =
+    isAvailable && (activeVariant?.isLowStock || availableQuantity <= lowStockThreshold);
 
+  const quantity = activeVariant
+    ? getItemQuantity(activeVariant.sellerProductId, activeVariant.id)
+    : 0;
+
+  const rawImg = activeVariant?.primaryImageUrl || product.primaryImageUrl;
+  const imageUrl = !imageError ? getOptimizedProductImage(rawImg, 'card') : null;
   const hasMultipleVariants = product.variants && product.variants.length > 1;
 
-  const handleIncrement = (e: React.MouseEvent) => {
+  const handleIncrement = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isOutOfStock) return;
-    setQuantity((prev) => Math.min(prev + 1, availableQuantity));
+
+    if (!resolvedStore || !activeVariant?.sellerProductId) {
+      openLocationModal();
+      return;
+    }
+    if (!isAvailable || quantity >= availableQuantity) return;
+
+    if (quantity === 0) {
+      await addItem({
+        sellerProductId: activeVariant.sellerProductId,
+        productId: product.id,
+        variantId: activeVariant.id,
+        productName: product.name,
+        productSlug: product.slug,
+        brand: product.brand,
+        packSize: activeVariant.packSize || activeVariant.name,
+        imageUrl: rawImg,
+        unitPrice: sellingPrice,
+        mrp,
+        availableQuantity,
+        store: {
+          id: resolvedStore.id,
+          name: resolvedStore.name,
+          slug: resolvedStore.slug || '',
+          deliveryEtaLabel: resolvedStore.deliveryEtaLabel ?? null,
+          deliveryTimeMinutes: resolvedStore.deliveryTimeMinutes ?? null,
+          isOpen: resolvedStore.isOpen ?? true,
+          isAcceptingOrders: resolvedStore.isAcceptingOrders ?? true,
+          minimumOrderValue: resolvedStore.minimumOrderValue ?? null,
+        },
+        quantity: 1,
+      });
+    } else {
+      await updateQuantity(activeVariant.sellerProductId, quantity + 1, {
+        availableQuantity,
+      });
+    }
   };
 
-  const handleDecrement = (e: React.MouseEvent) => {
+  const handleDecrement = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setQuantity((prev) => Math.max(0, prev - 1));
+    if (!activeVariant?.sellerProductId || quantity <= 0) return;
+    await updateQuantity(activeVariant.sellerProductId, quantity - 1, {
+      availableQuantity,
+    });
   };
 
   const handlePackSizeClick = (e: React.MouseEvent) => {
@@ -68,14 +138,12 @@ export function MobileSplitPaneProductCard({
     <div className="group relative flex flex-col justify-between rounded-2xl border border-stone-200/90 bg-white p-2 sm:p-2.5 shadow-2xs transition-all hover:border-emerald-300 hover:shadow-xs">
       {/* Product Image Box with Floating ADD Button */}
       <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-[#F8FAF7] border border-stone-100 flex items-center justify-center p-2">
-        {/* Discount Badge (Top-Left) */}
         {discountPercent > 0 && (
           <span className="absolute left-1.5 top-1.5 z-10 rounded-md bg-emerald-700 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-2xs">
             {discountPercent}% OFF
           </span>
         )}
 
-        {/* Dietary Veg / Non-Veg Indicator (Top-Right) */}
         {product.foodPreference && product.foodPreference !== 'NA' && (
           <div className="absolute right-1.5 top-1.5 z-10">
             {product.foodPreference === 'VEG' ? (
@@ -96,12 +164,11 @@ export function MobileSplitPaneProductCard({
           </div>
         )}
 
-        {/* Product Image with Link to PDP */}
         <Link
           href={`/products/${product.slug}`}
           className="flex h-full w-full items-center justify-center focus-visible:outline-none"
         >
-          {imageUrl && imageUrl !== '/placeholder-product.png' ? (
+          {imageUrl ? (
             <img
               src={imageUrl}
               alt={product.name}
@@ -116,9 +183,22 @@ export function MobileSplitPaneProductCard({
           )}
         </Link>
 
-        {/* Floating ADD Button / Stepper (Bottom-Right corner of image) */}
+        {/* Floating ADD Button / Stepper */}
         <div className="absolute bottom-1.5 right-1.5 z-20">
-          {isOutOfStock ? (
+          {!resolvedStore ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openLocationModal();
+              }}
+              className="flex items-center gap-0.5 rounded-lg border border-brand/40 bg-white/95 px-2 py-1 text-[10px] font-bold text-brand shadow-xs"
+            >
+              <MapPin className="h-2.5 w-2.5" />
+              <span>{hasLocationContext ? 'N/A' : 'Location'}</span>
+            </button>
+          ) : !isAvailable ? (
             <span className="rounded-md bg-stone-100/95 backdrop-blur-xs px-2 py-0.5 text-[10px] font-bold text-stone-500 border border-stone-200">
               Out of Stock
             </span>
@@ -146,8 +226,9 @@ export function MobileSplitPaneProductCard({
               <button
                 type="button"
                 onClick={handleIncrement}
+                disabled={quantity >= availableQuantity}
                 aria-label="Increase quantity"
-                className="flex h-6 w-6 items-center justify-center rounded-r-lg hover:bg-emerald-800 transition-colors active:scale-90"
+                className="flex h-6 w-6 items-center justify-center rounded-r-lg hover:bg-emerald-800 transition-colors active:scale-90 disabled:opacity-50"
               >
                 <Plus className="h-3 w-3" />
               </button>
@@ -159,20 +240,20 @@ export function MobileSplitPaneProductCard({
       {/* Product Content Details */}
       <div className="mt-2 flex flex-col flex-grow justify-between">
         <div>
-          {/* Price Row: Selling Price + Strikethrough MRP + Savings */}
           <div className="flex items-baseline flex-wrap gap-1.5">
-            <span className="text-xs font-black text-stone-950 sm:text-sm">₹{sellingPrice}</span>
+            <span className="text-xs font-black text-stone-950 sm:text-sm">
+              {formatINR(sellingPrice)}
+            </span>
             {mrp > sellingPrice && (
-              <span className="text-[10px] text-stone-400 line-through">₹{mrp}</span>
+              <span className="text-[10px] text-stone-400 line-through">{formatINR(mrp)}</span>
             )}
-            {mrp > sellingPrice && (
+            {savingsAmount > 0 && (
               <span className="text-[9px] font-bold text-emerald-700">
-                ₹{Math.round(mrp - sellingPrice)} OFF
+                {formatINR(savingsAmount)} OFF
               </span>
             )}
           </div>
 
-          {/* Product Title */}
           <Link
             href={`/products/${product.slug}`}
             className="block mt-0.5 focus-visible:outline-none"
@@ -184,6 +265,12 @@ export function MobileSplitPaneProductCard({
               {product.name}
             </h3>
           </Link>
+
+          {isLowStock && (
+            <p className="mt-0.5 text-[10px] font-semibold text-amber-700">
+              Only {availableQuantity} left
+            </p>
+          )}
         </div>
 
         {/* Pack Size / Variant Selector Trigger */}

@@ -87,7 +87,7 @@ export default function AllCategoriesPage() {
     : categories;
 
   return (
-    <StorefrontLayout cartItemCount={2}>
+    <StorefrontLayout>
       {/* =================================================================== */}
       {/* 1. MOBILE CATEGORIES DIRECTORY (< md breakpoint, Reference A style) */}
       {/* =================================================================== */}

@@ -1,17 +1,27 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+  forwardRef,
+} from '@nestjs/common';
 import { ProductStatus, Seller, SellerStatus } from '@prisma/client';
 import {
   PaginatedResponse,
   ProductCardItem,
   ProductDetailItem,
   ProductVariantItem,
+  SearchSuggestionProductItem,
+  SearchSuggestionsResponse,
 } from '@marvels-basket/shared';
 import { PrismaService } from '../../database/prisma.service';
+import { StoresService } from '../stores/stores.service';
 import { QueryCatalogProductsDto } from './dto';
 
 // Common Indian quick-commerce localized synonyms dictionary
 const SEARCH_SYNONYMS: Record<string, string[]> = {
-  doodh: ['milk', 'dairy'],
+  doodh: ['milk', 'dairy', 'taaza', 'toned'],
   milk: ['doodh', 'taaza', 'toned', 'cow milk'],
   atta: ['flour', 'wheat', 'sharbati', 'aashirvaad'],
   flour: ['atta', 'maida', 'suji'],
@@ -20,10 +30,16 @@ const SEARCH_SYNONYMS: Record<string, string[]> = {
   makkhan: ['butter'],
   butter: ['makkhan', 'amul'],
   tel: ['oil', 'mustard', 'sunflower', 'refined'],
-  oil: ['tel', 'cooking oil', 'fortune'],
+  oil: ['tel', 'cooking oil', 'fortune', 'sunflower'],
   chawal: ['rice', 'basmati'],
   rice: ['chawal', 'basmati'],
-  biscuit: ['biscuits', 'cookies', 'rusk'],
+  cheeni: ['sugar'],
+  sugar: ['cheeni'],
+  namak: ['salt'],
+  salt: ['namak'],
+  chai: ['tea', 'tata tea'],
+  tea: ['chai', 'tata tea'],
+  biscuit: ['biscuits', 'cookies', 'rusk', 'parle'],
   chips: ['namkeen', 'crisps', 'snack', 'lays', 'kurkure'],
   namkeen: ['mixture', 'sev', 'bhujia', 'chips'],
   aloo: ['potato', 'potatoes'],
@@ -32,25 +48,67 @@ const SEARCH_SYNONYMS: Record<string, string[]> = {
   onion: ['pyaz'],
   tamatar: ['tomato', 'tomatoes'],
   tomato: ['tamatar'],
+  dhaniya: ['coriander'],
+  coriander: ['dhaniya'],
+  matar: ['peas', 'green peas', 'safal'],
+  peas: ['matar'],
+  sabzi: ['vegetable', 'vegetables'],
+  phal: ['fruit', 'fruits', 'apple'],
+  seb: ['apple', 'apples'],
+  apple: ['seb', 'royal gala'],
+  mirch: ['capsicum', 'chilli', 'pepper'],
+  capsicum: ['shimla mirch', 'mirch'],
+  shimla: ['capsicum'],
+  bread: ['sourdough', 'loaf', 'bakery'],
+  soap: ['dettol', 'bathing soap'],
+  juice: ['orange juice', 'real activ', 'cold drink'],
 };
 
 @Injectable()
 export class ProductsService {
   private readonly logger = new Logger(ProductsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(forwardRef(() => StoresService))
+    private readonly storesService?: StoresService,
+  ) {}
 
   /**
-   * Resolves the customer's serviceable store for hyperlocal quick-commerce delivery.
-   * Priority:
-   * 1. Explicit storeId if active and approved
-   * 2. Store with matching service area for postalCode
-   * 3. Fallback: primary active store in the system
+   * Computes bounded Levenshtein edit distance for simple search typo tolerance.
+   */
+  private levenshteinDistance(a: string, b: string): number {
+    if (a === b) return 0;
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+
+    const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 0; i < a.length; i++) {
+      const curr = [i + 1];
+      for (let j = 0; j < b.length; j++) {
+        const cost = a[i] === b[j] ? 0 : 1;
+        curr.push(Math.min(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost));
+      }
+      for (let j = 0; j < prev.length; j++) {
+        prev[j] = curr[j];
+      }
+    }
+    return prev[b.length];
+  }
+
+  /**
+   * Resolves the customer's serviceable store ONLY when explicit storeId or location is supplied.
+   * Strictly NEVER falls back to an arbitrary flagship store when location is missing or unserviceable.
    */
   async resolveServiceableStore(options?: {
     storeId?: string;
     postalCode?: string;
-  }): Promise<Seller | null> {
+    latitude?: number;
+    longitude?: number;
+  }): Promise<
+    (Seller & { profile?: any; businessHours?: any[]; distanceKm?: number | null }) | null
+  > {
     if (options?.storeId) {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         options.storeId,
@@ -62,13 +120,46 @@ export class ProductsService {
         },
         include: { profile: true },
       });
-      if (store) return store;
+      return store || null;
     }
 
-    if (options?.postalCode) {
+    const hasPostal = Boolean(options?.postalCode && options.postalCode.trim());
+    const hasCoords =
+      options?.latitude !== undefined &&
+      options?.longitude !== undefined &&
+      Number.isFinite(options.latitude) &&
+      Number.isFinite(options.longitude);
+
+    if (!hasPostal && !hasCoords) {
+      return null;
+    }
+
+    // Use StoresService for accurate radius + PIN + operational hours prioritization
+    if (this.storesService) {
+      const nearby = await this.storesService.findNearbyStores({
+        postalCode: options?.postalCode,
+        latitude: options?.latitude,
+        longitude: options?.longitude,
+      });
+
+      if (nearby.length === 0) {
+        return null;
+      }
+
+      const best = nearby[0];
+      const storeRecord = await this.prisma.seller.findFirst({
+        where: { id: best.id },
+        include: { profile: true },
+      });
+      if (!storeRecord) return null;
+      return { ...storeRecord, distanceKm: best.distanceKm };
+    }
+
+    // Direct DB PIN fallback when StoresService is omitted (e.g. isolated unit tests)
+    if (hasPostal) {
       const serviceArea = await this.prisma.sellerServiceArea.findFirst({
         where: {
-          postalCode: options.postalCode.trim(),
+          postalCode: options!.postalCode!.trim(),
           isActive: true,
           seller: {
             status: { in: [SellerStatus.APPROVED, SellerStatus.APPROVED_ACTIVE] },
@@ -78,17 +169,58 @@ export class ProductsService {
           seller: { include: { profile: true } },
         },
       });
-      if (serviceArea?.seller) return serviceArea.seller;
+      return serviceArea?.seller || null;
     }
 
-    // Default fallback: first active approved store
-    return this.prisma.seller.findFirst({
-      where: {
-        status: { in: [SellerStatus.APPROVED, SellerStatus.APPROVED_ACTIVE] },
-      },
-      include: { profile: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    return null;
+  }
+
+  /**
+   * Builds store metadata snapshot with real operational status & distance-aware delivery ETA.
+   */
+  private async buildStoreContextSummary(
+    store: (Seller & { profile?: any; distanceKm?: number | null }) | null,
+  ) {
+    if (!store) return null;
+
+    if (this.storesService) {
+      // Load businessHours if not present for accurate open/closed evaluation
+      const sellerWithHours = await this.prisma.seller.findUnique({
+        where: { id: store.id },
+        include: { profile: true, businessHours: { orderBy: { dayOfWeek: 'asc' } } },
+      });
+      const target = sellerWithHours || store;
+      const op = this.storesService.evaluateStoreOperationalStatus(target);
+      const eta = this.storesService.computeDeliveryEstimate(
+        target.profile?.preparationTime,
+        store.distanceKm ?? null,
+        op.isOpen,
+        op.isAcceptingOrders,
+      );
+
+      return {
+        id: store.id,
+        name: target.storeDisplayName || target.businessName,
+        slug: target.slug,
+        deliveryTimeMinutes: eta.deliveryTimeMinutes,
+        isOpen: op.isOpen,
+        isAcceptingOrders: op.isAcceptingOrders,
+        operationalStatusLabel: op.operationalStatusLabel,
+      };
+    }
+
+    return {
+      id: store.id,
+      name:
+        (store as any).profile?.storeDisplayName || store.storeDisplayName || store.businessName,
+      slug: store.slug,
+      deliveryTimeMinutes: (store as any).profile?.preparationTime
+        ? (store as any).profile.preparationTime + 10
+        : 15,
+      isOpen: true,
+      isAcceptingOrders: true,
+      operationalStatusLabel: 'Open',
+    };
   }
 
   /**
@@ -101,11 +233,21 @@ export class ProductsService {
     const page = query.page || 1;
     const limit = query.limit || 20;
 
+    const hasLocationContext = Boolean(
+      query.storeId ||
+      query.postalCode?.trim() ||
+      (query.latitude !== undefined && query.longitude !== undefined),
+    );
+
     // 1. Resolve store context
     const store = await this.resolveServiceableStore({
       storeId: query.storeId,
       postalCode: query.postalCode,
+      latitude: query.latitude,
+      longitude: query.longitude,
     });
+
+    const storeSummary = await this.buildStoreContextSummary(store);
 
     // 2. Build Prisma Where Clause for Master Catalog Products
     const where: any = {
@@ -171,98 +313,136 @@ export class ProductsService {
       ];
     }
 
-    // Free text keyword search with synonym expansion
-    if (query.q && query.q.trim()) {
-      const term = query.q.trim().toLowerCase();
-      const synonyms = SEARCH_SYNONYMS[term] || [];
-      const searchTerms = [term, ...synonyms];
+    // Free text keyword search with multi-word token + synonym expansion
+    const baseWhereWithoutSearch = { ...where };
+    const trimmedSearch = query.q?.trim().toLowerCase() || '';
 
-      const searchConditions = searchTerms.flatMap((word) => [
-        { name: { contains: word, mode: 'insensitive' } },
-        { brand: { contains: word, mode: 'insensitive' } },
-        { description: { contains: word, mode: 'insensitive' } },
-        { shortDescription: { contains: word, mode: 'insensitive' } },
-        { category: { name: { contains: word, mode: 'insensitive' } } },
-        { searchTags: { has: word } },
-      ]);
+    if (trimmedSearch) {
+      const tokens = trimmedSearch.split(/\s+/).filter(Boolean);
+      const tokenClauses = tokens.map((token) => {
+        const synonyms = SEARCH_SYNONYMS[token] || [];
+        const terms = Array.from(new Set([token, ...synonyms]));
+        return {
+          OR: terms.flatMap((word) => [
+            { name: { contains: word, mode: 'insensitive' } },
+            { brand: { contains: word, mode: 'insensitive' } },
+            { description: { contains: word, mode: 'insensitive' } },
+            { shortDescription: { contains: word, mode: 'insensitive' } },
+            { category: { name: { contains: word, mode: 'insensitive' } } },
+            { searchTags: { has: word } },
+          ]),
+        };
+      });
 
-      where.AND = [
-        ...(where.AND || []),
-        {
-          OR: searchConditions,
-        },
-      ];
+      where.AND = [...(where.AND || []), ...tokenClauses];
     }
 
-    // 3. Query Master Products with Variants & Images
-    const [, rawProducts] = await Promise.all([
-      this.prisma.product.count({ where }),
-      this.prisma.product.findMany({
-        where,
+    const productInclude: any = {
+      category: { select: { id: true, name: true, slug: true } },
+      brandRel: { select: { id: true, name: true, slug: true, logoUrl: true } },
+      images: {
+        where: { isPrimary: true },
+        take: 1,
+        select: { imageUrl: true },
+      },
+      variants: {
+        where: { isActive: true },
+        orderBy: { displayOrder: 'asc' },
         include: {
-          category: { select: { id: true, name: true, slug: true } },
-          brandRel: { select: { id: true, name: true, slug: true, logoUrl: true } },
           images: {
-            where: { isPrimary: true },
-            take: 1,
-            select: { imageUrl: true },
-          },
-          variants: {
-            where: { isActive: true },
             orderBy: { displayOrder: 'asc' },
-            include: {
-              images: {
-                orderBy: { displayOrder: 'asc' },
-                select: {
-                  id: true,
-                  imageUrl: true,
-                  publicId: true,
-                  altText: true,
-                  isPrimary: true,
-                  displayOrder: true,
+            select: {
+              id: true,
+              imageUrl: true,
+              publicId: true,
+              altText: true,
+              isPrimary: true,
+              displayOrder: true,
+            },
+          },
+        },
+      },
+      ...(store
+        ? {
+            sellerProducts: {
+              where: {
+                sellerId: store.id,
+                status: 'ACTIVE',
+                deletedAt: null,
+              },
+              include: {
+                inventory: {
+                  select: {
+                    availableQuantity: true,
+                    reservedQuantity: true,
+                    lowStockThreshold: true,
+                  },
                 },
               },
             },
-          },
-          ...(store
-            ? {
-                sellerProducts: {
-                  where: {
-                    sellerId: store.id,
-                    status: 'ACTIVE',
-                  },
-                  include: {
-                    inventory: {
-                      select: {
-                        availableQuantity: true,
-                        reservedQuantity: true,
-                      },
-                    },
-                  },
-                },
-              }
-            : {}),
-        },
+          }
+        : {}),
+    };
+
+    // 3. Query Master Products with Variants & Images
+    let [, rawProducts] = await Promise.all([
+      this.prisma.product.count({ where }),
+      this.prisma.product.findMany({
+        where,
+        include: productInclude,
+        orderBy: { createdAt: 'desc' },
       }),
     ]);
+
+    // Fuzzy typo fallback when exact token search returns zero results
+    if (trimmedSearch && rawProducts.length === 0 && trimmedSearch.length >= 3) {
+      const allActive = await this.prisma.product.findMany({
+        where: baseWhereWithoutSearch,
+        include: productInclude,
+        take: 150,
+      });
+
+      const searchWords = trimmedSearch.split(/\s+/).filter((w) => w.length >= 3);
+      rawProducts = allActive.filter((prod) => {
+        const candidateTokens = [
+          ...prod.name.toLowerCase().split(/\s+/),
+          ...(prod.brand ? prod.brand.toLowerCase().split(/\s+/) : []),
+          ...(prod.searchTags || []).map((t) => t.toLowerCase()),
+        ].filter((w) => w.length >= 3);
+
+        return searchWords.some((sw) =>
+          candidateTokens.some((ct) => {
+            if (ct.includes(sw) || sw.includes(ct)) return true;
+            const maxDist = sw.length >= 6 ? 2 : 1;
+            return this.levenshteinDistance(sw, ct) <= maxDist;
+          }),
+        );
+      });
+    }
+
+    const catalogTotalCount = rawProducts.length;
 
     // 4. Map & Merge Master Products with Store-Specific Pricing and Stock
     const mappedCards: ProductCardItem[] = [];
 
-    for (const prod of rawProducts) {
-      if (prod.variants.length === 0) continue;
+    for (const prod of rawProducts as any[]) {
+      if (!prod.variants || prod.variants.length === 0) continue;
 
-      // Create quick lookup for store inventory mapped to variants
       const storeListingsMap = new Map<string, any>();
-      if (store && (prod as any).sellerProducts) {
-        for (const sp of (prod as any).sellerProducts) {
+      if (store && prod.sellerProducts) {
+        for (const sp of prod.sellerProducts) {
           const key = sp.variantId || 'DEFAULT';
           storeListingsMap.set(key, sp);
         }
       }
 
-      // Map variants with store-specific data
-      const mappedVariants: ProductVariantItem[] = prod.variants.map((v) => {
+      if (query.onlyStoreListed && storeListingsMap.size === 0) {
+        continue;
+      }
+
+      let maxLowStockThreshold = 5;
+
+      const mappedVariants: ProductVariantItem[] = prod.variants.map((v: any) => {
         const storeListing = storeListingsMap.get(v.id) || storeListingsMap.get('DEFAULT');
         const mrp = Number(v.mrp);
 
@@ -275,8 +455,14 @@ export class ProductsService {
         if (storeListing) {
           sellingPrice = Number(storeListing.sellingPrice);
           availableQuantity = storeListing.inventory?.availableQuantity || 0;
-          isAvailable = availableQuantity > 0;
+          const storeAccepting = storeSummary
+            ? storeSummary.isAcceptingOrders && storeSummary.isOpen
+            : true;
+          isAvailable = availableQuantity > 0 && storeAccepting;
           sellerProductId = storeListing.id;
+          if (storeListing.inventory?.lowStockThreshold) {
+            maxLowStockThreshold = storeListing.inventory.lowStockThreshold;
+          }
         }
 
         if (mrp > 0 && sellingPrice < mrp) {
@@ -297,7 +483,7 @@ export class ProductsService {
           isActive: v.isActive,
           displayOrder: v.displayOrder,
           attributes: v.attributes as Record<string, unknown>,
-          images: v.images.map((img) => ({
+          images: (v.images || []).map((img: any) => ({
             id: img.id,
             imageUrl: img.imageUrl,
             publicId: img.publicId,
@@ -313,10 +499,19 @@ export class ProductsService {
         };
       });
 
-      // Default variant is the first active variant
-      const defaultVariant = mappedVariants[0];
+      // Prefer the first available variant as the default!
+      const defaultVariant =
+        mappedVariants.find((v) => v.isAvailable && (v.availableQuantity ?? 0) > 0) ||
+        mappedVariants.find((v) => Boolean(v.sellerProductId)) ||
+        mappedVariants[0];
 
-      // Check price range filter on store selling price
+      if (
+        query.inStockOnly &&
+        (!defaultVariant.isAvailable || (defaultVariant.availableQuantity ?? 0) <= 0)
+      ) {
+        continue;
+      }
+
       if (query.minPrice !== undefined && defaultVariant.sellingPrice! < query.minPrice) {
         continue;
       }
@@ -324,10 +519,13 @@ export class ProductsService {
         continue;
       }
 
-      // Check min discount filter
       if (query.minDiscount !== undefined && defaultVariant.discountPercent! < query.minDiscount) {
         continue;
       }
+
+      const availQty = defaultVariant.availableQuantity ?? 0;
+      const isAvail = Boolean(defaultVariant.isAvailable && availQty > 0);
+      const isLowStock = isAvail && availQty > 0 && availQty <= maxLowStockThreshold;
 
       mappedCards.push({
         id: prod.id,
@@ -339,33 +537,38 @@ export class ProductsService {
         foodPreference: prod.foodPreference,
         variants: mappedVariants,
         defaultVariant,
-        store: store
-          ? {
-              id: store.id,
-              name: (store as any).profile?.storeDisplayName || store.businessName,
-              deliveryTimeMinutes: (store as any).profile?.preparationTime
-                ? (store as any).profile.preparationTime + 10
-                : 15,
-            }
-          : null,
+        store: storeSummary,
         mrp: defaultVariant.mrp,
         sellingPrice: defaultVariant.sellingPrice!,
         discountPercent: defaultVariant.discountPercent!,
-        availableQuantity: defaultVariant.availableQuantity!,
-        isAvailable: defaultVariant.isAvailable!,
+        availableQuantity: availQty,
+        isAvailable: isAvail,
+        lowStockThreshold: maxLowStockThreshold,
+        isLowStock,
+        searchTags: prod.searchTags || [],
       });
     }
 
-    // 5. In-Memory Sorting by Store Values
-    if (query.sort === 'price_asc') {
-      mappedCards.sort((a, b) => a.sellingPrice - b.sellingPrice);
-    } else if (query.sort === 'price_desc') {
-      mappedCards.sort((a, b) => b.sellingPrice - a.sellingPrice);
-    } else if (query.sort === 'discount_desc') {
-      mappedCards.sort((a, b) => b.discountPercent - a.discountPercent);
-    } else if (query.sort === 'newest') {
-      // already sorted by createdAt
-    }
+    // 5. Partition In-Stock ahead of Out-Of-Stock (when store resolved) + Apply Sorting
+    const compareCards = (a: ProductCardItem, b: ProductCardItem): number => {
+      if (store) {
+        if (a.isAvailable !== b.isAvailable) {
+          return a.isAvailable ? -1 : 1;
+        }
+      }
+      if (query.sort === 'price_asc') {
+        return a.sellingPrice - b.sellingPrice;
+      }
+      if (query.sort === 'price_desc') {
+        return b.sellingPrice - a.sellingPrice;
+      }
+      if (query.sort === 'discount_desc') {
+        return b.discountPercent - a.discountPercent;
+      }
+      return 0;
+    };
+
+    mappedCards.sort(compareCards);
 
     // 6. Pagination on filtered set
     const total = mappedCards.length;
@@ -380,6 +583,14 @@ export class ProductsService {
       totalPages: Math.ceil(total / limit),
       hasNext: page * limit < total,
       hasPrevious: page > 1,
+      metaInfo: {
+        hasLocationContext,
+        isServiceable: Boolean(store),
+        storeId: store?.id || null,
+        storeName: storeSummary?.name || null,
+        storeSlug: store?.slug || null,
+        catalogTotalCount,
+      },
     };
   }
 
@@ -388,9 +599,10 @@ export class ProductsService {
    */
   async getProductBySlug(
     slug: string,
-    options?: { storeId?: string; postalCode?: string },
+    options?: { storeId?: string; postalCode?: string; latitude?: number; longitude?: number },
   ): Promise<ProductDetailItem> {
     const store = await this.resolveServiceableStore(options);
+    const storeSummary = await this.buildStoreContextSummary(store);
 
     const product = await this.prisma.product.findUnique({
       where: { slug },
@@ -444,12 +656,13 @@ export class ProductsService {
         ...(store
           ? {
               sellerProducts: {
-                where: { sellerId: store.id, status: 'ACTIVE' },
+                where: { sellerId: store.id, status: 'ACTIVE', deletedAt: null },
                 include: {
                   inventory: {
                     select: {
                       availableQuantity: true,
                       reservedQuantity: true,
+                      lowStockThreshold: true,
                     },
                   },
                 },
@@ -484,7 +697,10 @@ export class ProductsService {
       if (storeListing) {
         sellingPrice = Number(storeListing.sellingPrice);
         availableQuantity = storeListing.inventory?.availableQuantity || 0;
-        isAvailable = availableQuantity > 0;
+        const storeAccepting = storeSummary
+          ? storeSummary.isAcceptingOrders && storeSummary.isOpen
+          : true;
+        isAvailable = availableQuantity > 0 && storeAccepting;
         sellerProductId = storeListing.id;
       }
 
@@ -492,7 +708,6 @@ export class ProductsService {
         discountPercent = Math.round(((mrp - sellingPrice) / mrp) * 100);
       }
 
-      // Merge product-level images if variant has no specific images
       const images = v.images.length > 0 ? v.images : product.images;
 
       return {
@@ -547,14 +762,12 @@ export class ProductsService {
       searchTags: product.searchTags,
       status: product.status,
       variants: mappedVariants,
-      store: store
+      store: storeSummary
         ? {
-            id: store.id,
-            name: (store as any).profile?.storeDisplayName || store.businessName,
-            slug: store.slug,
-            deliveryTimeMinutes: (store as any).profile?.preparationTime
-              ? (store as any).profile.preparationTime + 10
-              : 15,
+            id: storeSummary.id,
+            name: storeSummary.name,
+            slug: storeSummary.slug,
+            deliveryTimeMinutes: storeSummary.deliveryTimeMinutes ?? undefined,
           }
         : null,
       createdAt: product.createdAt.toISOString(),
@@ -563,49 +776,66 @@ export class ProductsService {
   }
 
   /**
-   * Search Suggestions: Autocomplete across active products, brands, and categories.
+   * Search Suggestions: Autocomplete across active products (with store pricing & ADD metadata),
+   * brands, and categories. Supports Hinglish synonyms & location context.
    */
-  async getSearchSuggestions(q: string): Promise<{
-    products: { name: string; slug: string }[];
-    categories: { name: string; slug: string }[];
-    brands: { name: string; slug: string }[];
-  }> {
+  async getSearchSuggestions(
+    q: string,
+    location?: { storeId?: string; postalCode?: string; latitude?: number; longitude?: number },
+  ): Promise<SearchSuggestionsResponse> {
     if (!q || q.trim().length < 2) {
       return { products: [], categories: [], brands: [] };
     }
 
-    const term = q.trim();
+    const term = q.trim().toLowerCase();
+    const synonyms = SEARCH_SYNONYMS[term] || [];
+    const searchTerms = Array.from(new Set([term, ...synonyms]));
 
-    const [products, categories, brands] = await Promise.all([
-      this.prisma.product.findMany({
-        where: {
-          status: ProductStatus.ACTIVE,
-          deletedAt: null,
-          OR: [
-            { name: { contains: term, mode: 'insensitive' } },
-            { searchTags: { has: term.toLowerCase() } },
-          ],
-        },
-        select: { name: true, slug: true },
-        take: 5,
+    const [catalogMatch, categories, brands] = await Promise.all([
+      this.getCatalogProducts({
+        q: term,
+        limit: 5,
+        page: 1,
+        storeId: location?.storeId,
+        postalCode: location?.postalCode,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
       }),
       this.prisma.category.findMany({
         where: {
           isActive: true,
-          name: { contains: term, mode: 'insensitive' },
+          OR: searchTerms.map((word) => ({ name: { contains: word, mode: 'insensitive' } })),
         },
         select: { name: true, slug: true },
-        take: 3,
+        take: 4,
       }),
       this.prisma.brand.findMany({
         where: {
           isActive: true,
-          name: { contains: term, mode: 'insensitive' },
+          OR: searchTerms.map((word) => ({ name: { contains: word, mode: 'insensitive' } })),
         },
         select: { name: true, slug: true },
-        take: 3,
+        take: 4,
       }),
     ]);
+
+    const products: SearchSuggestionProductItem[] = catalogMatch.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      slug: item.slug,
+      brand: item.brand,
+      primaryImageUrl: item.primaryImageUrl,
+      defaultVariantId: item.defaultVariant?.id,
+      packSize: item.defaultVariant?.packSize || item.defaultVariant?.name || null,
+      mrp: item.mrp,
+      sellingPrice: item.sellingPrice,
+      discountPercent: item.discountPercent,
+      availableQuantity: item.availableQuantity,
+      isAvailable: item.isAvailable,
+      sellerProductId: item.defaultVariant?.sellerProductId,
+      storeId: item.store?.id || null,
+      storeName: item.store?.name || null,
+    }));
 
     return { products, categories, brands };
   }

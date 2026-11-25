@@ -71,6 +71,25 @@ export const ENDPOINTS = {
     BY_SLUG: (slug: string) => `/products/${slug}`,
     SEARCH_SUGGESTIONS: '/products/search/suggestions',
   },
+  STORES: {
+    NEARBY: '/stores/nearby',
+    BY_SLUG: (slug: string) => `/stores/${slug}`,
+    PRODUCTS: (slug: string) => `/stores/${slug}/products`,
+  },
+  LOCATIONS: {
+    REVERSE_GEOCODE: '/locations/reverse-geocode',
+    SERVICEABILITY: '/locations/serviceability',
+    SUGGESTIONS: '/locations/suggestions',
+    PLACES: '/locations/places',
+  },
+  CART: {
+    ROOT: '/cart',
+    ITEMS: '/cart/items',
+    ITEM_BY_ID: (itemId: string) => `/cart/items/${itemId}`,
+    COMPARE_STORE: '/cart/compare-store',
+    APPLY_STORE_SWITCH: '/cart/apply-store-switch',
+    SYNC: '/cart/sync',
+  },
   ADMIN_CATEGORIES: {
     LIST: '/admin/categories',
     DETAIL: (id: string) => `/admin/categories/${id}`,

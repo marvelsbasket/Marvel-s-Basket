@@ -8,19 +8,20 @@ import {
   ArrowUpDown,
   ChevronDown,
   ChevronRight,
-  Filter,
   MapPin,
   Search,
   ShoppingBag,
   SlidersHorizontal,
 } from 'lucide-react';
-import { CategoryTreeItem, ProductCardItem } from '@marvels-basket/shared';
+import { BrandItem, CategoryTreeItem, ProductCardItem } from '@marvels-basket/shared';
 import { StorefrontLayout } from '@/components/layout/storefront-layout';
 import { ProductCard } from '@/features/catalog/components/product-card';
 import { MobileSplitPaneProductCard } from '@/features/catalog/components/mobile-split-pane-card';
 import { MobileFilterDrawer, SortOption } from '@/features/catalog/components/mobile-filter-drawer';
 import { MobileVariantDrawer } from '@/features/catalog/components/mobile-variant-drawer';
 import { CatalogService } from '@/features/catalog/services/catalog.service';
+import { useLocation } from '@/features/location/context/location-context';
+import { useBasket } from '@/features/basket/context/basket-context';
 import { cn } from '@/lib/utils';
 
 /**
@@ -73,17 +74,26 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ slu
   const router = useRouter();
   const searchParams = useSearchParams();
   const subSlug = searchParams.get('sub');
+  const { isHydrated, location, activeStore, openLocationModal } = useLocation();
+  const { basket } = useBasket();
 
   const [category, setCategory] = useState<CategoryTreeItem | null>(null);
+  const [brands, setBrands] = useState<BrandItem[]>([]);
   const [selectedSubSlug, setSelectedSubSlug] = useState<string | null>(subSlug);
   const [products, setProducts] = useState<ProductCardItem[]>([]);
   const [totalProducts, setTotalProducts] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Filter & Sort States
-  const [foodPreference, setFoodPreference] = useState<string>('ALL');
-  const [sortBy, setSortBy] = useState<SortOption>('relevance');
-  const [inStockOnly, setInStockOnly] = useState<boolean>(false);
+  // Filter & Sort States (initialized from URL params for shareable links)
+  const [foodPreference, setFoodPreference] = useState<string>(searchParams.get('food') || 'ALL');
+  const [sortBy, setSortBy] = useState<SortOption>(
+    (searchParams.get('sort') as SortOption) || 'relevance',
+  );
+  const [inStockOnly, setInStockOnly] = useState<boolean>(searchParams.get('inStock') === 'true');
+  const [selectedBrandId, setSelectedBrandId] = useState<string>(searchParams.get('brand') || '');
+  const [minDiscount, setMinDiscount] = useState<number | null>(
+    searchParams.get('minDiscount') ? Number(searchParams.get('minDiscount')) : null,
+  );
 
   // Mobile Drawer States
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
@@ -98,11 +108,21 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ slu
   }, [subSlug]);
 
   useEffect(() => {
+    CatalogService.getActiveBrands()
+      .then((list) => setBrands(list))
+      .catch(() => setBrands([]));
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    let cancelled = false;
     async function fetchCategoryAndProducts() {
       setIsLoading(true);
       try {
         // 1. Fetch category details & hierarchy tree
         const cat = await CatalogService.getCategoryBySlug(slug);
+        if (cancelled) return;
         setCategory(cat);
 
         // 2. Determine target category ID (parent or specific subcategory)
@@ -114,31 +134,74 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ slu
           }
         }
 
-        // 3. Fetch products matching category & filters
+        // 3. Fetch products matching category, location, store & filters
         const res = await CatalogService.getProducts({
           categoryId: targetCategoryId,
           foodPreference: foodPreference !== 'ALL' ? foodPreference : undefined,
+          brandId: selectedBrandId || undefined,
+          minDiscount: minDiscount ?? undefined,
+          inStockOnly: inStockOnly || undefined,
           sort: sortBy,
+          storeId: activeStore?.id,
+          postalCode: location?.postalCode ?? undefined,
+          latitude: location?.latitude ?? undefined,
+          longitude: location?.longitude ?? undefined,
         });
 
-        let items = res.items || [];
-        if (inStockOnly) {
-          items = items.filter(
-            (p) => (p.availableQuantity ?? 0) > 0 && p.defaultVariant?.isAvailable !== false,
-          );
-        }
-
-        setProducts(items);
-        setTotalProducts(inStockOnly ? items.length : res.total || 0);
+        if (cancelled) return;
+        setProducts(res.items || []);
+        setTotalProducts(res.total || 0);
       } catch (err) {
         console.error('Failed to load category products:', err);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
 
     fetchCategoryAndProducts();
-  }, [slug, selectedSubSlug, foodPreference, sortBy, inStockOnly]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    slug,
+    selectedSubSlug,
+    foodPreference,
+    sortBy,
+    inStockOnly,
+    selectedBrandId,
+    minDiscount,
+    isHydrated,
+    activeStore?.id,
+    location?.postalCode,
+    location?.latitude,
+    location?.longitude,
+  ]);
+
+  // Keep URL query params in sync
+  useEffect(() => {
+    const qp = new URLSearchParams();
+    if (selectedSubSlug) qp.set('sub', selectedSubSlug);
+    if (foodPreference !== 'ALL') qp.set('food', foodPreference);
+    if (sortBy !== 'relevance') qp.set('sort', sortBy);
+    if (inStockOnly) qp.set('inStock', 'true');
+    if (selectedBrandId) qp.set('brand', selectedBrandId);
+    if (minDiscount) qp.set('minDiscount', String(minDiscount));
+
+    const qs = qp.toString();
+    const nextUrl = qs
+      ? `/categories/${category?.slug || slug}?${qs}`
+      : `/categories/${category?.slug || slug}`;
+    window.history.replaceState(null, '', nextUrl);
+  }, [
+    selectedSubSlug,
+    foodPreference,
+    sortBy,
+    inStockOnly,
+    selectedBrandId,
+    minDiscount,
+    category?.slug,
+    slug,
+  ]);
 
   // Determine active subcategory name
   const activeSubcategory =
@@ -148,10 +211,6 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ slu
 
   const handleSubcategorySelect = (subSlugToSelect: string | null) => {
     setSelectedSubSlug(subSlugToSelect);
-    const newUrl = subSlugToSelect
-      ? `/categories/${category?.slug || slug}?sub=${subSlugToSelect}`
-      : `/categories/${category?.slug || slug}`;
-    window.history.replaceState(null, '', newUrl);
     rightPaneRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -159,13 +218,19 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ slu
     setFoodPreference('ALL');
     setSortBy('relevance');
     setInStockOnly(false);
+    setSelectedBrandId('');
+    setMinDiscount(null);
   };
 
   const activeFilterCount =
-    (foodPreference !== 'ALL' ? 1 : 0) + (sortBy !== 'relevance' ? 1 : 0) + (inStockOnly ? 1 : 0);
+    (foodPreference !== 'ALL' ? 1 : 0) +
+    (sortBy !== 'relevance' ? 1 : 0) +
+    (inStockOnly ? 1 : 0) +
+    (selectedBrandId ? 1 : 0) +
+    (minDiscount ? 1 : 0);
 
   return (
-    <StorefrontLayout cartItemCount={2} hideMobileHeader={true} hideMobileFooter={true}>
+    <StorefrontLayout hideMobileHeader={true} hideMobileFooter={true}>
       {/* =================================================================== */}
       {/* 1. MOBILE VIEW: ZEPTO-STYLE SPLIT-PANE LISTING (< md breakpoint)     */}
       {/* =================================================================== */}
@@ -186,18 +251,24 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ slu
               <h1 className="text-sm font-black text-stone-900 truncate leading-snug">
                 {activeSubcategory ? activeSubcategory.name : category?.name || 'Category'}
               </h1>
-              <div className="flex items-center gap-1 text-[11px] font-semibold text-stone-500 leading-none">
+              <button
+                type="button"
+                onClick={openLocationModal}
+                className="flex items-center gap-1 text-[11px] font-semibold text-stone-500 leading-none"
+              >
                 <MapPin className="h-3 w-3 text-emerald-700 shrink-0" />
-                <span className="truncate max-w-[130px]">Azamgarh, UP</span>
+                <span className="truncate max-w-[140px]">
+                  {location?.displayLocation || 'Select location'}
+                </span>
                 <ChevronDown className="h-2.5 w-2.5 text-stone-400" />
-              </div>
+              </button>
             </div>
           </div>
 
           {/* Quick Search & Basket Actions */}
           <div className="flex items-center gap-1 shrink-0">
             <Link
-              href="/"
+              href="/search"
               aria-label="Search items"
               className="flex h-8 w-8 items-center justify-center rounded-full text-stone-700 hover:bg-stone-100"
             >
@@ -209,9 +280,11 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ slu
               className="relative flex h-8 w-8 items-center justify-center rounded-full text-emerald-800 hover:bg-emerald-50"
             >
               <ShoppingBag className="h-4 w-4" />
-              <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-cta px-1 text-[9px] font-black text-stone-900 shadow-2xs">
-                2
-              </span>
+              {basket.totalUnits > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-cta px-1 text-[9px] font-black text-stone-900 shadow-2xs">
+                  {basket.totalUnits}
+                </span>
+              )}
             </Link>
           </div>
         </header>
@@ -646,12 +719,59 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ slu
                   </button>
                 </div>
 
+                {/* Brand Selector (Desktop) */}
+                {brands.length > 0 && (
+                  <select
+                    value={selectedBrandId}
+                    onChange={(e) => setSelectedBrandId(e.target.value)}
+                    aria-label="Filter by brand"
+                    className="rounded-xl border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-bold text-stone-700 shadow-2xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="">All Brands</option>
+                    {brands.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* In-Stock Toggle (Desktop) */}
+                {activeStore && (
+                  <button
+                    type="button"
+                    onClick={() => setInStockOnly((v) => !v)}
+                    className={cn(
+                      'rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors shadow-2xs',
+                      inStockOnly
+                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                        : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
+                    )}
+                  >
+                    In Stock Only
+                  </button>
+                )}
+
+                {/* Discount Filter */}
+                <button
+                  type="button"
+                  onClick={() => setMinDiscount((prev) => (prev ? null : 10))}
+                  className={cn(
+                    'rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors shadow-2xs',
+                    minDiscount
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                      : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
+                  )}
+                >
+                  10%+ OFF
+                </button>
+
                 {/* Sort Selector */}
-                <div className="flex items-center rounded-xl border border-stone-200 bg-white px-2.5 py-1 shadow-2xs">
+                <div className="flex items-center rounded-xl border border-stone-200 bg-white px-2.5 py-1.5 shadow-2xs">
                   <ArrowUpDown className="h-3.5 w-3.5 text-stone-400 mr-1.5" />
                   <select
                     value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as any)}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
                     aria-label="Sort products"
                     className="bg-transparent text-xs font-bold text-stone-700 focus:outline-none cursor-pointer"
                   >
@@ -664,6 +784,55 @@ export default function CategoryProductsPage({ params }: { params: Promise<{ slu
                 </div>
               </div>
             </div>
+
+            {/* Active Filters Bar */}
+            {activeFilterCount > 0 && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
+                {foodPreference !== 'ALL' && (
+                  <button
+                    type="button"
+                    onClick={() => setFoodPreference('ALL')}
+                    className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 font-semibold text-emerald-800"
+                  >
+                    {foodPreference === 'VEG' ? 'Veg Only' : 'Non-Veg'} ×
+                  </button>
+                )}
+                {selectedBrandId && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBrandId('')}
+                    className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 font-semibold text-emerald-800"
+                  >
+                    Brand: {brands.find((b) => b.id === selectedBrandId)?.name || 'Selected'} ×
+                  </button>
+                )}
+                {inStockOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setInStockOnly(false)}
+                    className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 font-semibold text-emerald-800"
+                  >
+                    In Stock Only ×
+                  </button>
+                )}
+                {minDiscount && (
+                  <button
+                    type="button"
+                    onClick={() => setMinDiscount(null)}
+                    className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 font-semibold text-emerald-800"
+                  >
+                    {minDiscount}%+ OFF ×
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="font-bold text-brand hover:underline ml-1"
+                >
+                  Clear All
+                </button>
+              </div>
+            )}
 
             {/* Product Grid */}
             {isLoading ? (

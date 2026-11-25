@@ -68,8 +68,9 @@ export function AddressCard({
           </div>
 
           <p className="text-xs text-ink-muted leading-relaxed sm:text-sm">
-            {address.addressLine1}
-            {address.addressLine2 && `, ${address.addressLine2}`}
+            {[address.addressLine1, address.addressLine2, address.locality]
+              .filter(Boolean)
+              .join(', ')}
           </p>
 
           {address.landmark && (

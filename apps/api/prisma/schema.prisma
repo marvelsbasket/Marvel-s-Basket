@@ -221,6 +221,12 @@ enum NotificationChannel {
   PUSH
 }
 
+enum AddressType {
+  HOME
+  OFFICE
+  OTHER
+}
+
 // ==============================================================================
 // 3. IDENTITY & ACCESS MANAGEMENT (IAM)
 // ==============================================================================
@@ -368,23 +374,26 @@ model CustomerProfile {
 }
 
 model CustomerAddress {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  label         String   @default("Home")
-  recipientName String   @map("recipient_name")
-  phone         String
-  addressLine1  String   @map("address_line1")
-  addressLine2  String?  @map("address_line2")
-  landmark      String?
-  city          String
-  state         String
-  postalCode    String   @map("postal_code")
-  country       String   @default("India")
-  latitude      Decimal? @db.Decimal(10, 8)
-  longitude     Decimal? @db.Decimal(11, 8)
-  isDefault     Boolean  @default(false) @map("is_default")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id             String      @id @default(uuid()) @db.Uuid
+  userId         String      @map("user_id") @db.Uuid
+  addressType    AddressType @default(HOME) @map("address_type")
+  label          String      @default("Home")
+  recipientName  String      @map("recipient_name")
+  phone          String
+  forSomeoneElse Boolean     @default(false) @map("for_someone_else")
+  addressLine1   String      @map("address_line1")
+  addressLine2   String?     @map("address_line2")
+  landmark       String?
+  locality       String?
+  city           String
+  state          String
+  postalCode     String      @map("postal_code")
+  country        String      @default("India")
+  latitude       Decimal?    @db.Decimal(10, 8)
+  longitude      Decimal?    @db.Decimal(11, 8)
+  isDefault      Boolean     @default(false) @map("is_default")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
