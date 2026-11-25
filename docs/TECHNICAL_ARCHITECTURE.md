@@ -2244,6 +2244,12 @@ The initial release will prioritize reliability and correctness over unnecessary
 - **Checkout Preparation (`CheckoutModule`)**: `POST /api/v1/checkout/prepare`, `GET /api/v1/checkout/summary`, and `POST /api/v1/checkout/cancel` validate store operational hours (`Asia/Kolkata`), Haversine distance & radius serviceability, MOV, coupons, and price-change deltas before creating an immutable `CheckoutSession` and atomically reserving inventory for 15 minutes.
 - **BullMQ Expiration & Recovery (`InventoryModule`)**: `InventoryReservationService` schedules a delayed BullMQ job on `reservation-expiration` (`delay = 15m`) and uses guarded `UPDATE ... WHERE status = 'ACTIVE' AND expires_at > NOW()` / `<= NOW()` transitions so commit vs expiration races cannot double-mutate stock. `ReservationExpirationWorker` runs a Redis-locked 60s recovery sweep against PostgreSQL `expires_at`.
 
+## Phase 12 Addendum — Order Lifecycle & State Machine
+
+- **Order Creation (`OrdersService`)**: Creates single-store `Order` + immutable `OrderItem` & `addressSnapshot` + `OrderStatusHistory` + commits `StockReservation` (`commitReservationInTx`) + records `CouponUsage` + clears `Cart` inside one ACID transaction.
+- **State Machine (`OrderStateMachine`)**: Enforces `PENDING -> CONFIRMED -> PACKED -> OUT_FOR_DELIVERY -> DELIVERED`, pre-pack customer cancellation (`PENDING`/`CONFIRMED`), seller rejection (`PENDING`/`CONFIRMED`), and audited admin interventions.
+- **Idempotent Stock Restoration (`restoreOrderStockInTx`)**: Restores stock on pre-pack cancellation or seller rejection using per-item `idempotency_key` (`order-restore:<orderId>:<orderItemId>`).
+
 # 25. RELATED DOCUMENTATION
 
 The following documents define the complete project specification.

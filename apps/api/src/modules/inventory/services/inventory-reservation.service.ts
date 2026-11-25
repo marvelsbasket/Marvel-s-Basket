@@ -463,80 +463,205 @@ export class InventoryReservationService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      let committedCount = 0;
-
-      for (const r of reservations) {
-        // Guarded atomic state transition: only one concurrent caller (commit vs expire) can win
-        const transitioned = await tx.stockReservation.updateMany({
-          where: {
-            id: r.id,
-            status: StockReservationStatus.ACTIVE,
-            expiresAt: { gt: now },
-          },
-          data: {
-            status: StockReservationStatus.COMMITTED,
-            committedAt: now,
-            orderItemId: dto.orderId,
-          },
-        });
-
-        if (transitioned.count === 0) {
-          throw new BadRequestException(
-            `Reservation ${r.id} for checkout session ${dto.checkoutSessionId} could not be committed because it expired or was already transitioned.`,
-          );
-        }
-
-        const inv = await tx.inventory.findUnique({ where: { id: r.inventoryId } });
-        const baseInv = inv || r.inventory;
-        const currentStockOnHand = baseInv.stockOnHand;
-        const newStockOnHand = Math.max(0, currentStockOnHand - r.quantity);
-        const newReserved = Math.max(0, baseInv.reservedQuantity - r.quantity);
-
-        await tx.inventory.update({
-          where: { id: baseInv.id },
-          data: {
-            stockOnHand: newStockOnHand,
-            reservedQuantity: newReserved,
-            availableQuantity: newStockOnHand - newReserved,
-          },
-        });
-
-        await tx.inventoryTransaction.create({
-          data: {
-            inventoryId: baseInv.id,
-            type: InventoryTransactionType.ORDER_COMMITTED,
-            quantity: -r.quantity,
-            stockBefore: currentStockOnHand,
-            stockAfter: newStockOnHand,
-            referenceType: 'ORDER',
-            referenceId: dto.orderId || dto.checkoutSessionId,
-            note: `Stock committed for order checkout session ${dto.checkoutSessionId}`,
-            idempotencyKey: dto.idempotencyKey ? `${dto.idempotencyKey}:${r.id}` : undefined,
-          },
-        });
-
-        committedCount++;
-      }
-
-      if (this.isUuid(dto.checkoutSessionId)) {
-        await tx.checkoutSession.updateMany({
-          where: {
-            id: dto.checkoutSessionId,
-            status: CheckoutSessionStatus.RESERVATION_ACTIVE,
-          },
-          data: {
-            status: CheckoutSessionStatus.COMMITTED,
-            committedAt: now,
-          },
-        });
-      }
-
-      return {
-        checkoutSessionId: dto.checkoutSessionId,
-        status: StockReservationStatus.COMMITTED,
-        committedCount,
-      };
+      return this.commitReservationInTx(tx, {
+        ...dto,
+        reservations,
+      });
     });
+  }
+
+  /**
+   * Transaction-scoped reservation commit so Order creation can commit stock
+   * inside the same ACID database transaction.
+   */
+  async commitReservationInTx(
+    tx: Prisma.TransactionClient,
+    params: CommitReservationDto & {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      reservations?: any[];
+    },
+  ) {
+    const reservations =
+      params.reservations ||
+      (await tx.stockReservation.findMany({
+        where: { checkoutSessionId: params.checkoutSessionId },
+        include: { inventory: { include: { sellerProduct: true } } },
+        orderBy: { inventoryId: 'asc' },
+      }));
+
+    if (reservations.length === 0) {
+      throw new NotFoundException(
+        `No reservations found for checkout session ${params.checkoutSessionId}`,
+      );
+    }
+
+    const allCommitted = reservations.every((r) => r.status === StockReservationStatus.COMMITTED);
+    if (allCommitted) {
+      return {
+        checkoutSessionId: params.checkoutSessionId,
+        status: StockReservationStatus.COMMITTED,
+        committedCount: reservations.length,
+        message: 'Reservation already committed (idempotent)',
+      };
+    }
+
+    const now = new Date();
+    for (const r of reservations) {
+      if (
+        r.status === StockReservationStatus.EXPIRED ||
+        (r.status === StockReservationStatus.ACTIVE && r.expiresAt <= now)
+      ) {
+        throw new BadRequestException(
+          `Reservation for checkout session ${params.checkoutSessionId} has expired. Cannot commit an expired reservation. Please check stock and initiate refund if paid.`,
+        );
+      }
+      if (r.status === StockReservationStatus.RELEASED) {
+        throw new BadRequestException(
+          `Reservation for checkout session ${params.checkoutSessionId} has already been released.`,
+        );
+      }
+    }
+
+    let committedCount = 0;
+
+    for (const r of reservations) {
+      const transitioned = await tx.stockReservation.updateMany({
+        where: {
+          id: r.id,
+          status: StockReservationStatus.ACTIVE,
+          expiresAt: { gt: now },
+        },
+        data: {
+          status: StockReservationStatus.COMMITTED,
+          committedAt: now,
+          orderItemId: params.orderId,
+        },
+      });
+
+      if (transitioned.count === 0) {
+        throw new BadRequestException(
+          `Reservation ${r.id} for checkout session ${params.checkoutSessionId} could not be committed because it expired or was already transitioned.`,
+        );
+      }
+
+      const inv = await tx.inventory.findUnique({ where: { id: r.inventoryId } });
+      const baseInv = inv || r.inventory;
+      const currentStockOnHand = baseInv.stockOnHand;
+      const newStockOnHand = Math.max(0, currentStockOnHand - r.quantity);
+      const newReserved = Math.max(0, baseInv.reservedQuantity - r.quantity);
+
+      await tx.inventory.update({
+        where: { id: baseInv.id },
+        data: {
+          stockOnHand: newStockOnHand,
+          reservedQuantity: newReserved,
+          availableQuantity: newStockOnHand - newReserved,
+        },
+      });
+
+      await tx.inventoryTransaction.create({
+        data: {
+          inventoryId: baseInv.id,
+          type: InventoryTransactionType.ORDER_COMMITTED,
+          quantity: -r.quantity,
+          stockBefore: currentStockOnHand,
+          stockAfter: newStockOnHand,
+          referenceType: 'ORDER',
+          referenceId: params.orderId || params.checkoutSessionId,
+          note: `Stock committed for order checkout session ${params.checkoutSessionId}`,
+          idempotencyKey: params.idempotencyKey ? `${params.idempotencyKey}:${r.id}` : undefined,
+        },
+      });
+
+      committedCount++;
+    }
+
+    if (this.isUuid(params.checkoutSessionId)) {
+      await tx.checkoutSession.updateMany({
+        where: {
+          id: params.checkoutSessionId,
+          status: CheckoutSessionStatus.RESERVATION_ACTIVE,
+        },
+        data: {
+          status: CheckoutSessionStatus.COMMITTED,
+          committedAt: now,
+        },
+      });
+    }
+
+    return {
+      checkoutSessionId: params.checkoutSessionId,
+      status: StockReservationStatus.COMMITTED,
+      committedCount,
+    };
+  }
+
+  /**
+   * Idempotently restores committed stock when an order is cancelled or rejected
+   * prior to delivery. Never restores the same order item twice.
+   */
+  async restoreOrderStockInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      orderId: string;
+      reason: string;
+      actorId?: string;
+      items: Array<{ orderItemId: string; sellerProductId: string; quantity: number }>;
+    },
+  ): Promise<void> {
+    const sortedItems = [...params.items].sort((a, b) =>
+      a.sellerProductId.localeCompare(b.sellerProductId),
+    );
+
+    for (const item of sortedItems) {
+      const idempKey = `order-restore:${params.orderId}:${item.orderItemId}`;
+      const existing = await tx.inventoryTransaction.findFirst({
+        where: { idempotencyKey: idempKey },
+      });
+      if (existing) {
+        continue; // Already restored idempotently
+      }
+
+      const inv = await tx.inventory.findUnique({
+        where: { sellerProductId: item.sellerProductId },
+        include: { sellerProduct: true },
+      });
+      if (!inv) continue;
+
+      const stockBefore = inv.stockOnHand;
+      const newStockOnHand = stockBefore + item.quantity;
+      const newAvailable = newStockOnHand - inv.reservedQuantity;
+
+      await tx.inventory.update({
+        where: { id: inv.id },
+        data: {
+          stockOnHand: newStockOnHand,
+          availableQuantity: newAvailable,
+        },
+      });
+
+      if (newAvailable > 0 && inv.sellerProduct.status === SellerProductStatus.OUT_OF_STOCK) {
+        await tx.sellerProduct.update({
+          where: { id: inv.sellerProduct.id },
+          data: { status: SellerProductStatus.ACTIVE },
+        });
+      }
+
+      await tx.inventoryTransaction.create({
+        data: {
+          inventoryId: inv.id,
+          type: InventoryTransactionType.RESTOCK,
+          quantity: item.quantity,
+          stockBefore,
+          stockAfter: newStockOnHand,
+          referenceType: 'ORDER_CANCELLATION',
+          referenceId: params.orderId,
+          note: params.reason,
+          idempotencyKey: idempKey,
+          createdBy: params.actorId,
+        },
+      });
+    }
   }
 
   /**

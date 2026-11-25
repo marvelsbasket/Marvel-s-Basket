@@ -653,7 +653,7 @@ The backend must strictly enforce single-store cart limits and atomic inventory 
 # 14. Phase 12 — Order Management
 
 **Priority:** Critical  
-**Status:** Not Started
+**Status:** Completed (Verified on 25 November 2026)
 
 ### Objective
 
@@ -661,16 +661,16 @@ Implement single-store order creation and end-to-end lifecycle management.
 
 ### Tasks
 
-- [ ] Implement single-store order creation (direct mapping to `sellerId`).
-- [ ] Implement immutable `OrderItem` snapshots (product title, variant, SKU, price, MRP).
-- [ ] Implement immutable delivery address snapshot.
-- [ ] Implement order lifecycle state transitions (`PENDING -> CONFIRMED -> PACKED -> OUT_FOR_DELIVERY -> DELIVERED`).
-- [ ] Implement store order acceptance and packing workflow.
-- [ ] Implement lifecycle cancellation rules (free pre-pack, restricted post-pack, locked in transit).
-- [ ] Implement customer complaint workflows for perishables (3-4h) and packaged goods (24-48h).
-- [ ] Implement immutable `OrderStatusHistory` audit logs.
-- [ ] Build customer order details and tracking screens.
-- [ ] Build seller order packing screens.
+- [x] Implement single-store order creation (direct mapping to `sellerId`).
+- [x] Implement immutable `OrderItem` snapshots (product title, variant, SKU, price, MRP).
+- [x] Implement immutable delivery address snapshot.
+- [x] Implement order lifecycle state transitions (`PENDING -> CONFIRMED -> PACKED -> OUT_FOR_DELIVERY -> DELIVERED`).
+- [x] Implement store order acceptance and packing workflow.
+- [x] Implement lifecycle cancellation rules (free pre-pack, restricted post-pack, locked in transit).
+- [x] Implement customer complaint workflows for perishables (3-4h) and packaged goods (24-48h).
+- [x] Implement immutable `OrderStatusHistory` audit logs.
+- [x] Build customer order details and tracking screens.
+- [x] Build seller order packing screens.
 
 ### Deliverables
 

@@ -21,6 +21,7 @@ import { StoresModule } from './modules/stores/stores.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
+import { OrdersModule } from './modules/orders/orders.module';
 import { JwtAuthGuard, RolesGuard, PermissionsGuard } from './modules/auth/guards';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
@@ -74,6 +75,7 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     LocationsModule,
     CartModule,
     CheckoutModule,
+    OrdersModule,
     HealthModule,
   ],
   providers: [

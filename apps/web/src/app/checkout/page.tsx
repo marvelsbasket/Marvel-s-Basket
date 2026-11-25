@@ -24,6 +24,7 @@ import { AuthGuard } from '@/features/auth/components/auth-guard';
 import { useBasket } from '@/features/basket/context/basket-context';
 import { addressService } from '@/features/addresses/services/address.service';
 import { CheckoutService } from '@/features/checkout/services/checkout.service';
+import { OrdersService } from '@/features/orders/services/orders.service';
 import { ApiError } from '@/lib/api/errors';
 import { Button } from '@/components/ui/button';
 import { formatINR } from '@/lib/utils/currency';
@@ -53,6 +54,8 @@ function CheckoutContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [deliveryNotes, setDeliveryNotes] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [priceChanges, setPriceChanges] = useState<PriceChangeDelta[] | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
@@ -532,15 +535,57 @@ function CheckoutContent() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-brand/20 bg-brand-tint/60 p-3 text-xs text-ink space-y-1">
-                  <p className="font-bold text-brand flex items-center gap-1.5">
-                    <ShieldCheck className="h-4 w-4 shrink-0" />
-                    Checkout Ready for Order &amp; Payment
-                  </p>
-                  <p className="text-ink-secondary">
-                    Your inventory is atomically reserved. Order placement and Razorpay / COD
-                    payment integration connect here in Phases 12 &amp; 13.
-                  </p>
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-brand/25 bg-brand-tint/60 p-3 text-xs text-ink space-y-1">
+                    <p className="font-bold text-brand flex items-center gap-1.5">
+                      <ShieldCheck className="h-4 w-4 shrink-0" />
+                      Payment Method: Cash on Delivery (COD)
+                    </p>
+                    <p className="text-ink-secondary">
+                      Pay in cash or UPI at your doorstep. Online Razorpay checkout connects here in
+                      Phase 13.
+                    </p>
+                  </div>
+
+                  <textarea
+                    value={deliveryNotes}
+                    onChange={(e) => setDeliveryNotes(e.target.value)}
+                    placeholder="Optional delivery instructions (e.g., ring bell, leave at door)..."
+                    rows={2}
+                    className="w-full rounded-xl border border-border bg-white px-3 py-2 text-xs text-ink placeholder:text-muted focus:border-brand focus:outline-none"
+                  />
+
+                  <Button
+                    type="button"
+                    disabled={isExpired || isPreparing || isCancelling}
+                    isLoading={isPlacingOrder}
+                    onClick={async () => {
+                      if (!summary || isExpired) return;
+                      setIsPlacingOrder(true);
+                      setErrorMsg(null);
+                      try {
+                        const order = await OrdersService.createOrder({
+                          checkoutSessionId: summary.checkoutSessionId,
+                          paymentMethod: 'COD',
+                          idempotencyKey: `order:${summary.checkoutSessionId}`,
+                          notes: deliveryNotes.trim() || undefined,
+                        });
+                        notify(`Order ${order.orderNumber} placed!`, 'success');
+                        await refreshBasket();
+                        router.push(`/orders/${order.id}`);
+                      } catch (err) {
+                        const msg =
+                          err instanceof ApiError ? err.message : 'Unable to place order.';
+                        setErrorMsg(msg);
+                        notify(msg, 'error');
+                      } finally {
+                        setIsPlacingOrder(false);
+                      }
+                    }}
+                    className="w-full py-3.5 rounded-2xl bg-brand hover:bg-forest text-white font-black"
+                  >
+                    Place Order (COD) • {formatINR(summary.priceBreakdown.grandTotal)}
+                  </Button>
                 </div>
 
                 <Button
