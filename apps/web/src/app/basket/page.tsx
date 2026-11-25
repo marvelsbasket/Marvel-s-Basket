@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
   AlertTriangle,
@@ -12,7 +13,9 @@ import {
   ShoppingBag,
   Sparkles,
   Store,
+  Tag,
   Trash2,
+  X,
 } from 'lucide-react';
 import { CartRevalidationResponse } from '@marvels-basket/shared';
 import { StorefrontLayout } from '@/components/layout/storefront-layout';
@@ -24,12 +27,23 @@ import { formatINR, multiplyCurrency } from '@/lib/utils/currency';
 import { getOptimizedProductImage } from '@/lib/utils/cloudinary';
 
 export default function BasketPage() {
+  const router = useRouter();
   const { isAuthenticated } = useAuth();
-  const { basket, isLoading, isUpdating, updateQuantity, removeItem, clearBasket, refreshBasket } =
-    useBasket();
+  const {
+    basket,
+    isLoading,
+    isUpdating,
+    updateQuantity,
+    removeItem,
+    clearBasket,
+    refreshBasket,
+    applyCoupon,
+    removeCoupon,
+  } = useBasket();
 
   const [revalidation, setRevalidation] = useState<CartRevalidationResponse | null>(null);
-  const [showCheckoutPreviewNotice, setShowCheckoutPreviewNotice] = useState(false);
+  const [couponInput, setCouponInput] = useState('');
+  const [couponBusy, setCouponBusy] = useState(false);
 
   // Live stock & price revalidation whenever basket items load
   useEffect(() => {
@@ -64,8 +78,10 @@ export default function BasketPage() {
     };
   }, [basket.sellerId, basket.items]);
 
-  const mov = basket.store?.minimumOrderValue ?? null;
-  const belowMov = mov !== null && basket.subtotal < mov;
+  const mov = basket.minimumOrderValue ?? basket.store?.minimumOrderValue ?? null;
+  const belowMov = basket.belowMov ?? (mov !== null && basket.subtotal < mov);
+  const movRemaining =
+    basket.movRemaining ?? (mov !== null ? Math.max(0, mov - basket.subtotal) : 0);
   const storeClosed =
     basket.store !== null &&
     (basket.store.isOpen === false || basket.store.isAcceptingOrders === false);
@@ -346,10 +362,75 @@ export default function BasketPage() {
               <div className="rounded-2xl border border-border bg-white p-5 shadow-xs space-y-4 sticky top-24">
                 <h2 className="text-base font-bold text-ink">Basket Summary</h2>
 
+                {/* Platform Coupon Section */}
+                {isAuthenticated && (
+                  <div className="rounded-xl border border-border bg-surface-tile/60 p-3 space-y-2">
+                    {basket.appliedCouponCode ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-xs font-bold text-brand">
+                          <Tag className="h-3.5 w-3.5 shrink-0" />
+                          <span>{basket.appliedCouponCode}</span>
+                          {typeof basket.couponDiscount === 'number' &&
+                            basket.couponDiscount > 0 && (
+                              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-800">
+                                -{formatINR(basket.couponDiscount)}
+                              </span>
+                            )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={removeCoupon}
+                          disabled={isUpdating}
+                          aria-label="Remove coupon"
+                          className="text-xs font-semibold text-red-600 hover:underline inline-flex items-center gap-1"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!couponInput.trim()) return;
+                          setCouponBusy(true);
+                          const ok = await applyCoupon(couponInput.trim());
+                          if (ok) setCouponInput('');
+                          setCouponBusy(false);
+                        }}
+                        className="flex gap-2"
+                      >
+                        <input
+                          type="text"
+                          value={couponInput}
+                          onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                          placeholder="Enter coupon code (e.g. WELCOME50)"
+                          className="flex-1 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-ink placeholder:text-muted focus:border-brand focus:outline-none"
+                        />
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant="outline"
+                          isLoading={couponBusy}
+                          disabled={!couponInput.trim() || isUpdating}
+                          className="shrink-0 bg-white text-xs font-bold"
+                        >
+                          Apply
+                        </Button>
+                      </form>
+                    )}
+                    {basket.couponMessage && !basket.appliedCouponCode && (
+                      <p className="text-[11px] font-medium text-amber-700">
+                        {basket.couponMessage}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-2.5 text-sm">
                   <div className="flex justify-between text-ink-secondary">
-                    <span>Total MRP</span>
-                    <span>{formatINR(basket.totalMrp)}</span>
+                    <span>Item Subtotal</span>
+                    <span>{formatINR(basket.subtotal)}</span>
                   </div>
                   {basket.totalSavings > 0 && (
                     <div className="flex justify-between text-brand font-semibold">
@@ -357,9 +438,27 @@ export default function BasketPage() {
                       <span>-{formatINR(basket.totalSavings)}</span>
                     </div>
                   )}
+                  {typeof basket.couponDiscount === 'number' && basket.couponDiscount > 0 && (
+                    <div className="flex justify-between text-brand font-semibold">
+                      <span>Coupon Discount ({basket.appliedCouponCode})</span>
+                      <span>-{formatINR(basket.couponDiscount)}</span>
+                    </div>
+                  )}
+                  {typeof basket.deliveryFee === 'number' && (
+                    <div className="flex justify-between text-ink-secondary">
+                      <span>Estimated Delivery Fee</span>
+                      <span>
+                        {basket.deliveryFee === 0 ? (
+                          <span className="font-bold text-brand">FREE</span>
+                        ) : (
+                          formatINR(basket.deliveryFee)
+                        )}
+                      </span>
+                    </div>
+                  )}
                   <div className="border-t border-border pt-2.5 flex justify-between text-base font-black text-ink">
-                    <span>Subtotal</span>
-                    <span>{formatINR(basket.subtotal)}</span>
+                    <span>Estimated Total</span>
+                    <span>{formatINR(basket.estimatedTotal ?? basket.subtotal)}</span>
                   </div>
                 </div>
 
@@ -372,8 +471,8 @@ export default function BasketPage() {
 
                 {belowMov && mov !== null && (
                   <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-medium text-amber-900">
-                    Add <strong>{formatINR(mov - basket.subtotal)}</strong> more to meet this
-                    store&apos;s minimum order of {formatINR(mov)}.
+                    Add <strong>{formatINR(movRemaining)}</strong> more to unlock delivery (min.{' '}
+                    {formatINR(mov)}).
                   </div>
                 )}
 
@@ -389,22 +488,12 @@ export default function BasketPage() {
                   <Button
                     type="button"
                     disabled={storeClosed || hasStockProblems || belowMov}
-                    onClick={() => setShowCheckoutPreviewNotice(true)}
+                    onClick={() => router.push('/checkout')}
                     className="w-full py-3.5 rounded-2xl bg-brand hover:bg-forest text-white font-black"
                   >
                     <span>Proceed to Checkout</span>
                     <ArrowRight className="h-4 w-4 ml-1.5" />
                   </Button>
-                )}
-
-                {showCheckoutPreviewNotice && (
-                  <div className="rounded-xl border border-brand/25 bg-brand-tint p-3 text-xs text-ink">
-                    <p className="font-bold text-brand">Ready for Phase 11 Checkout</p>
-                    <p className="mt-0.5 text-ink-secondary">
-                      Your basket is synced with live store inventory. Order placement, delivery
-                      fees, coupons, and payments will connect here in Phase 11.
-                    </p>
-                  </div>
                 )}
               </div>
             </div>

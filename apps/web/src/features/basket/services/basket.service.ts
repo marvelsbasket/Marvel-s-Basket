@@ -72,6 +72,29 @@ export class BasketService {
     return res.data!;
   }
 
+  static async switchStore(payload: {
+    sellerProductId: string;
+    quantity: number;
+  }): Promise<BasketStateResponse> {
+    const res = await apiClient.post<BasketStateResponse>(ENDPOINTS.CART.SWITCH_STORE, payload);
+    return res.data!;
+  }
+
+  static async validateCart(): Promise<CartRevalidationResponse> {
+    const res = await apiClient.post<CartRevalidationResponse>(ENDPOINTS.CART.VALIDATE, {});
+    return res.data!;
+  }
+
+  static async applyCoupon(code: string): Promise<BasketStateResponse> {
+    const res = await apiClient.post<BasketStateResponse>(ENDPOINTS.CART.COUPON, { code });
+    return res.data!;
+  }
+
+  static async removeCoupon(): Promise<BasketStateResponse> {
+    const res = await apiClient.delete<BasketStateResponse>(ENDPOINTS.CART.COUPON);
+    return res.data!;
+  }
+
   static async revalidateCart(payload: {
     storeId: string;
     items: Array<{

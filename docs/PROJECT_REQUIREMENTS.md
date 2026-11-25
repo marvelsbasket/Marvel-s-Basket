@@ -1655,6 +1655,12 @@ No major scope change should be silently introduced into the project.
 
 ---
 
+## Phase 11 Verification — Cart & Checkout (Single Store)
+
+- Single-store basket enforcement with store-switch confirmation modal (`Switch your basket?`) and `/api/v1/cart/switch-store`.
+- Server-authoritative cart & checkout pricing, MOV progress (`Add ₹X more to unlock delivery`), distance-tiered delivery fee, and platform coupon validation (`/api/v1/cart/coupon`).
+- Atomic 15-minute inventory reservation (`StockReservation` + `CheckoutSession`) with BullMQ auto-release and `/checkout` server-synced countdown UI.
+
 # 26. DOCUMENT MAINTENANCE
 
 This document must be updated whenever approved functional or non-functional requirements change.

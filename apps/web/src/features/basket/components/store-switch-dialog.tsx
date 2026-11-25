@@ -10,6 +10,7 @@ interface StoreSwitchDialogProps {
   isOpen: boolean;
   onClose: () => void;
   currentStore: BasketStoreInfo | null;
+  currentItemCount?: number;
   targetStoreName: string;
   itemName: string;
   isSubmitting?: boolean;
@@ -20,6 +21,7 @@ export function StoreSwitchDialog({
   isOpen,
   onClose,
   currentStore,
+  currentItemCount,
   targetStoreName,
   itemName,
   isSubmitting = false,
@@ -33,14 +35,14 @@ export function StoreSwitchDialog({
       title={
         <div className="flex items-center gap-2 text-ink">
           <AlertTriangle className="h-5 w-5 text-amber-600" />
-          <span>Replace Basket Items?</span>
+          <span>Switch your basket?</span>
         </div>
       }
       description="Marvel's Basket fulfills each order from a single neighborhood store for faster 15–30 minute delivery."
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
-            Keep Current Basket
+            Cancel
           </Button>
           <Button
             variant="primary"
@@ -48,7 +50,7 @@ export function StoreSwitchDialog({
             isLoading={isSubmitting}
             className="bg-brand hover:bg-forest text-white"
           >
-            Replace Basket & Add
+            Clear Existing Basket &amp; Switch
           </Button>
         </>
       }
@@ -56,10 +58,17 @@ export function StoreSwitchDialog({
       <div className="space-y-4">
         <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-ink-2">
           <p>
-            Your basket currently contains items from{' '}
-            <strong className="text-ink">{currentStore?.name || 'another store'}</strong>. Adding{' '}
-            <strong className="text-ink">{itemName}</strong> from{' '}
-            <strong className="text-ink">{targetStoreName}</strong> will clear your existing basket.
+            Your basket contains{' '}
+            {currentItemCount ? (
+              <strong className="text-ink">
+                {currentItemCount} item{currentItemCount === 1 ? '' : 's'}
+              </strong>
+            ) : (
+              'items'
+            )}{' '}
+            from <strong className="text-ink">{currentStore?.name || 'another store'}</strong>.
+            Adding <strong className="text-ink">{itemName}</strong> from{' '}
+            <strong className="text-ink">{targetStoreName}</strong> will clear your current basket.
           </p>
         </div>
 

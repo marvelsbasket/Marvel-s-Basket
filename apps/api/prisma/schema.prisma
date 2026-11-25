@@ -122,6 +122,15 @@ enum StockReservationStatus {
   EXPIRED
 }
 
+enum CheckoutSessionStatus {
+  PREPARED
+  RESERVATION_ACTIVE
+  EXPIRED
+  RELEASED
+  COMMITTED
+  CANCELLED
+}
+
 enum OrderStatus {
   PENDING
   CONFIRMED
@@ -254,6 +263,7 @@ model User {
   seller                  Seller?                  @relation("UserToSeller")
   deliveryPartner         DeliveryPartner?
   cart                    Cart?
+  checkoutSessions        CheckoutSession[]        @relation("CustomerCheckoutSessions")
   orders                  Order[]                  @relation("CustomerOrders")
   reviews                 Review[]
   wishlist                Wishlist?
@@ -395,7 +405,8 @@ model CustomerAddress {
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkoutSessions CheckoutSession[]
 
   @@index([userId])
   @@index([postalCode])
@@ -458,6 +469,7 @@ model Seller {
   listings          SellerProduct[]
   orders            Order[]               @relation("SellerOrders")
   carts             Cart[]                @relation("SellerCarts")
+  checkoutSessions  CheckoutSession[]     @relation("SellerCheckoutSessions")
   commissionRecords CommissionRecord[]
   ledgerEntries     SellerLedgerEntry[]
   settlements       Settlement[]
@@ -838,18 +850,58 @@ model StockReservation {
 // ==============================================================================
 
 model Cart {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @unique @map("user_id") @db.Uuid
-  sellerId  String?  @map("seller_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @map("user_id") @db.Uuid
+  sellerId          String?  @map("seller_id") @db.Uuid
+  appliedCouponCode String?  @map("applied_coupon_code")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  seller Seller?    @relation("SellerCarts", fields: [sellerId], references: [id], onDelete: SetNull)
-  items  CartItem[]
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller           Seller?           @relation("SellerCarts", fields: [sellerId], references: [id], onDelete: SetNull)
+  items            CartItem[]
+  checkoutSessions CheckoutSession[]
 
   @@index([userId])
   @@map("carts")
+}
+
+model CheckoutSession {
+  id              String                @id @default(uuid()) @db.Uuid
+  userId          String                @map("user_id") @db.Uuid
+  cartId          String                @map("cart_id") @db.Uuid
+  sellerId        String                @map("seller_id") @db.Uuid
+  addressId       String                @map("address_id") @db.Uuid
+  addressSnapshot Json                  @map("address_snapshot")
+  couponId        String?               @map("coupon_id") @db.Uuid
+  couponCode      String?               @map("coupon_code")
+  status          CheckoutSessionStatus @default(RESERVATION_ACTIVE)
+  itemSubtotal    Decimal               @map("item_subtotal") @db.Decimal(12, 2)
+  productDiscount Decimal               @default(0) @map("product_discount") @db.Decimal(12, 2)
+  couponDiscount  Decimal               @default(0) @map("coupon_discount") @db.Decimal(12, 2)
+  deliveryFee     Decimal               @default(0) @map("delivery_fee") @db.Decimal(12, 2)
+  taxAmount       Decimal               @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  grandTotal      Decimal               @map("grand_total") @db.Decimal(12, 2)
+  distanceKm      Decimal?              @map("distance_km") @db.Decimal(6, 2)
+  itemsSnapshot   Json                  @map("items_snapshot")
+  idempotencyKey  String?               @map("idempotency_key")
+  expiresAt       DateTime              @map("expires_at")
+  committedAt     DateTime?             @map("committed_at")
+  releasedAt      DateTime?             @map("released_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+
+  user    User            @relation("CustomerCheckoutSessions", fields: [userId], references: [id], onDelete: Cascade)
+  cart    Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  seller  Seller          @relation("SellerCheckoutSessions", fields: [sellerId], references: [id], onDelete: Restrict)
+  address CustomerAddress @relation(fields: [addressId], references: [id], onDelete: Restrict)
+  coupon  Coupon?         @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([expiresAt])
+  @@index([sellerId])
+  @@index([idempotencyKey])
+  @@map("checkout_sessions")
 }
 
 model CartItem {
@@ -1271,7 +1323,8 @@ model Coupon {
   createdAt          DateTime     @default(now()) @map("created_at")
   updatedAt          DateTime     @updatedAt @map("updated_at")
 
-  usages CouponUsage[]
+  usages           CouponUsage[]
+  checkoutSessions CheckoutSession[]
 
   @@index([code])
   @@index([isActive])

@@ -1,6 +1,7 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { BullModule } from '@nestjs/bullmq';
 import configuration from './config/configuration';
 import { environmentValidationSchema } from './config/validation.schema';
 import { PrismaModule } from './database/prisma.module';
@@ -19,6 +20,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { StoresModule } from './modules/stores/stores.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { CartModule } from './modules/cart/cart.module';
+import { CheckoutModule } from './modules/checkout/checkout.module';
 import { JwtAuthGuard, RolesGuard, PermissionsGuard } from './modules/auth/guards';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
@@ -36,6 +38,28 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     }),
     PrismaModule,
     RedisModule,
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('redis.url');
+        if (redisUrl) {
+          return {
+            connection: {
+              url: redisUrl,
+              maxRetriesPerRequest: null,
+            },
+          };
+        }
+        return {
+          connection: {
+            host: configService.get<string>('redis.host') || 'localhost',
+            port: configService.get<number>('redis.port') || 6380,
+            password: configService.get<string>('redis.password') || undefined,
+            maxRetriesPerRequest: null,
+          },
+        };
+      },
+    }),
     EmailModule,
     AuthModule,
     UsersModule,
@@ -49,6 +73,7 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     StoresModule,
     LocationsModule,
     CartModule,
+    CheckoutModule,
     HealthModule,
   ],
   providers: [

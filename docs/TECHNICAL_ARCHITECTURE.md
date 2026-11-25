@@ -2238,6 +2238,12 @@ The initial release will prioritize reliability and correctness over unnecessary
 
 ---
 
+## Phase 11 Addendum — Cart, Checkout & BullMQ Reservation Architecture
+
+- **Cart & Pricing (`CartModule` / `PricingService`)**: Enforces single-store cart ownership (`Cart.sellerId`), releases active checkout reservations on cart mutation or `/api/v1/cart/switch-store`, validates `sellingPrice <= MRP`, and computes all monetary amounts in integer paise from `PlatformSetting` (`minimum_order_value`, `delivery_fee_tiers`, `default_delivery_fee`, `free_delivery_threshold`, `tax_rate_percent`, `max_cart_item_quantity`).
+- **Checkout Preparation (`CheckoutModule`)**: `POST /api/v1/checkout/prepare`, `GET /api/v1/checkout/summary`, and `POST /api/v1/checkout/cancel` validate store operational hours (`Asia/Kolkata`), Haversine distance & radius serviceability, MOV, coupons, and price-change deltas before creating an immutable `CheckoutSession` and atomically reserving inventory for 15 minutes.
+- **BullMQ Expiration & Recovery (`InventoryModule`)**: `InventoryReservationService` schedules a delayed BullMQ job on `reservation-expiration` (`delay = 15m`) and uses guarded `UPDATE ... WHERE status = 'ACTIVE' AND expires_at > NOW()` / `<= NOW()` transitions so commit vs expiration races cannot double-mutate stock. `ReservationExpirationWorker` runs a Redis-locked 60s recovery sweep against PostgreSQL `expires_at`.
+
 # 25. RELATED DOCUMENTATION
 
 The following documents define the complete project specification.

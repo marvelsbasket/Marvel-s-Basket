@@ -32,6 +32,10 @@ describe('InventoryReservationService', () => {
       count: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    checkoutSession: {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     inventoryTransaction: {
       findFirst: jest.fn(),
@@ -50,6 +54,8 @@ describe('InventoryReservationService', () => {
     service = module.get<InventoryReservationService>(InventoryReservationService);
     prisma = module.get<PrismaService>(PrismaService);
     jest.clearAllMocks();
+    mockPrisma.stockReservation.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.checkoutSession.updateMany.mockResolvedValue({ count: 1 });
   });
 
   describe('revalidateCart', () => {
@@ -202,11 +208,19 @@ describe('InventoryReservationService', () => {
 
   describe('commitReservation', () => {
     it('should decrease stock on hand and reserved stock and transition status to COMMITTED', async () => {
+      mockPrisma.inventory.findUnique.mockResolvedValue({
+        id: 'inv-1',
+        stockOnHand: 50,
+        reservedQuantity: 2,
+        availableQuantity: 48,
+      });
       mockPrisma.stockReservation.findMany.mockResolvedValue([
         {
           id: 'res-1',
+          inventoryId: 'inv-1',
           quantity: 2,
           status: StockReservationStatus.ACTIVE,
+          expiresAt: new Date(Date.now() + 600000),
           inventory: {
             id: 'inv-1',
             stockOnHand: 50,
@@ -231,8 +245,11 @@ describe('InventoryReservationService', () => {
           availableQuantity: 48,
         },
       });
-      expect(mockPrisma.stockReservation.update).toHaveBeenCalledWith({
-        where: { id: 'res-1' },
+      expect(mockPrisma.stockReservation.updateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          id: 'res-1',
+          status: StockReservationStatus.ACTIVE,
+        }),
         data: expect.objectContaining({
           status: StockReservationStatus.COMMITTED,
         }),
@@ -269,9 +286,17 @@ describe('InventoryReservationService', () => {
 
   describe('releaseReservation', () => {
     it('should restore available stock and decrement reserved stock', async () => {
+      mockPrisma.inventory.findUnique.mockResolvedValue({
+        id: 'inv-1',
+        stockOnHand: 50,
+        reservedQuantity: 3,
+        availableQuantity: 47,
+        sellerProduct: { id: 'listing-1', status: SellerProductStatus.OUT_OF_STOCK },
+      });
       mockPrisma.stockReservation.findMany.mockResolvedValue([
         {
           id: 'res-1',
+          inventoryId: 'inv-1',
           quantity: 3,
           status: StockReservationStatus.ACTIVE,
           inventory: {

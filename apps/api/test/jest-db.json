@@ -5,6 +5,9 @@
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(@nestjs/bullmq|@nestjs/bull-shared|bullmq|msgpackr)/)"
+  ],
   "testEnvironment": "node",
   "testTimeout": 30000
 }

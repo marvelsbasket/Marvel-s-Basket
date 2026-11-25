@@ -4,7 +4,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../../../database/prisma.service';
 import {
   CommitReservationDto,
@@ -14,7 +17,9 @@ import {
   RevalidateCartDto,
 } from '../dto';
 import {
+  CheckoutSessionStatus,
   InventoryTransactionType,
+  Prisma,
   ProductStatus,
   SellerProductStatus,
   SellerStatus,
@@ -22,11 +27,52 @@ import {
 } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
+export const RESERVATION_EXPIRATION_QUEUE = 'reservation-expiration';
+export const DEFAULT_RESERVATION_TTL_MINUTES = 15;
+
 @Injectable()
 export class InventoryReservationService {
   private readonly logger = new Logger(InventoryReservationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    @InjectQueue(RESERVATION_EXPIRATION_QUEUE)
+    private readonly expirationQueue?: Queue,
+  ) {}
+
+  private isUuid(val?: string | null): boolean {
+    if (!val) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+  }
+
+  /**
+   * Schedules a BullMQ delayed expiration job for a checkout session.
+   * Database `expiresAt` remains the source of truth; BullMQ is the primary trigger.
+   */
+  async scheduleExpirationJob(checkoutSessionId: string, expiresAt: Date): Promise<void> {
+    if (!this.expirationQueue || !checkoutSessionId) return;
+    try {
+      const delayMs = Math.max(0, expiresAt.getTime() - Date.now()) + 1000; // +1s buffer past exact expiresAt
+      await this.expirationQueue.add(
+        'expire-checkout-reservation',
+        { checkoutSessionId },
+        {
+          jobId: `expire-${checkoutSessionId}`,
+          delay: delayMs,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+          removeOnFail: 100,
+        },
+      );
+    } catch (err) {
+      // Non-fatal: the recovery sweep worker guarantees eventual expiration from DB
+      this.logger.warn(
+        `Failed to enqueue BullMQ expiration job for session ${checkoutSessionId}: ${(err as Error).message}`,
+      );
+    }
+  }
 
   /**
    * Revalidates customer basket items against current store prices and available stock.
@@ -165,7 +211,7 @@ export class InventoryReservationService {
    * 4. Multi-item Atomic Transaction: Succeeds completely or rolls back entirely without partial deductions.
    */
   async createReservation(dto: CreateStockReservationDto) {
-    const ttlMinutes = dto.ttlMinutes || 10;
+    const ttlMinutes = dto.ttlMinutes || DEFAULT_RESERVATION_TTL_MINUTES;
     const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
 
     // 1. Check Idempotency Key
@@ -272,18 +318,12 @@ export class InventoryReservationService {
     resolvedItems.sort((a, b) => a.inventoryId.localeCompare(b.inventoryId));
 
     // 5. Execute Atomic Database Transaction with Parameterized Conditional Update
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const createdReservations = [];
 
       for (const item of resolvedItems) {
-        // Eagerly expire any existing outdated reservations on this item
-        await tx.$executeRaw`
-          UPDATE "stock_reservations"
-          SET "status" = 'EXPIRED'
-          WHERE "inventory_id" = ${item.inventoryId}::uuid
-            AND "status" = 'ACTIVE'
-            AND "expires_at" <= NOW()
-        `;
+        // Eagerly expire any existing outdated reservations on this item and restore their reserved_quantity
+        await this.expireOutdatedReservationsForItemTx(tx, item.inventoryId);
 
         // ATOMIC CONDITIONAL UPDATE (Section 8.A)
         // Only increments reserved_quantity if (stock_on_hand - reserved_quantity) >= quantity
@@ -328,6 +368,23 @@ export class InventoryReservationService {
           },
         });
 
+        // Append RESERVATION_HOLD to audit ledger
+        await tx.inventoryTransaction.create({
+          data: {
+            inventoryId: item.inventoryId,
+            type: InventoryTransactionType.RESERVATION_HOLD,
+            quantity: item.quantity,
+            stockBefore: invState.stock_on_hand,
+            stockAfter: invState.stock_on_hand,
+            referenceType: 'CHECKOUT_SESSION',
+            referenceId: dto.checkoutSessionId,
+            note: `Reserved ${item.quantity} unit(s) for ${ttlMinutes}m checkout session`,
+            idempotencyKey: dto.idempotencyKey
+              ? `${dto.idempotencyKey}:hold:${reservation.id}`
+              : undefined,
+          },
+        });
+
         // If available quantity reached 0, mark listing OUT_OF_STOCK
         if (invState.available_quantity === 0) {
           await tx.sellerProduct.update({
@@ -353,6 +410,9 @@ export class InventoryReservationService {
         })),
       };
     });
+
+    await this.scheduleExpirationJob(dto.checkoutSessionId, expiresAt);
+    return result;
   }
 
   /**
@@ -364,6 +424,7 @@ export class InventoryReservationService {
     const reservations = await this.prisma.stockReservation.findMany({
       where: { checkoutSessionId: dto.checkoutSessionId },
       include: { inventory: { include: { sellerProduct: true } } },
+      orderBy: { inventoryId: 'asc' },
     });
 
     if (reservations.length === 0) {
@@ -383,9 +444,13 @@ export class InventoryReservationService {
       };
     }
 
-    // Verify all reservations are currently ACTIVE
+    const now = new Date();
+    // Verify all reservations are currently ACTIVE and not past expiresAt
     for (const r of reservations) {
-      if (r.status === StockReservationStatus.EXPIRED) {
+      if (
+        r.status === StockReservationStatus.EXPIRED ||
+        (r.status === StockReservationStatus.ACTIVE && r.expiresAt <= now)
+      ) {
         throw new BadRequestException(
           `Reservation for checkout session ${dto.checkoutSessionId} has expired. Cannot commit an expired reservation. Please check stock and initiate refund if paid.`,
         );
@@ -398,15 +463,37 @@ export class InventoryReservationService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      for (const r of reservations) {
-        const inv = r.inventory;
-        const currentStockOnHand = inv.stockOnHand;
-        const newStockOnHand = Math.max(0, currentStockOnHand - r.quantity);
-        const newReserved = Math.max(0, inv.reservedQuantity - r.quantity);
+      let committedCount = 0;
 
-        // Update inventory: decrease stock on hand and reserved quantity
+      for (const r of reservations) {
+        // Guarded atomic state transition: only one concurrent caller (commit vs expire) can win
+        const transitioned = await tx.stockReservation.updateMany({
+          where: {
+            id: r.id,
+            status: StockReservationStatus.ACTIVE,
+            expiresAt: { gt: now },
+          },
+          data: {
+            status: StockReservationStatus.COMMITTED,
+            committedAt: now,
+            orderItemId: dto.orderId,
+          },
+        });
+
+        if (transitioned.count === 0) {
+          throw new BadRequestException(
+            `Reservation ${r.id} for checkout session ${dto.checkoutSessionId} could not be committed because it expired or was already transitioned.`,
+          );
+        }
+
+        const inv = await tx.inventory.findUnique({ where: { id: r.inventoryId } });
+        const baseInv = inv || r.inventory;
+        const currentStockOnHand = baseInv.stockOnHand;
+        const newStockOnHand = Math.max(0, currentStockOnHand - r.quantity);
+        const newReserved = Math.max(0, baseInv.reservedQuantity - r.quantity);
+
         await tx.inventory.update({
-          where: { id: inv.id },
+          where: { id: baseInv.id },
           data: {
             stockOnHand: newStockOnHand,
             reservedQuantity: newReserved,
@@ -414,20 +501,9 @@ export class InventoryReservationService {
           },
         });
 
-        // Mark reservation as COMMITTED
-        await tx.stockReservation.update({
-          where: { id: r.id },
-          data: {
-            status: StockReservationStatus.COMMITTED,
-            committedAt: new Date(),
-            orderItemId: dto.orderId,
-          },
-        });
-
-        // Append ORDER_COMMITTED to audit ledger
         await tx.inventoryTransaction.create({
           data: {
-            inventoryId: inv.id,
+            inventoryId: baseInv.id,
             type: InventoryTransactionType.ORDER_COMMITTED,
             quantity: -r.quantity,
             stockBefore: currentStockOnHand,
@@ -438,12 +514,27 @@ export class InventoryReservationService {
             idempotencyKey: dto.idempotencyKey ? `${dto.idempotencyKey}:${r.id}` : undefined,
           },
         });
+
+        committedCount++;
+      }
+
+      if (this.isUuid(dto.checkoutSessionId)) {
+        await tx.checkoutSession.updateMany({
+          where: {
+            id: dto.checkoutSessionId,
+            status: CheckoutSessionStatus.RESERVATION_ACTIVE,
+          },
+          data: {
+            status: CheckoutSessionStatus.COMMITTED,
+            committedAt: now,
+          },
+        });
       }
 
       return {
         checkoutSessionId: dto.checkoutSessionId,
         status: StockReservationStatus.COMMITTED,
-        committedCount: reservations.length,
+        committedCount,
       };
     });
   }
@@ -459,10 +550,10 @@ export class InventoryReservationService {
         status: StockReservationStatus.ACTIVE,
       },
       include: { inventory: { include: { sellerProduct: true } } },
+      orderBy: { inventoryId: 'asc' },
     });
 
     if (reservations.length === 0) {
-      // Check if already released
       const releasedCount = await this.prisma.stockReservation.count({
         where: {
           checkoutSessionId: dto.checkoutSessionId,
@@ -483,13 +574,150 @@ export class InventoryReservationService {
       };
     }
 
+    const now = new Date();
     return this.prisma.$transaction(async (tx) => {
+      let releasedCount = 0;
+
       for (const r of reservations) {
-        const inv = r.inventory;
+        const transitioned = await tx.stockReservation.updateMany({
+          where: {
+            id: r.id,
+            status: StockReservationStatus.ACTIVE,
+          },
+          data: {
+            status: StockReservationStatus.RELEASED,
+            releasedAt: now,
+          },
+        });
+
+        if (transitioned.count === 0) {
+          continue; // Already transitioned by another concurrent caller
+        }
+
+        const inv = await tx.inventory.findUnique({
+          where: { id: r.inventoryId },
+          include: { sellerProduct: true },
+        });
+        const baseInv = inv || r.inventory;
+        const newReserved = Math.max(0, baseInv.reservedQuantity - r.quantity);
+        const newAvailable = baseInv.stockOnHand - newReserved;
+
+        await tx.inventory.update({
+          where: { id: baseInv.id },
+          data: {
+            reservedQuantity: newReserved,
+            availableQuantity: newAvailable,
+          },
+        });
+
+        if (
+          newAvailable > 0 &&
+          baseInv.sellerProduct?.status === SellerProductStatus.OUT_OF_STOCK
+        ) {
+          await tx.sellerProduct.update({
+            where: { id: baseInv.sellerProduct.id },
+            data: { status: SellerProductStatus.ACTIVE },
+          });
+        }
+
+        await tx.inventoryTransaction.create({
+          data: {
+            inventoryId: baseInv.id,
+            type: InventoryTransactionType.RESERVATION_RELEASE,
+            quantity: r.quantity,
+            stockBefore: baseInv.stockOnHand,
+            stockAfter: baseInv.stockOnHand,
+            referenceType: 'CHECKOUT_SESSION',
+            referenceId: dto.checkoutSessionId,
+            note: dto.reason || 'Reservation released due to cancellation or timeout',
+            idempotencyKey: dto.idempotencyKey ? `${dto.idempotencyKey}:${r.id}` : undefined,
+          },
+        });
+
+        releasedCount++;
+      }
+
+      if (this.isUuid(dto.checkoutSessionId)) {
+        await tx.checkoutSession.updateMany({
+          where: {
+            id: dto.checkoutSessionId,
+            status: CheckoutSessionStatus.RESERVATION_ACTIVE,
+          },
+          data: {
+            status: CheckoutSessionStatus.RELEASED,
+            releasedAt: now,
+          },
+        });
+      }
+
+      return {
+        checkoutSessionId: dto.checkoutSessionId,
+        status: StockReservationStatus.RELEASED,
+        releasedCount,
+      };
+    });
+  }
+
+  /**
+   * EXPIRE A SPECIFIC CHECKOUT SESSION RESERVATION (Called by BullMQ delayed job or checkout summary check)
+   * Guarded by DB `status = ACTIVE` and `expiresAt <= NOW()`.
+   */
+  async expireSessionReservation(checkoutSessionId: string): Promise<{ releasedCount: number }> {
+    const now = new Date();
+    const expiredReservations = await this.prisma.stockReservation.findMany({
+      where: {
+        checkoutSessionId,
+        status: StockReservationStatus.ACTIVE,
+        expiresAt: { lte: now },
+      },
+      orderBy: { inventoryId: 'asc' },
+    });
+
+    if (expiredReservations.length === 0) {
+      // Also ensure CheckoutSession is marked EXPIRED if past expiresAt
+      if (this.isUuid(checkoutSessionId)) {
+        await this.prisma.checkoutSession.updateMany({
+          where: {
+            id: checkoutSessionId,
+            status: CheckoutSessionStatus.RESERVATION_ACTIVE,
+            expiresAt: { lte: now },
+          },
+          data: {
+            status: CheckoutSessionStatus.EXPIRED,
+            releasedAt: now,
+          },
+        });
+      }
+      return { releasedCount: 0 };
+    }
+
+    let releasedCount = 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const r of expiredReservations) {
+        const transitioned = await tx.stockReservation.updateMany({
+          where: {
+            id: r.id,
+            status: StockReservationStatus.ACTIVE,
+            expiresAt: { lte: now },
+          },
+          data: {
+            status: StockReservationStatus.EXPIRED,
+            releasedAt: now,
+          },
+        });
+
+        if (transitioned.count === 0) continue;
+
+        const inv = await tx.inventory.findUnique({
+          where: { id: r.inventoryId },
+          include: { sellerProduct: true },
+        });
+        if (!inv) continue;
+
         const newReserved = Math.max(0, inv.reservedQuantity - r.quantity);
         const newAvailable = inv.stockOnHand - newReserved;
 
-        // Restore available quantity and decrement reserved
         await tx.inventory.update({
           where: { id: inv.id },
           data: {
@@ -498,27 +726,13 @@ export class InventoryReservationService {
           },
         });
 
-        // If listing was OUT_OF_STOCK and stock is now available, restore ACTIVE status
-        if (
-          newAvailable > 0 &&
-          r.inventory.sellerProduct.status === SellerProductStatus.OUT_OF_STOCK
-        ) {
+        if (newAvailable > 0 && inv.sellerProduct.status === SellerProductStatus.OUT_OF_STOCK) {
           await tx.sellerProduct.update({
-            where: { id: r.inventory.sellerProduct.id },
+            where: { id: inv.sellerProduct.id },
             data: { status: SellerProductStatus.ACTIVE },
           });
         }
 
-        // Mark reservation as RELEASED
-        await tx.stockReservation.update({
-          where: { id: r.id },
-          data: {
-            status: StockReservationStatus.RELEASED,
-            releasedAt: new Date(),
-          },
-        });
-
-        // Append RESERVATION_RELEASE to ledger
         await tx.inventoryTransaction.create({
           data: {
             inventoryId: inv.id,
@@ -526,24 +740,41 @@ export class InventoryReservationService {
             quantity: r.quantity,
             stockBefore: inv.stockOnHand,
             stockAfter: inv.stockOnHand,
-            referenceType: 'CHECKOUT_SESSION',
-            referenceId: dto.checkoutSessionId,
-            note: dto.reason || 'Reservation released due to cancellation or timeout',
-            idempotencyKey: dto.idempotencyKey ? `${dto.idempotencyKey}:${r.id}` : undefined,
+            referenceType: 'EXPIRED_RESERVATION',
+            referenceId: r.checkoutSessionId || r.id,
+            note: 'Reservation automatically expired after 15m TTL',
+          },
+        });
+
+        releasedCount++;
+      }
+
+      if (this.isUuid(checkoutSessionId)) {
+        await tx.checkoutSession.updateMany({
+          where: {
+            id: checkoutSessionId,
+            status: CheckoutSessionStatus.RESERVATION_ACTIVE,
+            expiresAt: { lte: now },
+          },
+          data: {
+            status: CheckoutSessionStatus.EXPIRED,
+            releasedAt: now,
           },
         });
       }
-
-      return {
-        checkoutSessionId: dto.checkoutSessionId,
-        status: StockReservationStatus.RELEASED,
-        releasedCount: reservations.length,
-      };
     });
+
+    if (releasedCount > 0) {
+      this.logger.log(
+        `Expired ${releasedCount} reservation(s) for checkout session ${checkoutSessionId}`,
+      );
+    }
+
+    return { releasedCount };
   }
 
   /**
-   * EXPIRE OUTDATED RESERVATIONS (Background Cron & Lazy Trigger)
+   * EXPIRE OUTDATED RESERVATIONS (Recovery Sweep & Lazy Trigger)
    * Finds all ACTIVE reservations past their expiration timestamp and releases them in bounded batches.
    */
   async expireReservations(batchSize: number = 50) {
@@ -553,11 +784,22 @@ export class InventoryReservationService {
         status: StockReservationStatus.ACTIVE,
         expiresAt: { lte: now },
       },
-      include: { inventory: { include: { sellerProduct: true } } },
+      orderBy: { inventoryId: 'asc' },
       take: batchSize,
     });
 
     if (expiredReservations.length === 0) {
+      // Also reconcile any stale CheckoutSessions with no active reservations
+      await this.prisma.checkoutSession.updateMany({
+        where: {
+          status: CheckoutSessionStatus.RESERVATION_ACTIVE,
+          expiresAt: { lte: now },
+        },
+        data: {
+          status: CheckoutSessionStatus.EXPIRED,
+          releasedAt: now,
+        },
+      });
       return { releasedCount: 0 };
     }
 
@@ -566,6 +808,20 @@ export class InventoryReservationService {
     for (const r of expiredReservations) {
       try {
         await this.prisma.$transaction(async (tx) => {
+          const transitioned = await tx.stockReservation.updateMany({
+            where: {
+              id: r.id,
+              status: StockReservationStatus.ACTIVE,
+              expiresAt: { lte: now },
+            },
+            data: {
+              status: StockReservationStatus.EXPIRED,
+              releasedAt: now,
+            },
+          });
+
+          if (transitioned.count === 0) return;
+
           const inv = await tx.inventory.findUnique({
             where: { id: r.inventoryId },
             include: { sellerProduct: true },
@@ -591,14 +847,6 @@ export class InventoryReservationService {
             });
           }
 
-          await tx.stockReservation.update({
-            where: { id: r.id },
-            data: {
-              status: StockReservationStatus.EXPIRED,
-              releasedAt: new Date(),
-            },
-          });
-
           await tx.inventoryTransaction.create({
             data: {
               inventoryId: inv.id,
@@ -608,9 +856,23 @@ export class InventoryReservationService {
               stockAfter: inv.stockOnHand,
               referenceType: 'EXPIRED_RESERVATION',
               referenceId: r.checkoutSessionId || r.id,
-              note: 'Reservation automatically expired by background engine',
+              note: 'Reservation automatically expired by recovery sweep',
             },
           });
+
+          if (this.isUuid(r.checkoutSessionId)) {
+            await tx.checkoutSession.updateMany({
+              where: {
+                id: r.checkoutSessionId!,
+                status: CheckoutSessionStatus.RESERVATION_ACTIVE,
+                expiresAt: { lte: now },
+              },
+              data: {
+                status: CheckoutSessionStatus.EXPIRED,
+                releasedAt: now,
+              },
+            });
+          }
 
           releasedCount++;
         });
@@ -619,8 +881,41 @@ export class InventoryReservationService {
       }
     }
 
-    this.logger.log(`Released ${releasedCount} expired stock reservation(s)`);
+    if (releasedCount > 0) {
+      this.logger.log(`Released ${releasedCount} expired stock reservation(s)`);
+    }
     return { releasedCount };
+  }
+
+  /**
+   * Lazy expiration helper inside an existing transaction for a specific inventory row.
+   */
+  private async expireOutdatedReservationsForItemTx(
+    tx: Prisma.TransactionClient,
+    inventoryId: string,
+  ) {
+    const expiredRows: Array<{ id: string; quantity: number; checkout_session_id: string | null }> =
+      await tx.$queryRaw`
+        UPDATE "stock_reservations"
+        SET "status" = 'EXPIRED', "released_at" = NOW()
+        WHERE "inventory_id" = ${inventoryId}::uuid
+          AND "status" = 'ACTIVE'
+          AND "expires_at" <= NOW()
+        RETURNING "id", "quantity", "checkout_session_id"
+      `;
+
+    if (!expiredRows || expiredRows.length === 0) return;
+
+    const totalExpiredQty = expiredRows.reduce((sum, r) => sum + r.quantity, 0);
+    if (totalExpiredQty > 0) {
+      await tx.$executeRaw`
+        UPDATE "inventories"
+        SET "reserved_quantity" = GREATEST(0, "reserved_quantity" - ${totalExpiredQty}),
+            "available_quantity" = "stock_on_hand" - GREATEST(0, "reserved_quantity" - ${totalExpiredQty}),
+            "updated_at" = NOW()
+        WHERE "id" = ${inventoryId}::uuid
+      `;
+    }
   }
 
   /**
@@ -638,6 +933,19 @@ export class InventoryReservationService {
 
     for (const r of expiredReservations) {
       await this.prisma.$transaction(async (tx) => {
+        const transitioned = await tx.stockReservation.updateMany({
+          where: {
+            id: r.id,
+            status: StockReservationStatus.ACTIVE,
+            expiresAt: { lte: now },
+          },
+          data: {
+            status: StockReservationStatus.EXPIRED,
+            releasedAt: now,
+          },
+        });
+        if (transitioned.count === 0) return;
+
         const inv = await tx.inventory.findUnique({ where: { id: inventoryId } });
         if (!inv) return;
 
@@ -649,14 +957,6 @@ export class InventoryReservationService {
           data: {
             reservedQuantity: newReserved,
             availableQuantity: newAvailable,
-          },
-        });
-
-        await tx.stockReservation.update({
-          where: { id: r.id },
-          data: {
-            status: StockReservationStatus.EXPIRED,
-            releasedAt: new Date(),
           },
         });
       });

@@ -3,8 +3,9 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
-import { ProductStatus, SellerProductStatus } from '@prisma/client';
+import { CheckoutSessionStatus, ProductStatus, SellerProductStatus } from '@prisma/client';
 import {
   BasketItem,
   BasketStateResponse,
@@ -13,10 +14,13 @@ import {
 } from '@marvels-basket/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { StoresService } from '../stores/stores.service';
+import { InventoryReservationService } from '../inventory/services/inventory-reservation.service';
+import { PricingService } from './pricing.service';
 import {
   AddCartItemDto,
   ApplyStoreSwitchDto,
   CompareStoreSwitchDto,
+  SwitchStoreDto,
   SyncCartDto,
   UpdateCartItemDto,
 } from './dto';
@@ -26,10 +30,39 @@ export class CartService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storesService: StoresService,
+    @Optional() private readonly pricingService?: PricingService,
+    @Optional() private readonly reservationService?: InventoryReservationService,
   ) {}
 
-  private roundMoney(amount: number): number {
-    return Math.round((amount + Number.EPSILON) * 100) / 100;
+  private toPaise(amount: number | string | { toString(): string } | null | undefined): number {
+    if (amount === null || amount === undefined) return 0;
+    const num = typeof amount === 'number' ? amount : Number(amount.toString());
+    return Number.isFinite(num) ? Math.round(num * 100) : 0;
+  }
+
+  private fromPaise(paise: number): number {
+    return Math.round(paise) / 100;
+  }
+
+  private async releaseActiveCheckoutReservations(userId: string): Promise<void> {
+    if (!this.reservationService || !this.prisma.checkoutSession) return;
+    try {
+      const activeSessions = await this.prisma.checkoutSession.findMany({
+        where: {
+          userId,
+          status: CheckoutSessionStatus.RESERVATION_ACTIVE,
+        },
+        select: { id: true },
+      });
+      for (const s of activeSessions) {
+        await this.reservationService.releaseReservation({
+          checkoutSessionId: s.id,
+          reason: 'Basket modified or store switched',
+        });
+      }
+    } catch {
+      // Non-fatal if no active session exists
+    }
   }
 
   private async getOrCreateCart(userId: string) {
@@ -77,10 +110,10 @@ export class CartService {
     });
 
     if (!cart || cart.items.length === 0) {
-      if (cart && cart.sellerId) {
+      if (cart && (cart.sellerId || cart.appliedCouponCode)) {
         await this.prisma.cart.update({
           where: { id: cart.id },
-          data: { sellerId: null },
+          data: { sellerId: null, appliedCouponCode: null },
         });
       }
       return {
@@ -94,6 +127,15 @@ export class CartService {
         totalMrp: 0,
         totalSavings: 0,
         hasUnavailableItems: false,
+        appliedCouponCode: null,
+        couponDiscount: 0,
+        couponMessage: null,
+        minimumOrderValue: null,
+        movRemaining: 0,
+        belowMov: false,
+        deliveryFee: 0,
+        freeDeliveryThreshold: null,
+        estimatedTotal: 0,
       };
     }
 
@@ -117,8 +159,8 @@ export class CartService {
       };
     }
 
-    let subtotal = 0;
-    let totalMrp = 0;
+    let subtotalPaise = 0;
+    let totalMrpPaise = 0;
     let totalUnits = 0;
     let hasUnavailableItems = false;
 
@@ -128,12 +170,19 @@ export class CartService {
       const variant = sp.variant;
       const availableQuantity = sp.inventory?.availableQuantity ?? 0;
 
+      const unitPricePaise = this.toPaise(sp.sellingPrice);
+      const mrpPaise = this.toPaise(variant?.mrp ?? sp.mrp ?? sp.sellingPrice);
+      const unitPrice = this.fromPaise(unitPricePaise);
+      const mrp = this.fromPaise(mrpPaise);
+      const priceExceedsMrp = mrpPaise > 0 && unitPricePaise > mrpPaise;
+
       const isActive =
         !sp.deletedAt &&
         sp.status === SellerProductStatus.ACTIVE &&
         !product.deletedAt &&
         product.status === ProductStatus.ACTIVE &&
         (variant ? variant.isActive : true) &&
+        !priceExceedsMrp &&
         Boolean(storeInfo?.isOpen && storeInfo?.isAcceptingOrders);
 
       const isAvailable = isActive && availableQuantity >= ci.quantity && availableQuantity > 0;
@@ -141,16 +190,18 @@ export class CartService {
         hasUnavailableItems = true;
       }
 
-      const unitPrice = Number(sp.sellingPrice);
-      const mrp = Number(variant?.mrp ?? sp.mrp ?? unitPrice);
       const discountPercent =
-        mrp > unitPrice && mrp > 0 ? Math.round(((mrp - unitPrice) / mrp) * 100) : 0;
+        mrpPaise > unitPricePaise && mrpPaise > 0
+          ? Math.round(((mrpPaise - unitPricePaise) / mrpPaise) * 100)
+          : 0;
 
       let statusMessage: string | undefined;
       if (!storeInfo?.isAcceptingOrders || !storeInfo?.isOpen) {
         statusMessage = `${storeInfo?.name || 'Store'} is currently ${
           storeInfo?.operationalStatusLabel?.toLowerCase() || 'unavailable'
         }`;
+      } else if (priceExceedsMrp) {
+        statusMessage = 'Listing price exceeds MRP and is temporarily unavailable';
       } else if (!isActive) {
         statusMessage = 'No longer available from this store';
       } else if (availableQuantity <= 0) {
@@ -160,8 +211,8 @@ export class CartService {
       }
 
       const effectiveQty = isActive ? Math.min(ci.quantity, Math.max(0, availableQuantity)) : 0;
-      subtotal += unitPrice * effectiveQty;
-      totalMrp += mrp * effectiveQty;
+      subtotalPaise += unitPricePaise * effectiveQty;
+      totalMrpPaise += mrpPaise * effectiveQty;
       totalUnits += ci.quantity;
 
       return {
@@ -184,14 +235,67 @@ export class CartService {
       };
     });
 
-    subtotal = this.roundMoney(subtotal);
-    totalMrp = this.roundMoney(totalMrp);
-    const totalSavings = this.roundMoney(Math.max(0, totalMrp - subtotal));
+    const subtotal = this.fromPaise(subtotalPaise);
+    const totalMrp = this.fromPaise(totalMrpPaise);
+    const totalSavings = this.fromPaise(Math.max(0, totalMrpPaise - subtotalPaise));
+
+    let minimumOrderValue: number | null = null;
+    let movRemaining = 0;
+    let belowMov = false;
+    let deliveryFee = 0;
+    let freeDeliveryThreshold: number | null = null;
+    let couponDiscountPaise = 0;
+    let couponMessage: string | null = null;
+    let appliedCouponCode = cart.appliedCouponCode || null;
+
+    if (this.pricingService) {
+      const config = await this.pricingService.getPlatformPricingConfig();
+      if (config.minimumOrderValuePaise !== null) {
+        minimumOrderValue = this.fromPaise(config.minimumOrderValuePaise);
+        if (subtotalPaise < config.minimumOrderValuePaise) {
+          belowMov = true;
+          movRemaining = this.fromPaise(config.minimumOrderValuePaise - subtotalPaise);
+        }
+      }
+      if (config.freeDeliveryThresholdPaise !== null) {
+        freeDeliveryThreshold = this.fromPaise(config.freeDeliveryThresholdPaise);
+      }
+      const deliveryFeePaise =
+        config.freeDeliveryThresholdPaise !== null &&
+        subtotalPaise >= config.freeDeliveryThresholdPaise
+          ? 0
+          : config.defaultDeliveryFeePaise;
+      deliveryFee = this.fromPaise(deliveryFeePaise);
+
+      if (appliedCouponCode) {
+        try {
+          const couponEval = await this.pricingService.validateCoupon({
+            code: appliedCouponCode,
+            userId,
+            itemSubtotalPaise: subtotalPaise,
+          });
+          couponDiscountPaise = couponEval.discountPaise;
+          couponMessage = couponEval.description || `Coupon ${couponEval.code} applied`;
+        } catch (err) {
+          couponMessage =
+            err instanceof BadRequestException
+              ? (err.getResponse() as { message?: string })?.message || err.message
+              : 'Coupon is no longer valid for this basket';
+          appliedCouponCode = null;
+        }
+      }
+    }
+
+    const deliveryFeePaise = this.toPaise(deliveryFee);
+    const estimatedTotalPaise = Math.max(0, subtotalPaise - couponDiscountPaise + deliveryFeePaise);
 
     return {
       cartId: cart.id,
       sellerId: cart.sellerId,
-      store: storeInfo,
+      store: {
+        ...storeInfo!,
+        minimumOrderValue,
+      },
       items: mappedItems,
       itemCount: mappedItems.length,
       totalUnits,
@@ -199,6 +303,15 @@ export class CartService {
       totalMrp,
       totalSavings,
       hasUnavailableItems,
+      appliedCouponCode,
+      couponDiscount: this.fromPaise(couponDiscountPaise),
+      couponMessage,
+      minimumOrderValue,
+      movRemaining,
+      belowMov,
+      deliveryFee,
+      freeDeliveryThreshold,
+      estimatedTotal: this.fromPaise(estimatedTotalPaise),
     };
   }
 
@@ -236,6 +349,17 @@ export class CartService {
       });
     }
 
+    const listingMrpPaise = this.toPaise(
+      listing.variant?.mrp ?? listing.mrp ?? listing.sellingPrice,
+    );
+    const listingPricePaise = this.toPaise(listing.sellingPrice);
+    if (listingMrpPaise > 0 && listingPricePaise > listingMrpPaise) {
+      throw new ConflictException({
+        code: 'PRICE_EXCEEDS_MRP',
+        message: `"${listing.product.name}" cannot be added because its listing price exceeds MRP.`,
+      });
+    }
+
     const op = this.storesService.evaluateStoreOperationalStatus(listing.seller);
     if (!op.isApproved || !op.isOpen || !op.isAcceptingOrders) {
       throw new BadRequestException({
@@ -244,6 +368,16 @@ export class CartService {
           listing.seller.storeDisplayName || listing.seller.businessName
         } is currently ${op.operationalStatusLabel.toLowerCase()} and not accepting orders.`,
       });
+    }
+
+    if (this.pricingService) {
+      const config = await this.pricingService.getPlatformPricingConfig();
+      if (dto.quantity > config.maxCartItemQuantity) {
+        throw new BadRequestException({
+          code: 'MAX_QUANTITY_EXCEEDED',
+          message: `Maximum ${config.maxCartItemQuantity} units allowed per item.`,
+        });
+      }
     }
 
     const availableQty = listing.inventory?.availableQuantity ?? 0;
@@ -299,11 +433,13 @@ export class CartService {
         });
       }
 
+      await this.releaseActiveCheckoutReservations(userId);
+
       await this.prisma.$transaction(async (tx) => {
         await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
         await tx.cart.update({
           where: { id: cart.id },
-          data: { sellerId: listing.sellerId },
+          data: { sellerId: listing.sellerId, appliedCouponCode: null },
         });
         await tx.cartItem.create({
           data: {
@@ -409,6 +545,7 @@ export class CartService {
       });
     }
 
+    await this.releaseActiveCheckoutReservations(userId);
     await this.prisma.cartItem.update({
       where: { id: cartItem.id },
       data: { quantity: dto.quantity },
@@ -423,6 +560,7 @@ export class CartService {
       return this.getCart(userId);
     }
 
+    await this.releaseActiveCheckoutReservations(userId);
     await this.prisma.$transaction(async (tx) => {
       await tx.cartItem.deleteMany({
         where: {
@@ -434,7 +572,7 @@ export class CartService {
       if (remaining === 0) {
         await tx.cart.update({
           where: { id: cart.id },
-          data: { sellerId: null },
+          data: { sellerId: null, appliedCouponCode: null },
         });
       }
     });
@@ -445,11 +583,12 @@ export class CartService {
   async clearCart(userId: string): Promise<BasketStateResponse> {
     const cart = await this.prisma.cart.findUnique({ where: { userId } });
     if (cart) {
+      await this.releaseActiveCheckoutReservations(userId);
       await this.prisma.$transaction(async (tx) => {
         await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
         await tx.cart.update({
           where: { id: cart.id },
-          data: { sellerId: null },
+          data: { sellerId: null, appliedCouponCode: null },
         });
       });
     }
@@ -702,6 +841,105 @@ export class CartService {
       }
     }
 
+    return this.getCart(userId);
+  }
+
+  /**
+   * Confirms switching the cart to a new store by clearing the old cart,
+   * releasing any active checkout reservations, binding to the new store, and adding the item.
+   */
+  async switchStore(userId: string, dto: SwitchStoreDto): Promise<BasketStateResponse> {
+    return this.addItem(userId, {
+      sellerProductId: dto.sellerProductId,
+      quantity: dto.quantity,
+      confirmStoreSwitch: true,
+    });
+  }
+
+  /**
+   * Revalidates the authenticated customer's active cart against live store status,
+   * listing availability, MRP, and stock.
+   */
+  async validateCart(userId: string) {
+    const cart = await this.getCart(userId);
+    if (!cart.sellerId || cart.items.length === 0) {
+      return {
+        isOrderable: false,
+        hasPriceChanges: false,
+        hasQuantityAdjustments: false,
+        items: [],
+        cart,
+      };
+    }
+
+    if (!this.reservationService) {
+      return {
+        isOrderable: !cart.hasUnavailableItems,
+        hasPriceChanges: false,
+        hasQuantityAdjustments: Boolean(cart.hasUnavailableItems),
+        items: cart.items,
+        cart,
+      };
+    }
+
+    const revalidation = await this.reservationService.revalidateCart({
+      storeId: cart.sellerId,
+      items: cart.items.map((item) => ({
+        listingId: item.sellerProductId,
+        variantId: item.variantId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+    });
+
+    return {
+      ...revalidation,
+      cart,
+    };
+  }
+
+  /**
+   * Validates and applies a platform coupon to the authenticated customer's cart.
+   */
+  async applyCoupon(userId: string, code: string): Promise<BasketStateResponse> {
+    if (!this.pricingService) {
+      throw new BadRequestException('Pricing service unavailable');
+    }
+
+    const cart = await this.getCart(userId);
+    if (!cart.cartId || cart.items.length === 0) {
+      throw new BadRequestException({
+        code: 'EMPTY_BASKET',
+        message: 'Add items to your basket before applying a coupon.',
+      });
+    }
+
+    const subtotalPaise = this.toPaise(cart.subtotal);
+    const evaluation = await this.pricingService.validateCoupon({
+      code,
+      userId,
+      itemSubtotalPaise: subtotalPaise,
+    });
+
+    await this.prisma.cart.update({
+      where: { id: cart.cartId },
+      data: { appliedCouponCode: evaluation.code },
+    });
+
+    return this.getCart(userId);
+  }
+
+  /**
+   * Removes any applied coupon from the authenticated customer's cart.
+   */
+  async removeCoupon(userId: string): Promise<BasketStateResponse> {
+    const cart = await this.prisma.cart.findUnique({ where: { userId } });
+    if (cart && cart.appliedCouponCode) {
+      await this.prisma.cart.update({
+        where: { id: cart.id },
+        data: { appliedCouponCode: null },
+      });
+    }
     return this.getCart(userId);
   }
 }
