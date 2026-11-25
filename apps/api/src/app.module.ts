@@ -16,6 +16,9 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { BrandsModule } from './modules/brands/brands.module';
 import { ProductsModule } from './modules/products/products.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { StoresModule } from './modules/stores/stores.module';
+import { LocationsModule } from './modules/locations/locations.module';
+import { CartModule } from './modules/cart/cart.module';
 import { JwtAuthGuard, RolesGuard, PermissionsGuard } from './modules/auth/guards';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
@@ -43,6 +46,9 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     BrandsModule,
     ProductsModule,
     InventoryModule,
+    StoresModule,
+    LocationsModule,
+    CartModule,
     HealthModule,
   ],
   providers: [

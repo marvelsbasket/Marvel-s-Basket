@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useEffect, useState, use } from 'react';
+import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertCircle,
+  AlertTriangle,
   ChevronRight,
   Clock,
+  Info,
+  MapPin,
   Minus,
   Package,
   Plus,
@@ -23,57 +26,101 @@ import {
 import { StorefrontLayout } from '@/components/layout/storefront-layout';
 import { ProductCard } from '@/features/catalog/components/product-card';
 import { CatalogService } from '@/features/catalog/services/catalog.service';
+import { useLocation } from '@/features/location/context/location-context';
+import { useBasket } from '@/features/basket/context/basket-context';
+import { Dialog } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { calculateDiscountPercent, calculateSavings, formatINR } from '@/lib/utils/currency';
+import { getOptimizedProductImage } from '@/lib/utils/cloudinary';
 import { cn } from '@/lib/utils';
 
 export default function ProductDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
+  const { isHydrated, location, activeStore, hasLocationContext, openLocationModal } =
+    useLocation();
+  const { addItem, updateQuantity, getItemQuantity, notify } = useBasket();
 
   const [product, setProduct] = useState<ProductDetailItem | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariantItem | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [quantity, setQuantity] = useState(0);
   const [relatedProducts, setRelatedProducts] = useState<ProductCardItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCheckingAdd, setIsCheckingAdd] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'nutrition' | 'compliance'>('overview');
 
+  const [stalePriceAlert, setStalePriceAlert] = useState<{
+    oldPrice: number;
+    newPrice: number;
+    latestVariant: ProductVariantItem;
+    latestProduct: ProductDetailItem;
+  } | null>(null);
+
   useEffect(() => {
+    if (!isHydrated) return;
+
+    let cancelled = false;
     async function loadProduct() {
       setIsLoading(true);
       try {
-        const data = await CatalogService.getProductBySlug(slug);
+        const data = await CatalogService.getProductBySlug(slug, {
+          storeId: activeStore?.id,
+          postalCode: location?.postalCode ?? undefined,
+          latitude: location?.latitude ?? undefined,
+          longitude: location?.longitude ?? undefined,
+        });
+        if (cancelled) return;
+
         setProduct(data);
 
-        // Default variant is the first active variant
-        const firstVariant = data.variants?.[0] || null;
-        setSelectedVariant(firstVariant);
+        // Select first available variant by default, or fall back to first active variant
+        const firstAvailable =
+          data.variants?.find((v) => v.isAvailable !== false && (v.availableQuantity ?? 0) > 0) ||
+          data.variants?.[0] ||
+          null;
+        setSelectedVariant(firstAvailable);
 
-        // Initial preview image
         const initialImg =
-          firstVariant?.primaryImageUrl || firstVariant?.images?.[0]?.imageUrl || null;
+          firstAvailable?.primaryImageUrl ||
+          firstAvailable?.images?.[0]?.imageUrl ||
+          data.images?.[0]?.imageUrl ||
+          null;
         setSelectedImage(initialImg);
 
-        // Fetch related products in the same category
         if (data.category?.id) {
           const related = await CatalogService.getProducts({
             categoryId: data.category.id,
             limit: 4,
+            storeId: activeStore?.id,
+            postalCode: location?.postalCode ?? undefined,
+            latitude: location?.latitude ?? undefined,
+            longitude: location?.longitude ?? undefined,
           });
-          setRelatedProducts(related.items.filter((item) => item.id !== data.id));
+          if (!cancelled) {
+            setRelatedProducts(related.items.filter((item) => item.id !== data.id));
+          }
         }
       } catch (err) {
         console.error('Failed to load product details:', err);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
 
     loadProduct();
-  }, [slug]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    slug,
+    isHydrated,
+    activeStore?.id,
+    location?.postalCode,
+    location?.latitude,
+    location?.longitude,
+  ]);
 
-  // Update selected image when variant changes
   const handleVariantSelect = (v: ProductVariantItem) => {
     setSelectedVariant(v);
-    setQuantity(0);
     if (v.primaryImageUrl) {
       setSelectedImage(v.primaryImageUrl);
     } else if (v.images && v.images.length > 0) {
@@ -83,7 +130,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
 
   if (isLoading) {
     return (
-      <StorefrontLayout cartItemCount={2}>
+      <StorefrontLayout>
         <div className="mx-auto max-w-container px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
             <div className="h-96 animate-pulse rounded-3xl bg-stone-100" />
@@ -100,7 +147,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
 
   if (!product) {
     return (
-      <StorefrontLayout cartItemCount={2}>
+      <StorefrontLayout>
         <div className="mx-auto max-w-container px-4 py-16 text-center">
           <ShoppingBag className="mx-auto h-16 w-16 text-stone-300" />
           <h1 className="mt-4 text-xl font-bold text-stone-900">Product Not Found</h1>
@@ -121,13 +168,34 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
   const mrp = selectedVariant?.mrp ?? 0;
   const sellingPrice = selectedVariant?.sellingPrice ?? mrp;
   const discountPercent =
-    selectedVariant?.discountPercent ??
-    (mrp > sellingPrice && mrp > 0 ? Math.round(((mrp - sellingPrice) / mrp) * 100) : 0);
+    selectedVariant?.discountPercent ?? calculateDiscountPercent(mrp, sellingPrice);
+  const savingsAmount = calculateSavings(mrp, sellingPrice);
 
-  const availableStock = selectedVariant?.availableQuantity ?? 99;
-  const isOutOfStock = availableStock <= 0 || selectedVariant?.isAvailable === false;
+  const resolvedStore =
+    product.store ??
+    (activeStore
+      ? {
+          id: activeStore.id,
+          name: activeStore.name,
+          slug: activeStore.slug,
+          deliveryTimeMinutes: activeStore.deliveryTimeMinutes,
+          deliveryEtaLabel: activeStore.deliveryEtaLabel,
+          isOpen: activeStore.isOpen,
+          isAcceptingOrders: activeStore.isAcceptingOrders,
+        }
+      : null);
 
-  // Collect all gallery images from selected variant, product images, and other variants
+  const hasStoreOffer = Boolean(resolvedStore && selectedVariant?.sellerProductId);
+  const availableStock = selectedVariant?.availableQuantity ?? 0;
+  const isAvailable = hasStoreOffer && selectedVariant?.isAvailable !== false && availableStock > 0;
+  const lowStockThreshold = selectedVariant?.lowStockThreshold ?? 5;
+  const isLowStock =
+    isAvailable && (selectedVariant?.isLowStock || availableStock <= lowStockThreshold);
+
+  const quantity = selectedVariant
+    ? getItemQuantity(selectedVariant.sellerProductId, selectedVariant.id)
+    : 0;
+
   const allImages = [
     ...(selectedVariant?.primaryImageUrl ? [selectedVariant.primaryImageUrl] : []),
     ...(selectedVariant?.images?.map((img) => img.imageUrl) || []),
@@ -135,8 +203,96 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
     ...(product.variants?.flatMap((v) => v.images?.map((img) => img.imageUrl) || []) || []),
   ].filter((v, idx, arr) => Boolean(v) && arr.indexOf(v) === idx);
 
+  const heroImageUrl = getOptimizedProductImage(selectedImage, 'detail');
+
+  const commitAddToBasket = async (
+    targetProduct: ProductDetailItem,
+    targetVariant: ProductVariantItem,
+  ) => {
+    const store = targetProduct.store ?? resolvedStore;
+    if (!store || !targetVariant.sellerProductId) return;
+
+    await addItem({
+      sellerProductId: targetVariant.sellerProductId,
+      productId: targetProduct.id,
+      variantId: targetVariant.id,
+      productName: targetProduct.name,
+      productSlug: targetProduct.slug,
+      brand: targetProduct.brand,
+      packSize: targetVariant.packSize || targetVariant.name,
+      imageUrl: targetVariant.primaryImageUrl || targetProduct.images?.[0]?.imageUrl || null,
+      unitPrice: targetVariant.sellingPrice ?? targetVariant.mrp,
+      mrp: targetVariant.mrp,
+      availableQuantity: targetVariant.availableQuantity ?? 0,
+      store: {
+        id: store.id,
+        name: store.name,
+        slug: store.slug || '',
+        deliveryEtaLabel: store.deliveryEtaLabel ?? null,
+        deliveryTimeMinutes: store.deliveryTimeMinutes ?? null,
+        isOpen: store.isOpen ?? true,
+        isAcceptingOrders: store.isAcceptingOrders ?? true,
+      },
+      quantity: 1,
+    });
+  };
+
+  const handleAddWithFreshCheck = async () => {
+    if (!selectedVariant || !resolvedStore) {
+      openLocationModal();
+      return;
+    }
+
+    if (quantity > 0 && selectedVariant.sellerProductId) {
+      await updateQuantity(selectedVariant.sellerProductId, quantity + 1, {
+        availableQuantity: availableStock,
+      });
+      return;
+    }
+
+    // Re-fetch live price & stock right before initial add to prevent stale pricing
+    setIsCheckingAdd(true);
+    try {
+      const fresh = await CatalogService.getProductBySlug(slug, {
+        storeId: resolvedStore.id,
+        postalCode: location?.postalCode ?? undefined,
+        latitude: location?.latitude ?? undefined,
+        longitude: location?.longitude ?? undefined,
+      });
+      const freshVariant =
+        fresh.variants.find((v) => v.id === selectedVariant.id) || selectedVariant;
+
+      setProduct(fresh);
+      setSelectedVariant(freshVariant);
+
+      const freshQty = freshVariant.availableQuantity ?? 0;
+      if (freshQty <= 0 || freshVariant.isAvailable === false || !freshVariant.sellerProductId) {
+        notify(`"${fresh.name}" just went out of stock at this store.`, 'error');
+        return;
+      }
+
+      const freshPrice = freshVariant.sellingPrice ?? freshVariant.mrp;
+      if (Math.abs(freshPrice - sellingPrice) >= 0.01) {
+        setStalePriceAlert({
+          oldPrice: sellingPrice,
+          newPrice: freshPrice,
+          latestVariant: freshVariant,
+          latestProduct: fresh,
+        });
+        return;
+      }
+
+      await commitAddToBasket(fresh, freshVariant);
+    } catch {
+      // Fallback to direct add if live check fails transiently
+      await commitAddToBasket(product, selectedVariant);
+    } finally {
+      setIsCheckingAdd(false);
+    }
+  };
+
   return (
-    <StorefrontLayout cartItemCount={2}>
+    <StorefrontLayout>
       <div className="mx-auto max-w-container px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         {/* Breadcrumb Navigation */}
         <nav
@@ -169,16 +325,13 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
         <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:gap-12">
           {/* LEFT: Image Gallery */}
           <div className="space-y-3 sm:space-y-4">
-            {/* Active / Main Hero Image */}
             <div className="relative aspect-square w-full max-h-[420px] md:max-h-[480px] overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/80 bg-white p-4 sm:p-6 shadow-xs flex items-center justify-center">
-              {/* Discount Tag */}
               {discountPercent > 0 && (
                 <div className="absolute left-4 top-4 z-10 rounded-lg bg-emerald-700 px-2.5 py-1 text-xs font-black uppercase tracking-wider text-white shadow-xs">
                   {discountPercent}% OFF
                 </div>
               )}
 
-              {/* Food Preference Indicator */}
               {product.foodPreference &&
                 product.foodPreference !== 'NA' &&
                 product.foodPreference !== FoodPreference.NA && (
@@ -203,10 +356,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                   </div>
                 )}
 
-              {/* Main Image Display */}
-              {selectedImage ? (
+              {heroImageUrl ? (
                 <img
-                  src={selectedImage}
+                  src={heroImageUrl}
                   alt={product.name}
                   className="max-h-full max-w-full object-contain transition-transform duration-300 hover:scale-105"
                 />
@@ -215,11 +367,12 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
               )}
             </div>
 
-            {/* Thumbnail Strip (Rest of images) */}
+            {/* Thumbnail Strip (Compact Sizing preserved) */}
             {allImages.length > 1 && (
               <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto py-1 no-scrollbar">
                 {allImages.map((imgUrl, idx) => {
                   const isActive = selectedImage === imgUrl;
+                  const thumbUrl = getOptimizedProductImage(imgUrl, 'thumb') || imgUrl;
                   return (
                     <button
                       key={idx}
@@ -235,7 +388,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                       )}
                     >
                       <img
-                        src={imgUrl}
+                        src={thumbUrl}
                         alt={`${product.name} thumbnail ${idx + 1}`}
                         className="max-h-full max-w-full object-contain transition-transform duration-200 group-hover:scale-105"
                       />
@@ -249,7 +402,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
           {/* RIGHT: Product Meta, Variants, & Action */}
           <div className="flex flex-col justify-between space-y-6">
             <div className="space-y-4">
-              {/* Brand and Title */}
               <div>
                 {product.brand && (
                   <div className="inline-block rounded-md bg-stone-100 px-2 py-0.5 text-xs font-extrabold uppercase tracking-wider text-stone-600">
@@ -278,7 +430,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                       const varMrp = v.mrp;
                       const varPrice = v.sellingPrice ?? varMrp;
                       const varDisc =
-                        varMrp > varPrice ? Math.round(((varMrp - varPrice) / varMrp) * 100) : 0;
+                        v.discountPercent ?? calculateDiscountPercent(varMrp, varPrice);
+                      const varOut =
+                        hasLocationContext &&
+                        resolvedStore &&
+                        (v.isAvailable === false || (v.availableQuantity ?? 0) <= 0);
 
                       return (
                         <button
@@ -290,6 +446,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                             isSelected
                               ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-600 shadow-2xs'
                               : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50',
+                            varOut && 'opacity-65',
                           )}
                         >
                           <span className="text-xs font-bold text-stone-900">
@@ -297,17 +454,22 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                           </span>
                           <div className="mt-1 flex items-baseline gap-1">
                             <span className="text-sm font-extrabold text-stone-950">
-                              ₹{varPrice}
+                              {formatINR(varPrice)}
                             </span>
                             {varMrp > varPrice && (
                               <span className="text-[10px] text-stone-400 line-through">
-                                ₹{varMrp}
+                                {formatINR(varMrp)}
                               </span>
                             )}
                           </div>
                           {varDisc > 0 && (
                             <span className="mt-0.5 text-[9px] font-black text-emerald-700">
                               {varDisc}% OFF
+                            </span>
+                          )}
+                          {varOut && (
+                            <span className="mt-0.5 text-[9px] font-bold text-red-600">
+                              Out of stock
                             </span>
                           )}
                         </button>
@@ -319,64 +481,128 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
 
               {/* Price Row */}
               <div className="rounded-2xl border border-stone-100 bg-stone-50/80 p-4">
-                <div className="flex items-baseline gap-3">
-                  <span className="text-3xl font-black text-stone-950">₹{sellingPrice}</span>
+                <div className="flex flex-wrap items-baseline gap-3">
+                  <span className="text-3xl font-black text-stone-950">
+                    {formatINR(sellingPrice)}
+                  </span>
                   {mrp > sellingPrice && (
-                    <span className="text-lg text-stone-400 line-through">₹{mrp}</span>
+                    <span className="text-lg text-stone-400 line-through">{formatINR(mrp)}</span>
                   )}
-                  {discountPercent > 0 && (
+                  {savingsAmount > 0 && (
                     <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-800">
-                      Save ₹{mrp - sellingPrice} ({discountPercent}% OFF)
+                      Save {formatINR(savingsAmount)} ({discountPercent}% OFF)
                     </span>
                   )}
                 </div>
-                <div className="mt-1 text-[11px] font-medium text-stone-500">
-                  Inclusive of all taxes
+                <div className="mt-1 flex items-center justify-between text-[11px] font-medium text-stone-500">
+                  <span>
+                    {resolvedStore
+                      ? 'Inclusive of all taxes'
+                      : 'Catalog MRP (Set area for store offer)'}
+                  </span>
+                  {isLowStock && (
+                    <span className="font-bold text-amber-700">
+                      Only {availableStock} left at this store!
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Store & Hyperlocal Delivery Assurance Badge */}
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3.5 space-y-2">
-                <div className="flex items-center gap-2 text-xs font-extrabold text-emerald-900">
-                  <Zap className="h-4 w-4 fill-amber-400 text-amber-500" />
-                  <span>
-                    Hyperlocal Delivery in {product.store?.deliveryTimeMinutes || 15} mins
-                  </span>
-                </div>
-                {product.store && (
-                  <div className="flex items-center gap-2 text-xs text-stone-600">
-                    <Store className="h-3.5 w-3.5 text-stone-400" />
-                    <span>Fulfilled by {product.store.name}</span>
+              {resolvedStore ? (
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3.5 space-y-2">
+                  {resolvedStore.deliveryEtaLabel && (
+                    <div className="flex items-center gap-2 text-xs font-extrabold text-emerald-900">
+                      <Zap className="h-4 w-4 fill-amber-400 text-amber-500" />
+                      <span>Hyperlocal Delivery in {resolvedStore.deliveryEtaLabel}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-xs text-stone-600">
+                    <div className="flex items-center gap-2">
+                      <Store className="h-3.5 w-3.5 text-stone-400" />
+                      <span>
+                        Fulfilled by{' '}
+                        <Link
+                          href={`/stores/${resolvedStore.slug}`}
+                          className="font-bold text-brand hover:underline"
+                        >
+                          {resolvedStore.name}
+                        </Link>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openLocationModal}
+                      className="text-[11px] font-bold text-brand hover:underline"
+                    >
+                      Switch store
+                    </button>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 flex items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5 text-xs text-amber-900">
+                    <MapPin className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                    <span>
+                      {hasLocationContext
+                        ? `No local store delivers to ${location?.displayLocation} yet.`
+                        : 'Select your delivery location to see local store availability and ETA.'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openLocationModal}
+                    className="rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-white hover:bg-forest shrink-0"
+                  >
+                    Set Area
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Quantity & Add to Cart Controls */}
+            {/* Quantity & Add to Basket Controls */}
             <div className="pt-4 border-t border-stone-100">
-              {isOutOfStock ? (
+              {!resolvedStore ? (
+                <Button
+                  type="button"
+                  onClick={openLocationModal}
+                  className="w-full py-4 rounded-2xl bg-brand hover:bg-forest text-white font-black"
+                >
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Select Delivery Location to Add
+                </Button>
+              ) : !isAvailable ? (
                 <div className="flex items-center gap-2 rounded-xl bg-stone-100 p-3.5 text-sm font-bold text-stone-500">
                   <AlertCircle className="h-5 w-5 text-stone-400" />
-                  <span>Out of stock in your area. Please check back later.</span>
+                  <span>
+                    Out of stock at {resolvedStore.name}. Switch store or check another pack.
+                  </span>
                 </div>
               ) : quantity === 0 ? (
-                <button
+                <Button
                   type="button"
-                  onClick={() => setQuantity(1)}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 text-base font-black uppercase tracking-wider text-white shadow-md hover:bg-emerald-700 active:scale-98 transition-all"
+                  onClick={handleAddWithFreshCheck}
+                  isLoading={isCheckingAdd}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-4 text-base font-black uppercase tracking-wider text-white shadow-md hover:bg-emerald-700"
                 >
                   <Plus className="h-5 w-5" />
-                  <span>Add to Basket</span>
-                </button>
+                  <span>Add to Basket — {formatINR(sellingPrice)}</span>
+                </Button>
               ) : (
                 <div className="flex items-center justify-between rounded-2xl border-2 border-emerald-600 bg-emerald-50 p-2">
                   <span className="pl-3 text-xs font-extrabold text-emerald-900">
-                    Quantity added to basket:
+                    In Basket ({quantity} of {availableStock} available):
                   </span>
                   <div className="flex items-center rounded-xl bg-emerald-600 text-white shadow-sm">
                     <button
                       type="button"
-                      onClick={() => setQuantity(Math.max(0, quantity - 1))}
+                      onClick={() => {
+                        if (selectedVariant?.sellerProductId) {
+                          updateQuantity(selectedVariant.sellerProductId, quantity - 1, {
+                            availableQuantity: availableStock,
+                          });
+                        }
+                      }}
                       aria-label="Decrease quantity"
                       className="flex h-10 w-10 items-center justify-center rounded-l-xl hover:bg-emerald-700 active:scale-95"
                     >
@@ -385,9 +611,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                     <span className="px-4 text-sm font-black">{quantity}</span>
                     <button
                       type="button"
-                      onClick={() => setQuantity(quantity + 1)}
+                      onClick={handleAddWithFreshCheck}
+                      disabled={quantity >= availableStock}
                       aria-label="Increase quantity"
-                      className="flex h-10 w-10 items-center justify-center rounded-r-xl hover:bg-emerald-700 active:scale-95"
+                      className="flex h-10 w-10 items-center justify-center rounded-r-xl hover:bg-emerald-700 active:scale-95 disabled:opacity-50"
                     >
                       <Plus className="h-4 w-4" />
                     </button>
@@ -400,12 +627,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
 
         {/* Tabbed Product Details: Overview, Nutrition, Compliance */}
         <section className="mt-12 rounded-3xl border border-stone-200/80 bg-white p-6 shadow-xs">
-          {/* Tab Navigation */}
-          <div className="flex border-b border-stone-200">
+          <div className="flex border-b border-stone-200 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab('overview')}
               className={cn(
-                'border-b-2 px-5 py-3 text-sm font-extrabold transition-colors',
+                'border-b-2 px-5 py-3 text-sm font-extrabold transition-colors whitespace-nowrap',
                 activeTab === 'overview'
                   ? 'border-emerald-600 text-emerald-700'
                   : 'border-transparent text-stone-500 hover:text-stone-900',
@@ -416,7 +642,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
             <button
               onClick={() => setActiveTab('nutrition')}
               className={cn(
-                'border-b-2 px-5 py-3 text-sm font-extrabold transition-colors',
+                'border-b-2 px-5 py-3 text-sm font-extrabold transition-colors whitespace-nowrap',
                 activeTab === 'nutrition'
                   ? 'border-emerald-600 text-emerald-700'
                   : 'border-transparent text-stone-500 hover:text-stone-900',
@@ -427,26 +653,26 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
             <button
               onClick={() => setActiveTab('compliance')}
               className={cn(
-                'border-b-2 px-5 py-3 text-sm font-extrabold transition-colors',
+                'border-b-2 px-5 py-3 text-sm font-extrabold transition-colors whitespace-nowrap',
                 activeTab === 'compliance'
                   ? 'border-emerald-600 text-emerald-700'
                   : 'border-transparent text-stone-500 hover:text-stone-900',
               )}
             >
-              Compliance &amp; Manufacturer
+              Legal &amp; Seller Info
             </button>
           </div>
 
-          {/* Tab Content */}
-          <div className="py-6">
+          <div className="pt-6">
             {activeTab === 'overview' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-base font-bold text-stone-900">About the Product</h3>
+                  <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                    <Info className="h-4 w-4 text-emerald-600" />
+                    About This Product
+                  </h2>
                   <p className="mt-2 text-sm text-stone-600 leading-relaxed whitespace-pre-line">
-                    {product.description ||
-                      product.shortDescription ||
-                      'No detailed description available.'}
+                    {product.description || product.shortDescription || 'No description provided.'}
                   </p>
                 </div>
 
@@ -456,7 +682,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                     <div>
                       <div className="text-xs font-bold uppercase text-stone-400">Shelf Life</div>
                       <div className="text-sm font-semibold text-stone-800">
-                        {product.shelfLife || 'Check packaging'}
+                        {product.shelfLife || 'Check physical packaging'}
                       </div>
                     </div>
                   </div>
@@ -465,7 +691,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                     <div>
                       <div className="text-xs font-bold uppercase text-stone-400">Storage</div>
                       <div className="text-sm font-semibold text-stone-800">
-                        {product.storageInstructions || 'Store in a cool & dry place'}
+                        {product.storageInstructions || 'Store in a cool, dry place'}
                       </div>
                     </div>
                   </div>
@@ -518,7 +744,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                     </div>
                   ) : (
                     <p className="mt-2 text-sm text-stone-500">
-                      Please refer to the physical packaging for detailed nutritional panel.
+                      Refer to physical product packaging for detailed nutritional panel.
                     </p>
                   )}
                 </div>
@@ -539,24 +765,27 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
                     {product.packerDetails || 'Refer to physical pack'}
                   </span>
                 </div>
-                <div>
-                  <span className="font-bold text-stone-900">Customer Support: </span>
-                  <span className="text-stone-600">
-                    support@marvelsbasket.com | +91 1800-MARVELS
-                  </span>
-                </div>
+                {resolvedStore && (
+                  <div>
+                    <span className="font-bold text-stone-900">Sold By: </span>
+                    <Link
+                      href={`/stores/${resolvedStore.slug}`}
+                      className="font-semibold text-brand hover:underline"
+                    >
+                      {resolvedStore.name}
+                    </Link>
+                  </div>
+                )}
                 <div className="pt-2 text-xs text-stone-400">
-                  Disclaimer: While we work to ensure that product information is correct, on
-                  occasion manufacturers may alter their ingredient lists. Actual product packaging
-                  and materials may contain more and/or different information than that shown on our
-                  website.
+                  Disclaimer: Packaging labels, ingredients, and net weights are subject to batch
+                  updates by manufacturers. Check the delivered physical unit before consumption.
                 </div>
               </div>
             )}
           </div>
         </section>
 
-        {/* Related / More Products in this Category */}
+        {/* Related Products */}
         {relatedProducts.length > 0 && (
           <section className="mt-12">
             <h2 className="mb-4 text-xl font-black text-stone-900 sm:text-2xl tracking-tight">
@@ -570,6 +799,49 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
           </section>
         )}
       </div>
+
+      {/* Live Price Update Confirmation Modal */}
+      <Dialog
+        isOpen={Boolean(stalePriceAlert)}
+        onClose={() => setStalePriceAlert(null)}
+        maxWidth="sm"
+        title={
+          <div className="flex items-center gap-2 text-ink">
+            <AlertTriangle className="h-5 w-5 text-amber-600" />
+            <span>Price Updated at Store</span>
+          </div>
+        }
+        description="The store updated this item's selling price since the page loaded."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setStalePriceAlert(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              className="bg-brand hover:bg-forest text-white"
+              onClick={async () => {
+                if (!stalePriceAlert) return;
+                const { latestProduct, latestVariant } = stalePriceAlert;
+                setStalePriceAlert(null);
+                await commitAddToBasket(latestProduct, latestVariant);
+              }}
+            >
+              Add at {stalePriceAlert ? formatINR(stalePriceAlert.newPrice) : ''}
+            </Button>
+          </>
+        }
+      >
+        {stalePriceAlert && (
+          <p className="text-sm text-ink-secondary">
+            Price changed from{' '}
+            <strong className="line-through text-muted">
+              {formatINR(stalePriceAlert.oldPrice)}
+            </strong>{' '}
+            to <strong className="text-brand">{formatINR(stalePriceAlert.newPrice)}</strong>.
+          </p>
+        )}
+      </Dialog>
     </StorefrontLayout>
   );
 }

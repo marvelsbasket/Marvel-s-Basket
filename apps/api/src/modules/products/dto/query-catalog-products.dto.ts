@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
@@ -112,21 +112,44 @@ export class QueryCatalogProductsDto {
     description: 'Filter only featured products for homepage sections',
   })
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) =>
+    value === 'true' || value === true ? true : value === 'false' ? false : undefined,
+  )
   @IsBoolean()
   isFeatured?: boolean;
 
   @ApiPropertyOptional({
+    description: 'Return only products currently in stock at the resolved store',
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === 'true' || value === true ? true : value === 'false' ? false : undefined,
+  )
+  @IsBoolean()
+  inStockOnly?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Return only products actively listed by the specified store',
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === 'true' || value === true ? true : value === 'false' ? false : undefined,
+  )
+  @IsBoolean()
+  onlyStoreListed?: boolean;
+
+  @ApiPropertyOptional({
     description: 'Sort order for product discovery',
-    enum: ['relevance', 'price_asc', 'price_desc', 'discount_desc', 'newest'],
+    enum: ['relevance', 'popular', 'price_asc', 'price_desc', 'discount_desc', 'newest'],
     default: 'relevance',
   })
   @IsOptional()
   @IsString()
-  sort?: 'relevance' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newest' = 'relevance';
+  sort?: 'relevance' | 'popular' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newest' =
+    'relevance';
 
   @ApiPropertyOptional({
-    description: 'Explicit store UUID to scope inventory & selling prices',
+    description: 'Explicit store UUID or slug to scope inventory & selling prices',
   })
   @IsOptional()
   @IsString()
@@ -139,6 +162,22 @@ export class QueryCatalogProductsDto {
   @IsOptional()
   @IsString()
   postalCode?: string;
+
+  @ApiPropertyOptional({ description: 'Customer latitude for location store resolution' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude?: number;
+
+  @ApiPropertyOptional({ description: 'Customer longitude for location store resolution' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude?: number;
 
   @ApiPropertyOptional({ description: 'Page number', default: 1 })
   @IsOptional()

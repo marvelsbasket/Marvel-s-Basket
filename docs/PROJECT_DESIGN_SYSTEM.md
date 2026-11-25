@@ -1369,4 +1369,12 @@ In accordance with brand identity and market conventions, all customer-facing to
 
 ---
 
+# 19. Phase 10 — Location-Aware Discovery, Search & Persistent Basket Patterns
+
+- **Delivery Location Selector (`LocationSelectorModal`):** Step-by-step `<Use Current Location>` (pre-permission prompt, reverse-geocode confirmation, granular GPS error fallback), 6-digit PIN/city check, saved address reuse, and explicit *"We're coming soon to your area!"* unserviceable messaging without fabricated local stock.
+- **Persistent Floating Mobile Basket (`MobileFloatingBasket`):** Sticky pill above `MobileBottomNav` (`X Items • ₹Y | View Basket →`) hidden on `/basket` and when empty.
+- **INR Currency & Image Optimization:** Paise-safe `formatINR()` avoiding floating-point subtraction drift alongside responsive Cloudinary `f_auto,q_auto,w_*` transforms (`w_160`, `w_400`, `w_800`).
+
+---
+
 **Document End — PROJECT_DESIGN_SYSTEM.md**

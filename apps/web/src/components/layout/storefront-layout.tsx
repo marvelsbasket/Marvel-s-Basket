@@ -4,6 +4,8 @@ import React from 'react';
 import { Header } from './header';
 import { Footer } from './footer';
 import { MobileBottomNav } from './mobile-bottom-nav';
+import { MobileFloatingBasket } from './mobile-floating-basket';
+import { useBasket } from '@/features/basket/context/basket-context';
 
 export interface StorefrontLayoutProps {
   children: React.ReactNode;
@@ -20,15 +22,16 @@ export interface StorefrontLayoutProps {
 export function StorefrontLayout({
   children,
   basketItemCount,
-  cartItemCount = 0,
-  currentLocation = 'Azamgarh, UP',
+  cartItemCount,
+  currentLocation,
   onLocationChange,
   onSearch,
   hideMobileNav = false,
   hideMobileHeader = false,
   hideMobileFooter = false,
 }: StorefrontLayoutProps) {
-  const itemCount = basketItemCount ?? cartItemCount;
+  const { basket } = useBasket();
+  const itemCount = basketItemCount ?? cartItemCount ?? basket.totalUnits;
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
@@ -40,10 +43,13 @@ export function StorefrontLayout({
           onSearch={onSearch}
         />
       </div>
-      <main className="flex-1 pb-16 md:pb-0">{children}</main>
+      <main className={`flex-1 md:pb-0 ${basket.totalUnits > 0 ? 'pb-36' : 'pb-20'}`}>
+        {children}
+      </main>
       <div className={hideMobileFooter ? 'hidden md:block' : ''}>
         <Footer />
       </div>
+      {!hideMobileNav && <MobileFloatingBasket />}
       {!hideMobileNav && <MobileBottomNav basketItemCount={itemCount} />}
     </div>
   );

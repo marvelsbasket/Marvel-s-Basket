@@ -6,24 +6,43 @@ import { ArrowRight, Sparkles } from 'lucide-react';
 import { ProductCardItem } from '@marvels-basket/shared';
 import { ProductCard } from '@/features/catalog/components/product-card';
 import { CatalogService } from '@/features/catalog/services/catalog.service';
+import { useLocation } from '@/features/location/context/location-context';
 
 export function TrendingProducts() {
+  const { isHydrated, activeStore, location } = useLocation();
   const [products, setProducts] = useState<ProductCardItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isHydrated) return;
+
+    let cancelled = false;
     async function loadTrending() {
       try {
-        const res = await CatalogService.getProducts({ limit: 8 });
-        setProducts(res.items || []);
+        setLoading(true);
+        const res = await CatalogService.getProducts({
+          limit: 8,
+          isFeatured: true,
+          storeId: activeStore?.id,
+          postalCode: location?.postalCode ?? undefined,
+          latitude: location?.latitude ?? undefined,
+          longitude: location?.longitude ?? undefined,
+        });
+        if (!cancelled) {
+          setProducts(res.items || []);
+        }
       } catch {
-        // Fall back gracefully
+        // Fallback silently
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
     loadTrending();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHydrated, activeStore?.id, location?.postalCode, location?.latitude, location?.longitude]);
 
   if (!loading && products.length === 0) {
     return null;
@@ -35,7 +54,11 @@ export function TrendingProducts() {
         <div>
           <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-700">
             <Sparkles className="h-3.5 w-3.5" />
-            <span>Hyperlocal Express</span>
+            <span>
+              {activeStore?.deliveryEtaLabel
+                ? `Express in ${activeStore.deliveryEtaLabel}`
+                : 'Hyperlocal Express'}
+            </span>
           </div>
           <h2
             id="trending-heading"
@@ -45,7 +68,7 @@ export function TrendingProducts() {
           </h2>
         </div>
         <Link
-          href="/categories"
+          href="/search?sort=popular"
           className="flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800 transition-colors"
         >
           <span>See All</span>

@@ -5,15 +5,18 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, LayoutGrid, Package, ShoppingBag, User } from 'lucide-react';
 import { useAuth } from '@/features/auth';
+import { useBasket } from '@/features/basket/context/basket-context';
 import { cn } from '@/lib/utils';
 
 export interface MobileBottomNavProps {
   basketItemCount?: number;
 }
 
-export function MobileBottomNav({ basketItemCount = 0 }: MobileBottomNavProps) {
+export function MobileBottomNav({ basketItemCount }: MobileBottomNavProps) {
   const pathname = usePathname();
   const { isAuthenticated } = useAuth();
+  const { basket } = useBasket();
+  const effectiveBasketCount = basketItemCount ?? basket.totalUnits;
 
   const navItems = [
     {
@@ -32,7 +35,7 @@ export function MobileBottomNav({ basketItemCount = 0 }: MobileBottomNavProps) {
       label: 'Basket',
       href: '/basket',
       icon: ShoppingBag,
-      badge: basketItemCount > 0 ? basketItemCount : undefined,
+      badge: effectiveBasketCount > 0 ? effectiveBasketCount : undefined,
       isActive: pathname.startsWith('/basket') || pathname.startsWith('/cart'),
     },
     {

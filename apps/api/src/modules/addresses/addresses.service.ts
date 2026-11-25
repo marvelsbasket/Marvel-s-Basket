@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { CustomerAddress } from '@prisma/client';
+import { AddressType, CustomerAddress } from '@prisma/client';
 import { CustomerAddressResponse } from '@marvels-basket/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateAddressDto, UpdateAddressDto } from './dto';
@@ -10,16 +10,27 @@ export class AddressesService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  private inferAddressType(dto: { addressType?: AddressType; label?: string }): AddressType {
+    if (dto.addressType) return dto.addressType;
+    const normalized = (dto.label || '').trim().toLowerCase();
+    if (normalized === 'home') return AddressType.HOME;
+    if (normalized === 'office' || normalized === 'work') return AddressType.OFFICE;
+    return AddressType.OTHER;
+  }
+
   private mapToResponse(address: CustomerAddress): CustomerAddressResponse {
     return {
       id: address.id,
       userId: address.userId,
+      addressType: address.addressType,
       label: address.label,
       recipientName: address.recipientName,
       phone: address.phone,
+      forSomeoneElse: address.forSomeoneElse,
       addressLine1: address.addressLine1,
       addressLine2: address.addressLine2,
       landmark: address.landmark,
+      locality: address.locality,
       city: address.city,
       state: address.state,
       postalCode: address.postalCode,
@@ -46,18 +57,29 @@ export class AddressesService {
   }
 
   /**
-   * Adds a new delivery address for the authenticated customer.
-   * If this is the customer's first address or isDefault is true, marks it as default.
+   * Adds a new delivery address for the authenticated customer (or updates matching record to avoid duplicates).
+   * If this is the customer's first address or isDefault is true, marks it as default transactionally.
    */
   async create(userId: string, dto: CreateAddressDto): Promise<CustomerAddressResponse> {
     const existingCount = await this.prisma.customerAddress.count({
       where: { userId },
     });
 
+    // Deduplicate identical house/postal/city addresses saved by the same customer
+    const duplicate = await this.prisma.customerAddress.findFirst({
+      where: {
+        userId,
+        postalCode: dto.postalCode,
+        addressLine1: { equals: dto.addressLine1, mode: 'insensitive' },
+        city: { equals: dto.city, mode: 'insensitive' },
+      },
+    });
+
     // First address is automatically the default
     const shouldBeDefault = existingCount === 0 || dto.isDefault === true;
+    const resolvedType = this.inferAddressType(dto);
 
-    const created = await this.prisma.$transaction(async (tx) => {
+    const saved = await this.prisma.$transaction(async (tx) => {
       if (shouldBeDefault) {
         await tx.customerAddress.updateMany({
           where: { userId },
@@ -65,15 +87,42 @@ export class AddressesService {
         });
       }
 
+      if (duplicate) {
+        return tx.customerAddress.update({
+          where: { id: duplicate.id },
+          data: {
+            addressType: resolvedType,
+            label: dto.label,
+            recipientName: dto.recipientName,
+            phone: dto.phone,
+            forSomeoneElse: dto.forSomeoneElse ?? false,
+            addressLine1: dto.addressLine1,
+            addressLine2: dto.addressLine2 ?? duplicate.addressLine2,
+            landmark: dto.landmark ?? duplicate.landmark,
+            locality: dto.locality ?? duplicate.locality,
+            city: dto.city,
+            state: dto.state,
+            postalCode: dto.postalCode,
+            country: dto.country ?? 'India',
+            latitude: dto.latitude ?? duplicate.latitude,
+            longitude: dto.longitude ?? duplicate.longitude,
+            isDefault: shouldBeDefault ? true : duplicate.isDefault,
+          },
+        });
+      }
+
       return tx.customerAddress.create({
         data: {
           userId,
+          addressType: resolvedType,
           label: dto.label,
           recipientName: dto.recipientName,
           phone: dto.phone,
+          forSomeoneElse: dto.forSomeoneElse ?? false,
           addressLine1: dto.addressLine1,
           addressLine2: dto.addressLine2 ?? null,
           landmark: dto.landmark ?? null,
+          locality: dto.locality ?? null,
           city: dto.city,
           state: dto.state,
           postalCode: dto.postalCode,
@@ -85,8 +134,10 @@ export class AddressesService {
       });
     });
 
-    this.logger.log(`Created delivery address ${created.id} for user ${userId}`);
-    return this.mapToResponse(created);
+    this.logger.log(
+      `${duplicate ? 'Updated existing' : 'Created'} delivery address ${saved.id} for user ${userId}`,
+    );
+    return this.mapToResponse(saved);
   }
 
   /**
@@ -131,12 +182,15 @@ export class AddressesService {
       return tx.customerAddress.update({
         where: { id: addressId },
         data: {
+          ...(dto.addressType !== undefined && { addressType: dto.addressType }),
           ...(dto.label !== undefined && { label: dto.label }),
           ...(dto.recipientName !== undefined && { recipientName: dto.recipientName }),
           ...(dto.phone !== undefined && { phone: dto.phone }),
+          ...(dto.forSomeoneElse !== undefined && { forSomeoneElse: dto.forSomeoneElse }),
           ...(dto.addressLine1 !== undefined && { addressLine1: dto.addressLine1 }),
           ...(dto.addressLine2 !== undefined && { addressLine2: dto.addressLine2 ?? null }),
           ...(dto.landmark !== undefined && { landmark: dto.landmark ?? null }),
+          ...(dto.locality !== undefined && { locality: dto.locality ?? null }),
           ...(dto.city !== undefined && { city: dto.city }),
           ...(dto.state !== undefined && { state: dto.state }),
           ...(dto.postalCode !== undefined && { postalCode: dto.postalCode }),

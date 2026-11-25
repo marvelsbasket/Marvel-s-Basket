@@ -2,18 +2,31 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
+  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
+import { AddressType } from '@prisma/client';
 
 export class CreateAddressDto {
+  @ApiPropertyOptional({
+    description: 'Address type classification',
+    enum: AddressType,
+    default: AddressType.HOME,
+  })
+  @IsOptional()
+  @IsEnum(AddressType, { message: 'Address type must be HOME, OFFICE, or OTHER' })
+  addressType?: AddressType;
+
   @ApiProperty({
-    description: 'Address category label (e.g., Home, Work, Other)',
+    description: 'Address category or custom label (e.g., Home, Office, Parents Home)',
     example: 'Home',
     default: 'Home',
   })
@@ -47,20 +60,28 @@ export class CreateAddressDto {
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   phone!: string;
 
+  @ApiPropertyOptional({
+    description: 'Whether this delivery address is for someone else rather than the account owner',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  forSomeoneElse?: boolean;
+
   @ApiProperty({
-    description: 'House/flat number, building name, and street address',
-    example: 'Flat 402, Green Valley Apartments, Civil Lines',
+    description: 'Flat, house, or apartment number',
+    example: 'Flat 402, Green Valley Apartments',
   })
   @IsString()
-  @IsNotEmpty({ message: 'Address line 1 is required' })
-  @MinLength(3, { message: 'Address line 1 must be at least 3 characters long' })
+  @IsNotEmpty({ message: 'Flat / House number is required' })
+  @MinLength(2, { message: 'Flat / House number must be at least 2 characters long' })
   @MaxLength(255, { message: 'Address line 1 cannot exceed 255 characters' })
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   addressLine1!: string;
 
   @ApiPropertyOptional({
-    description: 'Locality, floor, or sub-area details',
-    example: 'Near Collectorate',
+    description: 'Street, building, or floor details',
+    example: 'Civil Lines Road',
   })
   @IsOptional()
   @IsString()
@@ -77,6 +98,16 @@ export class CreateAddressDto {
   @MaxLength(100, { message: 'Landmark cannot exceed 100 characters' })
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   landmark?: string;
+
+  @ApiPropertyOptional({
+    description: 'Locality, neighborhood, or sub-area name',
+    example: 'Civil Lines',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120, { message: 'Locality cannot exceed 120 characters' })
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  locality?: string;
 
   @ApiProperty({
     description: 'City or town name',
@@ -127,6 +158,8 @@ export class CreateAddressDto {
   })
   @IsOptional()
   @IsNumber({}, { message: 'Latitude must be a valid number' })
+  @Min(-90, { message: 'Latitude must be >= -90' })
+  @Max(90, { message: 'Latitude must be <= 90' })
   latitude?: number;
 
   @ApiPropertyOptional({
@@ -135,6 +168,8 @@ export class CreateAddressDto {
   })
   @IsOptional()
   @IsNumber({}, { message: 'Longitude must be a valid number' })
+  @Min(-180, { message: 'Longitude must be >= -180' })
+  @Max(180, { message: 'Longitude must be <= 180' })
   longitude?: number;
 
   @ApiPropertyOptional({

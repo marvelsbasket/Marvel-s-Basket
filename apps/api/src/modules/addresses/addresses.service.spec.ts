@@ -81,6 +81,7 @@ describe('AddressesService', () => {
   describe('create', () => {
     it('should make the first created address default automatically', async () => {
       prisma.customerAddress.count.mockResolvedValue(0);
+      prisma.customerAddress.findFirst.mockResolvedValue(null);
       prisma.customerAddress.create.mockResolvedValue(mockAddress);
 
       const result = await service.create(mockUserId, {
@@ -105,6 +106,7 @@ describe('AddressesService', () => {
 
     it('should unset previous default when new address isDefault is true', async () => {
       prisma.customerAddress.count.mockResolvedValue(1);
+      prisma.customerAddress.findFirst.mockResolvedValue(null);
       prisma.customerAddress.create.mockResolvedValue(mockAddress);
 
       await service.create(mockUserId, {
@@ -121,6 +123,36 @@ describe('AddressesService', () => {
       expect(prisma.customerAddress.updateMany).toHaveBeenCalledWith({
         where: { userId: mockUserId },
         data: { isDefault: false },
+      });
+    });
+
+    it('should update and reuse duplicate address instead of creating duplicate row', async () => {
+      prisma.customerAddress.count.mockResolvedValue(1);
+      prisma.customerAddress.findFirst.mockResolvedValue(mockAddress);
+      prisma.customerAddress.update.mockResolvedValue({
+        ...mockAddress,
+        locality: 'Civil Lines',
+        isDefault: true,
+      });
+
+      const result = await service.create(mockUserId, {
+        addressType: 'HOME',
+        label: 'Home',
+        recipientName: 'Rohan Sharma',
+        phone: '9876543210',
+        addressLine1: 'Flat 101, Green Heights',
+        locality: 'Civil Lines',
+        city: 'Azamgarh',
+        state: 'Uttar Pradesh',
+        postalCode: '276001',
+        isDefault: true,
+      });
+
+      expect(result.isDefault).toBe(true);
+      expect(prisma.customerAddress.create).not.toHaveBeenCalled();
+      expect(prisma.customerAddress.update).toHaveBeenCalledWith({
+        where: { id: mockAddressId },
+        data: expect.objectContaining({ locality: 'Civil Lines', isDefault: true }),
       });
     });
   });

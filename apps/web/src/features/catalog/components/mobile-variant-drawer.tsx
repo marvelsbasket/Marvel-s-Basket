@@ -1,9 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Minus, Plus, X } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { MapPin, Minus, Plus, X } from 'lucide-react';
 import { ProductCardItem, ProductVariantItem } from '@marvels-basket/shared';
-import { cn } from '@/lib/utils';
+import { useLocation } from '@/features/location/context/location-context';
+import { useBasket } from '@/features/basket/context/basket-context';
+import { calculateDiscountPercent, formatINR } from '@/lib/utils/currency';
+import { getOptimizedProductImage } from '@/lib/utils/cloudinary';
 
 export interface MobileVariantDrawerProps {
   isOpen: boolean;
@@ -12,8 +15,8 @@ export interface MobileVariantDrawerProps {
 }
 
 export function MobileVariantDrawer({ isOpen, onClose, product }: MobileVariantDrawerProps) {
-  // Quantities tracked per variant ID
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const { activeStore, openLocationModal } = useLocation();
+  const { addItem, updateQuantity, getItemQuantity } = useBasket();
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -32,32 +35,73 @@ export function MobileVariantDrawer({ isOpen, onClose, product }: MobileVariantD
 
   if (!isOpen || !product) return null;
 
-  const handleIncrement = (variantId: string, maxQty: number) => {
-    setQuantities((prev) => ({
-      ...prev,
-      [variantId]: Math.min((prev[variantId] || 0) + 1, maxQty),
-    }));
-  };
+  const resolvedStore =
+    product.store ??
+    (activeStore
+      ? {
+          id: activeStore.id,
+          name: activeStore.name,
+          slug: activeStore.slug,
+          deliveryEtaLabel: activeStore.deliveryEtaLabel,
+          deliveryTimeMinutes: activeStore.deliveryTimeMinutes,
+          isOpen: activeStore.isOpen,
+          isAcceptingOrders: activeStore.isAcceptingOrders,
+          minimumOrderValue: activeStore.minimumOrderValue,
+        }
+      : null);
 
-  const handleDecrement = (variantId: string) => {
-    setQuantities((prev) => ({
-      ...prev,
-      [variantId]: Math.max(0, (prev[variantId] || 0) - 1),
-    }));
+  const thumbUrl = getOptimizedProductImage(product.primaryImageUrl, 'thumb');
+
+  const handleVariantAdd = async (variant: ProductVariantItem, currentQty: number) => {
+    if (!resolvedStore || !variant.sellerProductId) {
+      onClose();
+      openLocationModal();
+      return;
+    }
+    const maxQty = variant.availableQuantity ?? 0;
+    if (maxQty <= 0 || currentQty >= maxQty) return;
+
+    if (currentQty === 0) {
+      await addItem({
+        sellerProductId: variant.sellerProductId,
+        productId: product.id,
+        variantId: variant.id,
+        productName: product.name,
+        productSlug: product.slug,
+        brand: product.brand,
+        packSize: variant.packSize || variant.name,
+        imageUrl: variant.primaryImageUrl || product.primaryImageUrl,
+        unitPrice: variant.sellingPrice ?? variant.mrp,
+        mrp: variant.mrp,
+        availableQuantity: maxQty,
+        store: {
+          id: resolvedStore.id,
+          name: resolvedStore.name,
+          slug: resolvedStore.slug || '',
+          deliveryEtaLabel: resolvedStore.deliveryEtaLabel ?? null,
+          deliveryTimeMinutes: resolvedStore.deliveryTimeMinutes ?? null,
+          isOpen: resolvedStore.isOpen ?? true,
+          isAcceptingOrders: resolvedStore.isAcceptingOrders ?? true,
+          minimumOrderValue: resolvedStore.minimumOrderValue ?? null,
+        },
+        quantity: 1,
+      });
+    } else {
+      await updateQuantity(variant.sellerProductId, currentQty + 1, {
+        availableQuantity: maxQty,
+      });
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
-      {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Sheet Surface */}
       <div className="relative z-10 w-full max-h-[85vh] flex flex-col rounded-t-3xl bg-white shadow-2xl animate-in slide-in-from-bottom duration-250">
-        {/* Pull Handle */}
         <div className="flex justify-center pt-3 pb-1">
           <div className="h-1.5 w-12 rounded-full bg-stone-300" />
         </div>
@@ -66,12 +110,8 @@ export function MobileVariantDrawer({ isOpen, onClose, product }: MobileVariantD
         <div className="flex items-center justify-between border-b border-stone-100 px-5 py-3">
           <div className="flex items-center gap-3 min-w-0 pr-3">
             <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-stone-100 bg-[#F8FAF7] p-1 flex items-center justify-center">
-              {product.primaryImageUrl ? (
-                <img
-                  src={product.primaryImageUrl}
-                  alt={product.name}
-                  className="h-full w-full object-contain"
-                />
+              {thumbUrl ? (
+                <img src={thumbUrl} alt={product.name} className="h-full w-full object-contain" />
               ) : (
                 <span className="text-xl">🛍️</span>
               )}
@@ -97,21 +137,22 @@ export function MobileVariantDrawer({ isOpen, onClose, product }: MobileVariantD
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           {product.variants?.map((variant) => {
             const mrp = variant.mrp ?? 0;
-            const sellingPrice = variant.sellingPrice ?? 0;
+            const sellingPrice = variant.sellingPrice ?? mrp;
             const discountPercent =
-              variant.discountPercent ??
-              (mrp > sellingPrice && mrp > 0 ? Math.round(((mrp - sellingPrice) / mrp) * 100) : 0);
+              variant.discountPercent ?? calculateDiscountPercent(mrp, sellingPrice);
 
-            const availableQty = variant.availableQuantity ?? 99;
-            const isOutOfStock = availableQty <= 0 || variant.isAvailable === false;
-            const currentQty = quantities[variant.id] || 0;
+            const hasStoreOffer = Boolean(resolvedStore && variant.sellerProductId);
+            const availableQty = variant.availableQuantity ?? 0;
+            const isOutOfStock =
+              !hasStoreOffer || availableQty <= 0 || variant.isAvailable === false;
+            const isLowStock = hasStoreOffer && availableQty > 0 && availableQty <= 5;
+            const currentQty = getItemQuantity(variant.sellerProductId, variant.id);
 
             return (
               <div
                 key={variant.id}
                 className="flex items-center justify-between rounded-2xl border border-stone-200/90 bg-white p-3.5 shadow-2xs hover:border-emerald-300 transition-colors"
               >
-                {/* Variant Info */}
                 <div className="min-w-0 pr-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-stone-900">
@@ -125,24 +166,42 @@ export function MobileVariantDrawer({ isOpen, onClose, product }: MobileVariantD
                   </div>
                   <div className="mt-1 flex items-baseline gap-1.5">
                     <span className="text-xs font-black text-stone-950 sm:text-sm">
-                      ₹{sellingPrice}
+                      {formatINR(sellingPrice)}
                     </span>
                     {mrp > sellingPrice && (
-                      <span className="text-[10px] text-stone-400 line-through">₹{mrp}</span>
+                      <span className="text-[10px] text-stone-400 line-through">
+                        {formatINR(mrp)}
+                      </span>
+                    )}
+                    {isLowStock && (
+                      <span className="text-[10px] font-semibold text-amber-700 ml-1">
+                        Only {availableQty} left
+                      </span>
                     )}
                   </div>
                 </div>
 
-                {/* Variant Action Button */}
                 <div className="shrink-0">
-                  {isOutOfStock ? (
+                  {!resolvedStore ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        openLocationModal();
+                      }}
+                      className="inline-flex items-center gap-1 rounded-xl border border-brand/40 bg-brand-tint px-2.5 py-1.5 text-[11px] font-bold text-brand"
+                    >
+                      <MapPin className="h-3 w-3" />
+                      <span>Set Area</span>
+                    </button>
+                  ) : isOutOfStock ? (
                     <span className="rounded-lg bg-stone-100 px-2.5 py-1 text-[10px] font-bold text-stone-500 border border-stone-200">
                       Out of Stock
                     </span>
                   ) : currentQty === 0 ? (
                     <button
                       type="button"
-                      onClick={() => handleIncrement(variant.id, availableQty)}
+                      onClick={() => handleVariantAdd(variant, 0)}
                       className="flex items-center gap-0.5 rounded-xl border border-emerald-600 bg-white px-3 py-1.5 text-xs font-black tracking-tight text-emerald-700 shadow-2xs transition-all hover:bg-emerald-600 hover:text-white active:scale-95"
                     >
                       <Plus className="h-3 w-3 stroke-[3]" />
@@ -152,7 +211,14 @@ export function MobileVariantDrawer({ isOpen, onClose, product }: MobileVariantD
                     <div className="flex items-center rounded-xl bg-emerald-700 text-white shadow-2xs">
                       <button
                         type="button"
-                        onClick={() => handleDecrement(variant.id)}
+                        onClick={() => {
+                          if (variant.sellerProductId) {
+                            updateQuantity(variant.sellerProductId, currentQty - 1, {
+                              availableQuantity: availableQty,
+                            });
+                          }
+                        }}
+                        aria-label="Decrease quantity"
                         className="flex h-7 w-7 items-center justify-center rounded-l-xl hover:bg-emerald-800 transition-colors active:scale-90"
                       >
                         <Minus className="h-3.5 w-3.5" />
@@ -160,8 +226,10 @@ export function MobileVariantDrawer({ isOpen, onClose, product }: MobileVariantD
                       <span className="px-2 text-xs font-black">{currentQty}</span>
                       <button
                         type="button"
-                        onClick={() => handleIncrement(variant.id, availableQty)}
-                        className="flex h-7 w-7 items-center justify-center rounded-r-xl hover:bg-emerald-800 transition-colors active:scale-90"
+                        onClick={() => handleVariantAdd(variant, currentQty)}
+                        disabled={currentQty >= availableQty}
+                        aria-label="Increase quantity"
+                        className="flex h-7 w-7 items-center justify-center rounded-r-xl hover:bg-emerald-800 transition-colors active:scale-90 disabled:opacity-50"
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </button>
@@ -173,7 +241,6 @@ export function MobileVariantDrawer({ isOpen, onClose, product }: MobileVariantD
           })}
         </div>
 
-        {/* Footer Done Button */}
         <div className="border-t border-stone-100 p-4 pb-6 bg-white">
           <button
             type="button"

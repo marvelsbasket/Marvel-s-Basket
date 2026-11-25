@@ -30,8 +30,21 @@ export class ProductsController {
   })
   @ApiResponse({ status: 200, description: 'Search suggestions' })
   @ResponseMessage('Search suggestions retrieved')
-  async getSearchSuggestions(@Query('q') q: string) {
-    return this.productsService.getSearchSuggestions(q || '');
+  async getSearchSuggestions(
+    @Query('q') q?: string,
+    @Query('storeId') storeId?: string,
+    @Query('postalCode') postalCode?: string,
+    @Query('latitude') latitude?: string,
+    @Query('longitude') longitude?: string,
+  ) {
+    const lat = latitude ? Number(latitude) : undefined;
+    const lng = longitude ? Number(longitude) : undefined;
+    return this.productsService.getSearchSuggestions(q || '', {
+      storeId,
+      postalCode,
+      latitude: lat !== undefined && Number.isFinite(lat) ? lat : undefined,
+      longitude: lng !== undefined && Number.isFinite(lng) ? lng : undefined,
+    });
   }
 
   @Public()
@@ -46,7 +59,16 @@ export class ProductsController {
     @Param('slug') slug: string,
     @Query('storeId') storeId?: string,
     @Query('postalCode') postalCode?: string,
+    @Query('latitude') latitude?: string,
+    @Query('longitude') longitude?: string,
   ) {
-    return this.productsService.getProductBySlug(slug, { storeId, postalCode });
+    const lat = latitude ? Number(latitude) : undefined;
+    const lng = longitude ? Number(longitude) : undefined;
+    return this.productsService.getProductBySlug(slug, {
+      storeId,
+      postalCode,
+      latitude: lat !== undefined && Number.isFinite(lat) ? lat : undefined,
+      longitude: lng !== undefined && Number.isFinite(lng) ? lng : undefined,
+    });
   }
 }

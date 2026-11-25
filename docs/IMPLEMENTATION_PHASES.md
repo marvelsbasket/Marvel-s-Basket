@@ -582,32 +582,31 @@ Inventory operations must prevent overselling and maintain consistency during co
 # 12. Phase 10 — Customer Shopping Experience
 
 **Priority:** High  
-**Status:** Not Started
+**Status:** Completed (Verified on 25 November 2026)
 
 ### Objective
 
-Build the customer-facing marketplace browsing experience.
+Build the location-aware customer marketplace browsing experience connecting real backend catalog, seller listings, inventory, pricing, location resolution, and persistent single-store basket.
 
 ### Tasks
 
-- [ ] Build homepage.
-- [ ] Build category navigation.
-- [ ] Build product listing pages.
-- [ ] Build product detail pages.
-- [ ] Build search interface.
-- [ ] Implement filters.
-- [ ] Implement sorting.
-- [ ] Display seller availability.
-- [ ] Display pricing and stock information.
-- [ ] Build responsive layouts.
-- [ ] Integrate product APIs.
+- [x] Build homepage (10-section storefront removing temporary component showcase).
+- [x] Build category navigation (`/categories` and `/categories/[slug]` split-pane & sidebar).
+- [x] Build product listing pages (`/stores`, `/stores/[slug]`, `/categories/[slug]`).
+- [x] Build product detail pages (`/products/[slug]` with live price/stock revalidation & variant selection).
+- [x] Build search interface (`/search` + instant 250ms autocomplete with Hinglish synonyms & typo tolerance).
+- [x] Implement filters (category, brand, dietary, discount, in-stock, URL sync).
+- [x] Implement sorting (relevance, store sellingPrice low/high, discount, popular, newest).
+- [x] Display seller availability (Open/Closed/Closing Soon IST evaluation, distanceKm, ETA).
+- [x] Display pricing and stock information (no fabricated stock/price when location missing/unserviceable).
+- [x] Build responsive layouts & mobile floating basket summary.
+- [x] Integrate product, location, stores, and persistent basket APIs.
 
 ### Deliverables
 
-- Customer marketplace interface.
-- Product discovery.
-- Search and filtering.
-- Product detail experience.
+- `StoresModule`, `LocationsModule`, and `CartModule` + enhanced `ProductsService`.
+- Frontend `LocationContext` (`<Use Current Location>` + reverse geocoding + serviceability + saved addresses) & `BasketContext` (`localStorage` guest merge + server `/cart` persistence + single-store conflict & location switch comparison modals).
+- Upgraded storefront pages (`/`, `/categories`, `/categories/[slug]`, `/products/[slug]`, `/stores`, `/stores/[slug]`, `/search`, `/basket`).
 
 ### Completion Criteria
 

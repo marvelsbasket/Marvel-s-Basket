@@ -6,7 +6,10 @@ import {
   PaginatedResponse,
   ProductCardItem,
   ProductDetailItem,
+  SearchSuggestionsResponse,
 } from '@marvels-basket/shared';
+
+export type SearchSuggestionsResult = SearchSuggestionsResponse;
 
 export interface CatalogQueryOptions {
   q?: string;
@@ -21,17 +24,15 @@ export interface CatalogQueryOptions {
   maxPrice?: number;
   minDiscount?: number;
   isFeatured?: boolean;
-  sort?: 'relevance' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newest';
+  inStockOnly?: boolean;
+  onlyStoreListed?: boolean;
+  sort?: 'relevance' | 'price_asc' | 'price_desc' | 'discount_desc' | 'newest' | 'popular';
   page?: number;
   limit?: number;
   storeId?: string;
   postalCode?: string;
-}
-
-export interface SearchSuggestionsResult {
-  products: { name: string; slug: string }[];
-  categories: { name: string; slug: string }[];
-  brands: { name: string; slug: string }[];
+  latitude?: number;
+  longitude?: number;
 }
 
 export class CatalogService {
@@ -87,11 +88,18 @@ export class CatalogService {
    */
   static async getProductBySlug(
     slug: string,
-    options?: { storeId?: string; postalCode?: string },
+    options?: {
+      storeId?: string;
+      postalCode?: string;
+      latitude?: number;
+      longitude?: number;
+    },
   ): Promise<ProductDetailItem> {
-    const params: Record<string, string> = {};
+    const params: Record<string, string | number> = {};
     if (options?.storeId) params.storeId = options.storeId;
     if (options?.postalCode) params.postalCode = options.postalCode;
+    if (options?.latitude !== undefined) params.latitude = options.latitude;
+    if (options?.longitude !== undefined) params.longitude = options.longitude;
 
     const res = await apiClient.get<ProductDetailItem>(ENDPOINTS.PRODUCTS.BY_SLUG(slug), {
       params,
@@ -102,13 +110,27 @@ export class CatalogService {
   /**
    * Autocomplete search suggestions across products, categories, and brands.
    */
-  static async getSearchSuggestions(q: string): Promise<SearchSuggestionsResult> {
+  static async getSearchSuggestions(
+    q: string,
+    options?: {
+      storeId?: string;
+      postalCode?: string;
+      latitude?: number;
+      longitude?: number;
+    },
+  ): Promise<SearchSuggestionsResponse> {
     if (!q || q.trim().length < 2) {
       return { products: [], categories: [], brands: [] };
     }
-    const res = await apiClient.get<SearchSuggestionsResult>(
+    const params: Record<string, string | number> = { q: q.trim() };
+    if (options?.storeId) params.storeId = options.storeId;
+    if (options?.postalCode) params.postalCode = options.postalCode;
+    if (options?.latitude !== undefined) params.latitude = options.latitude;
+    if (options?.longitude !== undefined) params.longitude = options.longitude;
+
+    const res = await apiClient.get<SearchSuggestionsResponse>(
       ENDPOINTS.PRODUCTS.SEARCH_SUGGESTIONS,
-      { params: { q: q.trim() } },
+      { params },
     );
     return res.data || { products: [], categories: [], brands: [] };
   }

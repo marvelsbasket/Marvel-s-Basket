@@ -64,6 +64,35 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
+
+  /* Bottom-up sheet & backdrop motion */
+  .animate-mb-sheet-up {
+    animation: mbSheetUp 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .animate-mb-backdrop {
+    animation: mbBackdropFade 220ms ease-out both;
+  }
+}
+
+@keyframes mbSheetUp {
+  from {
+    opacity: 0;
+    transform: translateY(32px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mbBackdropFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Reduced motion preference support */

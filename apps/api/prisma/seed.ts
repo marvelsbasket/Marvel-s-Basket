@@ -365,6 +365,36 @@ async function main() {
     },
   });
 
+  // Business Hours for Store 2 (7 days a week)
+  for (let day = 0; day <= 6; day++) {
+    await prisma.sellerBusinessHours.upsert({
+      where: {
+        sellerId_dayOfWeek: {
+          sellerId: store2.id,
+          dayOfWeek: day,
+        },
+      },
+      update: {},
+      create: {
+        sellerId: store2.id,
+        dayOfWeek: day,
+        openingTime: '08:00',
+        closingTime: '21:30',
+        isClosed: false,
+      },
+    });
+  }
+
+  // Service Area for Store 2 (560095 exclusive + 560034 + 560001 shared with Store 1)
+  await prisma.sellerServiceArea.deleteMany({ where: { sellerId: store2.id } });
+  await prisma.sellerServiceArea.createMany({
+    data: [
+      { sellerId: store2.id, postalCode: '560095', radiusKm: 5.0, isActive: true },
+      { sellerId: store2.id, postalCode: '560034', radiusKm: 5.0, isActive: true },
+      { sellerId: store2.id, postalCode: '560001', radiusKm: 8.0, isActive: true },
+    ],
+  });
+
   // 2.5 Delivery Rider
   const riderUser = await prisma.user.upsert({
     where: { email: 'rider1@marvelsbasket.com' },
@@ -1034,6 +1064,156 @@ async function main() {
           store1Stock: 45,
           store2Price: 190.0,
           store2Stock: 35,
+        },
+      ],
+    },
+    {
+      name: 'bb Popular Fine White Sugar (Cheeni)',
+      slug: 'bb-popular-fine-white-sugar',
+      brandSlug: 'bb-popular',
+      categoryId: catAttaRice.id,
+      shortDesc: 'Sulphur-free pure crystalline white sugar for everyday kitchen use.',
+      description:
+        'Hygienically packed refined white sugar crystals ideal for daily tea, coffee, mithai, and baking.',
+      foodPref: 'VEG',
+      countryOfOrigin: 'India',
+      shelfLife: '365 Days',
+      storage: 'Store in an airtight container away from moisture.',
+      tags: ['sugar', 'cheeni', 'chini', 'sweetener', 'grocery'],
+      isFeatured: true,
+      variants: [
+        {
+          name: '1 kg',
+          packSize: '1 kg Pouch',
+          unitVal: 1,
+          unitType: 'kg',
+          mrp: 58.0,
+          sku: 'MB-SUGAR-1KG',
+          img: 'https://images.unsplash.com/photo-1581441363689-1f3c3c414635?auto=format&fit=crop&w=600&q=80',
+          store1Price: 48.0,
+          store1Stock: 3, // Low stock threshold test (< 5)
+          store2Price: 51.0,
+          store2Stock: 25,
+        },
+      ],
+    },
+    {
+      name: 'Fresho Fresh Potato (Aloo)',
+      slug: 'fresho-fresh-potato-aloo',
+      brandSlug: 'fresho',
+      categoryId: catVeg.id,
+      shortDesc: 'Farm-fresh, hand-picked grade A table potatoes.',
+      description:
+        'Naturally grown potatoes ideal for curries, parathas, fries, and everyday Indian cooking.',
+      foodPref: 'VEG',
+      countryOfOrigin: 'India',
+      shelfLife: '10 Days',
+      storage: 'Keep in a cool, dark, ventilated basket.',
+      tags: ['potato', 'aloo', 'alu', 'sabzi', 'vegetables'],
+      isFeatured: true,
+      variants: [
+        {
+          name: '1 kg',
+          packSize: '1 kg',
+          unitVal: 1,
+          unitType: 'kg',
+          mrp: 45.0,
+          sku: 'MB-POTATO-1KG',
+          img: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=600&q=80',
+          store1Price: 36.0,
+          store1Stock: 40,
+          store2Price: 38.0,
+          store2Stock: 32,
+        },
+      ],
+    },
+    {
+      name: 'Fresho Red Onion (Pyaz)',
+      slug: 'fresho-red-onion-pyaz',
+      brandSlug: 'fresho',
+      categoryId: catVeg.id,
+      shortDesc: 'Crisp, pungent red onions sourced directly from Nashik farms.',
+      description:
+        'Uniformly graded red onions adding rich aroma and base flavour to biryanis, dals, and salads.',
+      foodPref: 'VEG',
+      countryOfOrigin: 'India',
+      shelfLife: '14 Days',
+      storage: 'Store in a dry, breathable mesh bag.',
+      tags: ['onion', 'pyaz', 'pyaaz', 'kanda', 'vegetables'],
+      isFeatured: false,
+      variants: [
+        {
+          name: '1 kg',
+          packSize: '1 kg',
+          unitVal: 1,
+          unitType: 'kg',
+          mrp: 60.0,
+          sku: 'MB-ONION-1KG',
+          img: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?auto=format&fit=crop&w=600&q=80',
+          store1Price: 49.0,
+          store1Stock: 50,
+          store2Price: 47.0,
+          store2Stock: 0, // Out of stock at Store 2 to test availability diff on store switch
+        },
+      ],
+    },
+    {
+      name: 'Fresho Hybrid Tomato (Tamatar)',
+      slug: 'fresho-hybrid-tomato-tamatar',
+      brandSlug: 'fresho',
+      categoryId: catVeg.id,
+      shortDesc: 'Plump, glossy farm-fresh red hybrid tomatoes.',
+      description:
+        'Hand-sorted ripe hybrid tomatoes ideal for gravies, chutneys, soups, and fresh salads.',
+      foodPref: 'VEG',
+      countryOfOrigin: 'India',
+      shelfLife: '5 Days',
+      storage: 'Store at cool room temperature or refrigerate in crisper.',
+      tags: ['tomato', 'tamatar', 'sabzi', 'vegetables'],
+      isFeatured: false,
+      variants: [
+        {
+          name: '500 g',
+          packSize: '500 g',
+          unitVal: 500,
+          unitType: 'g',
+          mrp: 35.0,
+          sku: 'MB-TOMATO-500G',
+          img: 'https://images.unsplash.com/photo-1546094096-0df4bcaaa337?auto=format&fit=crop&w=600&q=80',
+          store1Price: 28.0,
+          store1Stock: 24,
+          store2Price: 26.0,
+          store2Stock: 18,
+        },
+      ],
+    },
+    {
+      name: 'Tata Tea Gold Leaf & Assam CTC Blend (Chai)',
+      slug: 'tata-tea-gold-chai',
+      brandSlug: 'tata-tea',
+      categoryId: catSnacks.id,
+      shortDesc: '15% gently rolled aromatic long leaves blended with strong Assam CTC.',
+      description:
+        'A rich, balanced Indian chai blend offering irresistible aroma and brisk cup strength.',
+      foodPref: 'VEG',
+      countryOfOrigin: 'India',
+      shelfLife: '365 Days',
+      storage: 'Store in a cool, dry airtight jar.',
+      tags: ['tea', 'chai', 'patti', 'beverage', 'tata'],
+      isFeatured: true,
+      variants: [
+        {
+          name: '250 g',
+          packSize: '250 g Pouch',
+          unitVal: 250,
+          unitType: 'g',
+          mrp: 165.0,
+          sku: 'MB-TATATEA-GOLD-250G',
+          img: 'https://images.unsplash.com/photo-1597318181409-cf64d0b5d8a2?auto=format&fit=crop&w=600&q=80',
+          store1Price: 148.0,
+          store1Stock: 22,
+          store2Price: 152.0,
+          store2Stock: 16,
         },
       ],
     },
