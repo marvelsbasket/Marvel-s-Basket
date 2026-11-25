@@ -88,7 +88,15 @@ export const ENDPOINTS = {
     ITEM_BY_ID: (itemId: string) => `/cart/items/${itemId}`,
     COMPARE_STORE: '/cart/compare-store',
     APPLY_STORE_SWITCH: '/cart/apply-store-switch',
+    SWITCH_STORE: '/cart/switch-store',
+    VALIDATE: '/cart/validate',
+    COUPON: '/cart/coupon',
     SYNC: '/cart/sync',
+  },
+  CHECKOUT: {
+    PREPARE: '/checkout/prepare',
+    SUMMARY: '/checkout/summary',
+    CANCEL: '/checkout/cancel',
   },
   ADMIN_CATEGORIES: {
     LIST: '/admin/categories',

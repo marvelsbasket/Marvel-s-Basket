@@ -16,8 +16,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CartService } from './cart.service';
 import {
   AddCartItemDto,
+  ApplyCouponDto,
   ApplyStoreSwitchDto,
   CompareStoreSwitchDto,
+  SwitchStoreDto,
   SyncCartDto,
   UpdateCartItemDto,
 } from './dto';
@@ -105,5 +107,42 @@ export class CartController {
   @ResponseMessage('Basket synchronized')
   async syncGuestCart(@CurrentUser('id') userId: string, @Body() dto: SyncCartDto) {
     return this.cartService.syncGuestCart(userId, dto);
+  }
+
+  @ApiBearerAuth('JWT')
+  @Post('switch-store')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Confirm switching basket to a new store (clears old cart & active reservations)',
+  })
+  @ResponseMessage('Basket switched to new store')
+  async switchStore(@CurrentUser('id') userId: string, @Body() dto: SwitchStoreDto) {
+    return this.cartService.switchStore(userId, dto);
+  }
+
+  @ApiBearerAuth('JWT')
+  @Post('validate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Revalidate authenticated customer basket against live store & stock' })
+  @ResponseMessage('Basket validated')
+  async validateCart(@CurrentUser('id') userId: string) {
+    return this.cartService.validateCart(userId);
+  }
+
+  @ApiBearerAuth('JWT')
+  @Post('coupon')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Validate and apply a platform coupon to the basket' })
+  @ResponseMessage('Coupon applied')
+  async applyCoupon(@CurrentUser('id') userId: string, @Body() dto: ApplyCouponDto) {
+    return this.cartService.applyCoupon(userId, dto.code);
+  }
+
+  @ApiBearerAuth('JWT')
+  @Delete('coupon')
+  @ApiOperation({ summary: 'Remove applied coupon from the basket' })
+  @ResponseMessage('Coupon removed')
+  async removeCoupon(@CurrentUser('id') userId: string) {
+    return this.cartService.removeCoupon(userId);
   }
 }

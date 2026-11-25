@@ -2024,6 +2024,18 @@ IDENTITY
 
 ---
 
+## Phase 11 Addendum — CheckoutSession & Integrity Constraints
+
+- Added `CheckoutSessionStatus` enum (`PREPARED`, `RESERVATION_ACTIVE`, `EXPIRED`, `RELEASED`, `COMMITTED`, `CANCELLED`).
+- Added `carts.applied_coupon_code` (`String?`) for persistent coupon selection.
+- Added `checkout_sessions` table storing `user_id`, `cart_id`, `seller_id`, `address_id`, immutable `address_snapshot` (JSONB), `items_snapshot` (JSONB), `coupon_id`, `coupon_code`, `item_subtotal`, `product_discount`, `coupon_discount`, `delivery_fee`, `tax_amount`, `grand_total` (`Decimal(12, 2)`), `distance_km` (`Decimal(6, 2)`), `idempotency_key`, `expires_at`, `committed_at`, and `released_at`.
+- Added PostgreSQL `CHECK` constraints in migration `20261125101933_phase11_cart_checkout_sessions`:
+  - `chk_seller_products_selling_price_lte_mrp` (`mrp IS NULL OR selling_price <= mrp`)
+  - `chk_cart_items_quantity_positive` (`quantity > 0`)
+  - `chk_inventories_non_negative` (`stock_on_hand >= 0 AND reserved_quantity >= 0 AND stock_on_hand >= reserved_quantity`)
+
+---
+
 # 31. RELATED DOCUMENTATION
 
 1. PROJECT_CONTEXT.md

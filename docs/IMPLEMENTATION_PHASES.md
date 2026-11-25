@@ -617,7 +617,7 @@ Customers must be able to discover products and view valid seller-specific offer
 # 13. Phase 11 — Cart & Checkout
 
 **Priority:** Critical  
-**Status:** Not Started
+**Status:** Completed (Verified on 25 November 2026)
 
 ### Objective
 
@@ -625,17 +625,17 @@ Implement single-store cart management, store-switch confirmation, and checkout 
 
 ### Tasks
 
-- [ ] Implement single-store cart binding (cart bound to `sellerId`).
-- [ ] Implement store-switch confirmation modal when adding from a different store (clearing existing cart).
-- [ ] Implement add-to-cart, remove-from-cart, and quantity update APIs.
-- [ ] Validate store operational hours and open status.
-- [ ] Validate seller listing availability and price <= MRP.
-- [ ] Validate minimum order value (MOV).
-- [ ] Calculate distance-tiered delivery fee based on store radius.
-- [ ] Validate and apply platform coupons.
-- [ ] Implement atomic 15-minute inventory reservation (`StockReservation`).
-- [ ] Handle BullMQ auto-release for abandoned or expired checkout sessions.
-- [ ] Build cart and checkout summary interfaces.
+- [x] Implement single-store cart binding (cart bound to `sellerId`).
+- [x] Implement store-switch confirmation modal when adding from a different store (clearing existing cart).
+- [x] Implement add-to-cart, remove-from-cart, and quantity update APIs.
+- [x] Validate store operational hours and open status.
+- [x] Validate seller listing availability and price <= MRP.
+- [x] Validate minimum order value (MOV).
+- [x] Calculate distance-tiered delivery fee based on store radius.
+- [x] Validate and apply platform coupons.
+- [x] Implement atomic 15-minute inventory reservation (`StockReservation`).
+- [x] Handle BullMQ auto-release for abandoned or expired checkout sessions.
+- [x] Build cart and checkout summary interfaces.
 
 ### Deliverables
 

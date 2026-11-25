@@ -20,8 +20,11 @@ export class ReservationExpirationWorker implements OnApplicationBootstrap, OnAp
   ) {}
 
   onApplicationBootstrap() {
+    if (process.env.NODE_ENV === 'test') {
+      return;
+    }
     this.logger.log(`Starting ReservationExpirationWorker [Worker ID: ${this.workerId}]`);
-    // Run initial sweep after short startup delay (5s), then every 60s
+    // Run initial recovery sweep after short startup delay (5s), then every 60s
     setTimeout(() => {
       if (!this.isShuttingDown) {
         this.processExpiredReservations();

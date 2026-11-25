@@ -1018,6 +1018,77 @@ export interface BasketStateResponse {
   totalSavings: number;
   hasUnavailableItems?: boolean;
   hasPriceChanges?: boolean;
+  appliedCouponCode?: string | null;
+  couponDiscount?: number;
+  couponMessage?: string | null;
+  minimumOrderValue?: number | null;
+  movRemaining?: number;
+  belowMov?: boolean;
+  deliveryFee?: number | null;
+  freeDeliveryThreshold?: number | null;
+  estimatedTotal?: number;
+}
+
+export interface CheckoutPriceBreakdown {
+  itemSubtotal: number;
+  productDiscount: number;
+  couponDiscount: number;
+  deliveryFee: number;
+  taxAmount: number;
+  grandTotal: number;
+  totalMrp: number;
+  totalSavings: number;
+}
+
+export interface CheckoutSnapshotItem {
+  sellerProductId: string;
+  productId: string;
+  variantId: string;
+  productName: string;
+  productSlug: string;
+  packSize: string | null;
+  imageUrl: string | null;
+  quantity: number;
+  unitPrice: number;
+  mrp: number;
+  discountPercent: number;
+  lineTotal: number;
+  taxAmount: number;
+}
+
+export interface CheckoutAddressSnapshot {
+  id: string;
+  label: string;
+  recipientName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string | null;
+  landmark?: string | null;
+  locality?: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export type CheckoutSessionStatusType =
+  'PREPARED' | 'RESERVATION_ACTIVE' | 'EXPIRED' | 'RELEASED' | 'COMMITTED' | 'CANCELLED';
+
+export interface CheckoutSummaryResponse {
+  checkoutSessionId: string;
+  cartId: string;
+  status: CheckoutSessionStatusType;
+  store: BasketStoreInfo;
+  address: CheckoutAddressSnapshot;
+  distanceKm: number | null;
+  items: CheckoutSnapshotItem[];
+  couponCode: string | null;
+  priceBreakdown: CheckoutPriceBreakdown;
+  expiresAt: string;
+  serverTime: string;
+  remainingSeconds: number;
+  isExpired: boolean;
 }
 
 export interface StoreSwitchComparison {

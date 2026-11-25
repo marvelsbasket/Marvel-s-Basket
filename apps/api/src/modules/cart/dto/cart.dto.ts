@@ -145,3 +145,22 @@ export class SyncCartDto {
   @Type(() => SyncCartItemDto)
   items!: SyncCartItemDto[];
 }
+
+export class ApplyCouponDto {
+  @ApiProperty({ description: 'Platform coupon code' })
+  @IsString()
+  code!: string;
+}
+
+export class SwitchStoreDto {
+  @ApiProperty({ description: 'Store listing UUID (SellerProduct.id) from the new store' })
+  @IsUUID()
+  sellerProductId!: string;
+
+  @ApiProperty({ description: 'Desired quantity', default: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(99)
+  quantity: number = 1;
+}

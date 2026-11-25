@@ -78,6 +78,8 @@ export interface BasketContextValue {
   removeItem: (sellerProductIdOrItemId: string) => Promise<void>;
   clearBasket: () => Promise<void>;
   refreshBasket: () => Promise<void>;
+  applyCoupon: (code: string) => Promise<boolean>;
+  removeCoupon: () => Promise<void>;
   getItemQuantity: (sellerProductId?: string | null, variantId?: string | null) => number;
   requestLocationSwitch: (
     nextLocation: DeliveryLocation,
@@ -465,6 +467,43 @@ export function BasketProvider({ children }: { children: React.ReactNode }) {
     }
   }, [basket, isAuthenticated, persistGuestBasket]);
 
+  const removeCoupon = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setIsUpdating(true);
+    try {
+      const updated = await BasketService.removeCoupon();
+      setBasket(updated);
+      notify('Coupon removed.', 'info');
+    } catch {
+      notify('Failed to remove coupon.', 'error');
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [isAuthenticated, notify]);
+
+  const applyCoupon = useCallback(
+    async (code: string): Promise<boolean> => {
+      if (!isAuthenticated) {
+        notify('Please sign in to apply a coupon.', 'info');
+        return false;
+      }
+      setIsUpdating(true);
+      try {
+        const updated = await BasketService.applyCoupon(code);
+        setBasket(updated);
+        notify(`Coupon ${updated.appliedCouponCode || code.toUpperCase()} applied!`, 'success');
+        return true;
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : 'Unable to apply coupon.';
+        notify(msg, 'error');
+        return false;
+      } finally {
+        setIsUpdating(false);
+      }
+    },
+    [isAuthenticated, notify],
+  );
+
   const getItemQuantity = useCallback(
     (sellerProductId?: string | null, variantId?: string | null): number => {
       if (sellerProductId) {
@@ -576,6 +615,8 @@ export function BasketProvider({ children }: { children: React.ReactNode }) {
     removeItem,
     clearBasket,
     refreshBasket,
+    applyCoupon,
+    removeCoupon,
     getItemQuantity,
     requestLocationSwitch,
     requestStoreSwitch,
@@ -591,6 +632,7 @@ export function BasketProvider({ children }: { children: React.ReactNode }) {
         isOpen={Boolean(pendingStoreSwitch)}
         onClose={() => setPendingStoreSwitch(null)}
         currentStore={pendingStoreSwitch?.currentStore || basket.store}
+        currentItemCount={basket.totalUnits}
         targetStoreName={pendingStoreSwitch?.input.store.name || 'New Store'}
         itemName={pendingStoreSwitch?.input.productName || 'this item'}
         isSubmitting={isUpdating}
