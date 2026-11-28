@@ -2052,6 +2052,14 @@ IDENTITY
 - Added `review_moderation_logs` (`ReviewModerationLog`) for immutable moderation & customer edit/delete audit history.
 - Added `product_rating_aggregates` (`ProductRatingAggregate`) keyed by `product_id` (`average_rating`, `total_reviews`, `rating_1_count`..`rating_5_count`), serialized via `SELECT ... FOR UPDATE` on `products`.
 
+## Phase 17 Addendum — Notifications, Outbox & Delivery Tracking
+
+- Extended `NotificationType` with `REVIEW` and added `NotificationPriority` (`LOW`, `NORMAL`, `HIGH`, `CRITICAL`), `OutboxEventStatus` (`PENDING`, `PUBLISHED`, `PROCESSED`, `FAILED`), and `NotificationDeliveryStatus` (`PENDING`, `PROCESSING`, `SENT`, `DELIVERED`, `FAILED`, `RETRY_SCHEDULED`, `SKIPPED`, `BOUNCED`, `COMPLAINED`) (`20261128121500_phase17_notifications`).
+- Extended `notifications` (`Notification`) with `priority`, `event_key`, `action_url`, `related_entity_type`, `related_entity_id`, `dismissed_at`, `idempotency_key` (unique), and composite indexes `[user_id, dismissed_at, created_at]` and `[user_id, type, created_at]`.
+- Added `notification_category_preferences` (`NotificationCategoryPreference`) with `@@unique([userId, channel, category])`.
+- Added `outbox_events` (`OutboxEvent`) with unique `idempotency_key` and `[status, next_retry_at, created_at]` index for atomic transactional outbox persistence.
+- Added `notification_deliveries` (`NotificationDelivery`) tracking per-channel provider status, `provider_message_id`, `attempt_count`, `is_permanent_failure`, and unique `idempotency_key`.
+
 # 31. RELATED DOCUMENTATION
 
 1. PROJECT_CONTEXT.md

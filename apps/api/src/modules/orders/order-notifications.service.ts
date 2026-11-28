@@ -2,6 +2,8 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { NotificationChannel, NotificationType, OrderStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationEventKey } from '../notifications/notifications.events';
 
 @Injectable()
 export class OrderNotificationsService {
@@ -10,6 +12,7 @@ export class OrderNotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly emailService?: EmailService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   private async createInAppNotification(params: {
@@ -59,6 +62,40 @@ export class OrderNotificationsService {
     storeName: string;
     totalAmount: number;
   }): Promise<void> {
+    if (this.notificationsService) {
+      await Promise.allSettled([
+        this.notificationsService.publishEvent({
+          eventKey: 'ORDER_PLACED_CUSTOMER',
+          aggregateType: 'Order',
+          aggregateId: params.orderId,
+          recipientUserId: params.customerId,
+          idempotencyKey: `order_placed_customer:${params.orderId}`,
+          payload: {
+            orderId: params.orderId,
+            orderNumber: params.orderNumber,
+            storeName: params.storeName,
+            totalAmount: params.totalAmount,
+            actionUrl: `/orders/${params.orderId}`,
+          },
+        }),
+        this.notificationsService.publishEvent({
+          eventKey: 'ORDER_PLACED_SELLER',
+          aggregateType: 'Order',
+          aggregateId: params.orderId,
+          recipientUserId: params.sellerOwnerUserId,
+          idempotencyKey: `order_placed_seller:${params.orderId}`,
+          payload: {
+            orderId: params.orderId,
+            orderNumber: params.orderNumber,
+            storeName: params.storeName,
+            totalAmount: params.totalAmount,
+            actionUrl: '/seller/orders',
+          },
+        }),
+      ]);
+      return;
+    }
+
     await Promise.allSettled([
       this.createInAppNotification({
         userId: params.customerId,
@@ -97,6 +134,58 @@ export class OrderNotificationsService {
     newStatus: OrderStatus;
     reason?: string | null;
   }): Promise<void> {
+    const statusEventMap: Partial<Record<OrderStatus, NotificationEventKey>> = {
+      CONFIRMED: 'ORDER_CONFIRMED',
+      PACKED: 'ORDER_PACKED',
+      OUT_FOR_DELIVERY: 'ORDER_OUT_FOR_DELIVERY',
+      DELIVERED: 'ORDER_DELIVERED',
+      CANCELLED: 'ORDER_CANCELLED_CUSTOMER',
+      REJECTED: 'ORDER_REJECTED',
+    };
+
+    if (this.notificationsService) {
+      const eventKey = statusEventMap[params.newStatus] ?? 'ORDER_CONFIRMED';
+      const tasks: Promise<unknown>[] = [
+        this.notificationsService.publishEvent({
+          eventKey,
+          aggregateType: 'Order',
+          aggregateId: params.orderId,
+          recipientUserId: params.customerId,
+          idempotencyKey: `order_status:${params.orderId}:${params.newStatus}`,
+          payload: {
+            orderId: params.orderId,
+            orderNumber: params.orderNumber,
+            storeName: params.storeName,
+            status: params.newStatus,
+            reason: params.reason ?? null,
+            actionUrl: `/orders/${params.orderId}`,
+          },
+        }),
+      ];
+
+      if (params.newStatus === OrderStatus.CANCELLED && params.sellerOwnerUserId) {
+        tasks.push(
+          this.notificationsService.publishEvent({
+            eventKey: 'ORDER_CANCELLED_SELLER',
+            aggregateType: 'Order',
+            aggregateId: params.orderId,
+            recipientUserId: params.sellerOwnerUserId,
+            idempotencyKey: `order_cancelled_seller:${params.orderId}`,
+            payload: {
+              orderId: params.orderId,
+              orderNumber: params.orderNumber,
+              storeName: params.storeName,
+              reason: params.reason ?? null,
+              actionUrl: '/seller/orders',
+            },
+          }),
+        );
+      }
+
+      await Promise.allSettled(tasks);
+      return;
+    }
+
     const statusLabelMap: Partial<Record<OrderStatus, string>> = {
       CONFIRMED: 'confirmed by the store',
       PACKED: 'packed and ready for dispatch',
@@ -154,6 +243,25 @@ export class OrderNotificationsService {
     eventTitle: string;
     message: string;
   }): Promise<void> {
+    if (this.notificationsService) {
+      await this.notificationsService.publishEvent({
+        eventKey: 'DELIVERY_STATUS_UPDATED',
+        aggregateType: 'Delivery',
+        aggregateId: params.orderId,
+        recipientUserId: params.customerId,
+        idempotencyKey: `delivery_event:${params.orderId}:${params.eventTitle}:${Date.now()}`,
+        payload: {
+          orderId: params.orderId,
+          orderNumber: params.orderNumber,
+          storeName: params.storeName,
+          eventTitle: params.eventTitle,
+          message: params.message,
+          actionUrl: `/orders/${params.orderId}`,
+        },
+      });
+      return;
+    }
+
     await Promise.allSettled([
       this.createInAppNotification({
         userId: params.customerId,

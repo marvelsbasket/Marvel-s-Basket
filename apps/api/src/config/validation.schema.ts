@@ -85,6 +85,15 @@ export const environmentValidationSchema = Joi.object({
   RAZORPAY_CAPTURE_MODE: Joi.string().valid('automatic', 'manual').default('automatic'),
 
   COD_MAX_AMOUNT: Joi.number().min(100).max(50000).default(1500),
+
+  NOTIFICATIONS_ENABLED: Joi.boolean().truthy('true', '1').falsy('false', '0').default(true),
+  NOTIFICATIONS_IN_APP_ENABLED: Joi.boolean().truthy('true', '1').falsy('false', '0').default(true),
+  NOTIFICATIONS_EMAIL_ENABLED: Joi.boolean().truthy('true', '1').falsy('false', '0').default(true),
+  NOTIFICATIONS_SMS_ENABLED: Joi.boolean().truthy('true', '1').falsy('false', '0').default(false),
+  NOTIFICATIONS_PUSH_ENABLED: Joi.boolean().truthy('true', '1').falsy('false', '0').default(false),
+  NOTIFICATIONS_DEV_MODE: Joi.boolean().truthy('true', '1').falsy('false', '0').default(true),
+  NOTIFICATIONS_LOG_CONTENT: Joi.boolean().truthy('true', '1').falsy('false', '0').default(false),
+  RESEND_WEBHOOK_SECRET: Joi.string().allow('').optional(),
 })
   .custom((value, helpers) => {
     const isProd = value.NODE_ENV === 'production';

@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   AdminRejectApplicationDto,
   AdminReviewDocumentDto,
@@ -25,6 +26,7 @@ export class AdminSellersService {
     private readonly prisma: PrismaService,
     private readonly cloudinary: CloudinaryService,
     private readonly emailService: EmailService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   /**
@@ -395,6 +397,21 @@ export class AdminSellersService {
         seller.owner.name,
         seller.storeDisplayName || seller.businessName,
       );
+    }
+
+    if (this.notificationsService) {
+      void this.notificationsService.publishEvent({
+        eventKey: 'SELLER_APPROVED',
+        aggregateType: 'Seller',
+        aggregateId: seller.id,
+        recipientUserId: seller.ownerUserId,
+        idempotencyKey: `seller_approved:${seller.id}`,
+        payload: {
+          sellerId: seller.id,
+          storeName: seller.storeDisplayName || seller.businessName,
+          actionUrl: '/seller/profile',
+        },
+      });
     }
 
     return {

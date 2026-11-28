@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma, ReviewStatus } from '@prisma/client';
 import {
   AdminReviewDetailResponse,
@@ -11,6 +11,7 @@ import {
 } from '@marvels-basket/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { RatingAggregationService } from './rating-aggregation.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   ModerateReviewDto,
   QueryAdminReviewsDto,
@@ -23,6 +24,7 @@ export class AdminReviewsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ratingAggregation: RatingAggregationService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -216,6 +218,30 @@ export class AdminReviewsService {
       await this.ratingAggregation.recomputeProductAggregateInTx(tx, existing.productId);
       return saved;
     });
+
+    if (
+      this.notificationsService &&
+      (params.targetStatus === ReviewStatus.APPROVED ||
+        params.targetStatus === ReviewStatus.REJECTED)
+    ) {
+      void this.notificationsService.publishEvent({
+        eventKey:
+          params.targetStatus === ReviewStatus.APPROVED
+            ? 'REVIEW_APPROVED'
+            : 'REVIEW_REJECTED',
+        aggregateType: 'Review',
+        aggregateId: updated.id,
+        recipientUserId: updated.userId,
+        idempotencyKey: `review_moderated:${updated.id}:${params.targetStatus}:${updated.updatedAt.toISOString()}`,
+        payload: {
+          reviewId: updated.id,
+          productId: updated.productId,
+          productName: updated.product?.name || 'a product',
+          reason: params.reason ?? null,
+          actionUrl: '/reviews',
+        },
+      });
+    }
 
     return this.mapAdminReview(updated);
   }

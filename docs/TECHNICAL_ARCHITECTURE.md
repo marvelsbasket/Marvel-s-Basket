@@ -2256,6 +2256,13 @@ The initial release will prioritize reliability and correctness over unnecessary
 - **Moderation & Reporting (`AdminReviewsService`)**: Admin-only (`ADMIN` / `SUPER_ADMIN`) approve/reject/hide/restore transitions with idempotency, terminal `REMOVED` protection, `ReviewReport` uniqueness (`@@unique([reviewId, reporterUserId])`), and immutable `ReviewModerationLog` + `AdminActivityLog` entries.
 - **Rating Aggregation (`RatingAggregationService`)**: Maintains `ProductRatingAggregate` exclusively from `APPROVED` reviews inside transactions serialized by `SELECT id FROM products WHERE id = $1::uuid FOR UPDATE`, with an admin reconciliation endpoint (`POST /api/v1/admin/products/:productId/rating-reconcile`).
 
+## Phase 17 Addendum — Asynchronous Notification & Outbox Architecture
+
+- **Centralized Module (`NotificationsModule`)**: Global NestJS module providing `NotificationsService`, `NotificationPreferencesService`, `NotificationsDispatcher`, `NotificationsProcessor` (BullMQ `notifications` queue), `NotificationOutboxWorker` (30s Redis-locked outbox sweep), and `ResendWebhookService`.
+- **Transactional Outbox**: Business operations persist `OutboxEvent` records (inside transactions or via non-blocking `publishEvent`) and enqueue BullMQ jobs with `attempts: 5` and exponential backoff + jitter. Notification failures never block or roll back orders, payments, or refunds.
+- **Channels & Providers**: `IN_APP` (PostgreSQL `Notification`) and `EMAIL` (reusing `EmailService` / Resend) are active; `SMS` (`ISmsProvider`) and `PUSH` (`IPushProvider`) are behind provider interfaces and disabled by default pending vendor/DLT/platform approval.
+- **Resend Webhooks**: `POST /api/v1/webhooks/resend` verifies Svix HMAC-SHA256 signatures + replay window and applies monotonic `NotificationDeliveryStatus` updates (`SENT -> DELIVERED / BOUNCED / COMPLAINED`).
+
 # 25. RELATED DOCUMENTATION
 
 The following documents define the complete project specification.

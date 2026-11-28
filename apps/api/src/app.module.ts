@@ -26,6 +26,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { JwtAuthGuard, RolesGuard, PermissionsGuard } from './modules/auth/guards';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
@@ -84,6 +85,7 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     DeliveryModule,
     PromotionsModule,
     ReviewsModule,
+    NotificationsModule,
     HealthModule,
   ],
   providers: [

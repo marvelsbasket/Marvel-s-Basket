@@ -164,7 +164,7 @@ Phase 06 delivered the complete customer profile and delivery address management
 | **Phase 14** | Delivery & Fulfillment | High | **Completed** | `DeliveryModule` (`IDeliveryProvider` + `InternalDeliveryProvider`, discrete state machine `PENDING -> READY_FOR_PICKUP -> ASSIGNED -> ACCEPTED -> PICKED_UP -> IN_TRANSIT -> DELIVERED / FAILED / CANCELLED`, hashed 4-digit handover OTP + COD verification, BullMQ `delivery-operations` assignment timeout worker), Order lifecycle synchronization, Customer tracking UI (`/orders/[id]`), Seller `/seller/deliveries`, Rider `/delivery`, and Admin `/admin/deliveries`. Verified by 226 API unit + Phase 14 E2E tests. |
 | **Phase 15** | Coupons & Promotions | Medium | **Completed** | `PromotionsModule` (`SellerDiscountsService`, `AdminCouponsService`, centralized integer-paise `resolveEffectiveListingPrice`, atomic conditional SQL `current_usage_count` redemption), Seller `/seller/discounts`, Admin `/admin/coupons`, Cart/Checkout/Product/Order snapshot integration. Verified by 229 API unit + Phase 15 concurrent E2E tests. |
 | **Phase 16** | Reviews & Ratings | Medium | **Completed** | `ReviewsModule` (`ReviewsService`, `AdminReviewsService`, `RatingAggregationService`, XSS sanitizer, Redis rate limiting, `DELIVERED` verified-purchase eligibility, `@@unique([userId, productId])` & `@@unique([reviewId, reporterUserId])`, `ProductRatingAggregate`, `ReviewReport`, `ReviewModerationLog`), PDP `ProductReviewsSection`, Customer `/reviews`, Admin `/admin/reviews`. Verified by 234 API unit + Phase 16 E2E tests. |
-| **Phase 17** | Notifications | Medium | Not Started | Dependent on Phase 12 & 13. |
+| **Phase 17** | Notifications | Medium | **Completed** | `NotificationsModule` (`OutboxEvent`, BullMQ `notifications` worker, Redis-locked outbox sweep, `NotificationDelivery`, `NotificationCategoryPreference`, `NOTIFICATION_EVENTS` catalog, `EmailService` Resend integration, Svix `ResendWebhookService`, `ISmsProvider`/`IPushProvider` stubs disabled by default), Customer `/notifications` + navbar `NotificationBell`, Seller `/seller/notifications`, Admin `/admin/notifications`. |
 | **Phase 18** | Seller Dashboard | High | Not Started | Dependent on Phase 07–14. |
 | **Phase 19** | Super Admin Dashboard | High | Not Started | Dependent on Phase 07–15. |
 | **Phase 20** | Financial Management & Settlements | High | Not Started | Dependent on Phase 13. |
@@ -176,7 +176,7 @@ Phase 06 delivered the complete customer profile and delivery address management
 
 ## 9. Immediate Next Steps
 
-1. Transition to **Phase 17 — Notifications**:
-   - Multi-channel transactional notifications (order, delivery, payment, and review moderation alerts) via Resend and approved channels.
+1. Transition to **Phase 18 — Seller Dashboard**:
+   - Unified seller dashboard overview, analytics, earnings, and operational management.
 
 **Document End — PROJECT_STATUS.md**
