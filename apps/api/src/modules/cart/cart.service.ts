@@ -16,6 +16,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { StoresService } from '../stores/stores.service';
 import { InventoryReservationService } from '../inventory/services/inventory-reservation.service';
 import { PricingService } from './pricing.service';
+import { resolveEffectiveListingPrice } from '../promotions/discount-calculator';
 import {
   AddCartItemDto,
   ApplyStoreSwitchDto,
@@ -102,6 +103,9 @@ export class CartService {
                 },
                 variant: true,
                 inventory: true,
+                discounts: {
+                  where: { status: { in: ['ACTIVE', 'SCHEDULED'] } },
+                },
               },
             },
           },
@@ -170,8 +174,13 @@ export class CartService {
       const variant = sp.variant;
       const availableQuantity = sp.inventory?.availableQuantity ?? 0;
 
-      const unitPricePaise = this.toPaise(sp.sellingPrice);
-      const mrpPaise = this.toPaise(variant?.mrp ?? sp.mrp ?? sp.sellingPrice);
+      const resolvedPrice = resolveEffectiveListingPrice({
+        baseSellingPrice: sp.sellingPrice,
+        mrp: variant?.mrp ?? sp.mrp ?? sp.sellingPrice,
+        discounts: sp.discounts,
+      });
+      const unitPricePaise = this.toPaise(resolvedPrice.effectiveSellingPrice);
+      const mrpPaise = this.toPaise(resolvedPrice.mrp);
       const unitPrice = this.fromPaise(unitPricePaise);
       const mrp = this.fromPaise(mrpPaise);
       const priceExceedsMrp = mrpPaise > 0 && unitPricePaise > mrpPaise;

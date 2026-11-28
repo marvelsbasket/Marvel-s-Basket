@@ -17,6 +17,7 @@ import {
 } from '@marvels-basket/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { StoresService } from '../stores/stores.service';
+import { resolveEffectiveListingPrice } from '../promotions/discount-calculator';
 import { QueryCatalogProductsDto } from './dto';
 
 // Common Indian quick-commerce localized synonyms dictionary
@@ -378,6 +379,9 @@ export class ProductsService {
                     lowStockThreshold: true,
                   },
                 },
+                discounts: {
+                  where: { status: { in: ['ACTIVE', 'SCHEDULED'] } },
+                },
               },
             },
           }
@@ -453,7 +457,12 @@ export class ProductsService {
         let sellerProductId: string | undefined;
 
         if (storeListing) {
-          sellingPrice = Number(storeListing.sellingPrice);
+          const resolved = resolveEffectiveListingPrice({
+            baseSellingPrice: storeListing.sellingPrice,
+            mrp,
+            discounts: storeListing.discounts,
+          });
+          sellingPrice = resolved.effectiveSellingPrice;
           availableQuantity = storeListing.inventory?.availableQuantity || 0;
           const storeAccepting = storeSummary
             ? storeSummary.isAcceptingOrders && storeSummary.isOpen
@@ -695,7 +704,12 @@ export class ProductsService {
       let sellerProductId: string | undefined;
 
       if (storeListing) {
-        sellingPrice = Number(storeListing.sellingPrice);
+        const resolved = resolveEffectiveListingPrice({
+          baseSellingPrice: storeListing.sellingPrice,
+          mrp,
+          discounts: storeListing.discounts,
+        });
+        sellingPrice = resolved.effectiveSellingPrice;
         availableQuantity = storeListing.inventory?.availableQuantity || 0;
         const storeAccepting = storeSummary
           ? storeSummary.isAcceptingOrders && storeSummary.isOpen

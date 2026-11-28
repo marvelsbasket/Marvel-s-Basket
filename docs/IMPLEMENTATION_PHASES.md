@@ -764,7 +764,7 @@ Customers and authorized sellers must be able to view accurate delivery and fulf
 # 17. Phase 15 — Coupons, Discounts & Promotions
 
 **Priority:** Medium  
-**Status:** Not Started
+**Status:** Completed (Verified on 28 November 2026)
 
 ### Objective
 
@@ -772,17 +772,17 @@ Implement the approved promotional and discount system.
 
 ### Tasks
 
-- [ ] Implement coupon creation.
-- [ ] Implement coupon validation.
-- [ ] Implement coupon expiration.
-- [ ] Implement minimum order requirements.
-- [ ] Implement usage limits.
-- [ ] Implement customer eligibility.
-- [ ] Implement seller-specific coupons if approved.
-- [ ] Implement platform-wide promotions.
-- [ ] Implement discount calculations.
-- [ ] Build admin promotion management.
-- [ ] Test coupon stacking and eligibility rules.
+- [x] Implement coupon creation.
+- [x] Implement coupon validation.
+- [x] Implement coupon expiration.
+- [x] Implement minimum order requirements.
+- [x] Implement usage limits.
+- [x] Implement customer eligibility.
+- [x] Implement seller-specific product discounts (`SellerProductDiscount`).
+- [x] Implement platform-wide promotions.
+- [x] Implement discount calculations.
+- [x] Build admin promotion management.
+- [x] Test coupon stacking and eligibility rules.
 
 ### Deliverables
 

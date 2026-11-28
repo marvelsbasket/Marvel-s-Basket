@@ -1,0 +1,1 @@
+CREATE TYPE "SellerDiscountStatus" AS ENUM ('DRAFT', 'SCHEDULED', 'ACTIVE', 'PAUSED', 'EXPIRED', 'ENDED');

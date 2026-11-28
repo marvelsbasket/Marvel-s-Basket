@@ -276,8 +276,25 @@ export class OrdersService {
         reservations,
       });
 
-      // Record coupon usage if coupon was applied
+      // Record coupon usage atomically if coupon was applied
       if (session.couponId && Number(session.couponDiscount) > 0) {
+        const updatedCoupons = await tx.$queryRaw<Array<{ id: string }>>`
+          UPDATE coupons
+          SET current_usage_count = current_usage_count + 1,
+              updated_at = NOW()
+          WHERE id = ${session.couponId}::uuid
+            AND is_active = true
+            AND starts_at <= ${now}
+            AND expires_at > ${now}
+            AND (usage_limit IS NULL OR current_usage_count < usage_limit)
+          RETURNING id
+        `;
+        if (updatedCoupons.length === 0) {
+          throw new ConflictException({
+            code: 'COUPON_USAGE_LIMIT_REACHED',
+            message: 'Applied coupon is no longer available or has reached its redemption limit.',
+          });
+        }
         await tx.couponUsage.create({
           data: {
             couponId: session.couponId,

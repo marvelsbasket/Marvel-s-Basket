@@ -233,4 +233,16 @@ export const ENDPOINTS = {
     CANCEL: (deliveryId: string) => `/admin/deliveries/${deliveryId}/cancel`,
     PARTNERS: '/admin/delivery-partners',
   },
+  PROMOTIONS: {
+    PUBLIC_OFFERS: '/offers',
+    SELLER_DISCOUNTS: '/seller/discounts',
+    SELLER_DISCOUNT_DETAIL: (id: string) => `/seller/discounts/${id}`,
+    SELLER_DISCOUNT_ACTIVATE: (id: string) => `/seller/discounts/${id}/activate`,
+    SELLER_DISCOUNT_PAUSE: (id: string) => `/seller/discounts/${id}/pause`,
+    SELLER_DISCOUNT_END: (id: string) => `/seller/discounts/${id}/end`,
+    ADMIN_COUPONS: '/admin/coupons',
+    ADMIN_COUPON_DETAIL: (id: string) => `/admin/coupons/${id}`,
+    ADMIN_COUPON_ACTIVATE: (id: string) => `/admin/coupons/${id}/activate`,
+    ADMIN_COUPON_PAUSE: (id: string) => `/admin/coupons/${id}/pause`,
+  },
 } as const;
