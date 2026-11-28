@@ -1,8 +1,11 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { DeliveryStatus, OrderStatus, PaymentStatus, Prisma, SellerStatus } from '@prisma/client';
 import { OrderDetailResponse, PaginatedOrdersResponse } from '@marvels-basket/shared';
@@ -12,6 +15,7 @@ import { QueryOrdersDto, RejectOrderDto } from './dto/orders.dto';
 import { assertValidOrderTransition } from './order-state-machine';
 import { OrderNotificationsService } from './order-notifications.service';
 import { mapOrderDetail, mapOrderSummary } from './order-mapper';
+import { DeliveryService } from '../delivery/delivery.service';
 
 const SELLER_ORDER_INCLUDE = {
   seller: {
@@ -36,6 +40,9 @@ export class SellerOrdersService {
     private readonly prisma: PrismaService,
     private readonly reservationService: InventoryReservationService,
     private readonly notifications: OrderNotificationsService,
+    @Optional()
+    @Inject(forwardRef(() => DeliveryService))
+    private readonly deliveryService?: DeliveryService,
   ) {}
 
   private async resolveOwnedSeller(sellerUserId: string) {
@@ -166,6 +173,7 @@ export class SellerOrdersService {
           actorRole: 'SELLER',
         },
       });
+      await this.deliveryService?.ensureDeliveryForOrderInTx(tx, order.id, sellerUserId, 'SELLER');
       return tx.order.findUniqueOrThrow({
         where: { id: order.id },
         include: SELLER_ORDER_INCLUDE,
@@ -242,6 +250,14 @@ export class SellerOrdersService {
             quantity: i.quantity,
           })),
         });
+
+        await this.deliveryService?.cancelDeliveryForOrderInTx(
+          tx,
+          order.id,
+          dto.reason.trim(),
+          sellerUserId,
+          'SELLER',
+        );
       }
 
       return tx.order.findUniqueOrThrow({
@@ -281,6 +297,7 @@ export class SellerOrdersService {
     assertValidOrderTransition(order.status, OrderStatus.PACKED);
 
     const now = new Date();
+    let plainOtp: string | null = null;
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.order.update({
         where: { id: order.id },
@@ -296,11 +313,32 @@ export class SellerOrdersService {
           actorRole: 'SELLER',
         },
       });
+      if (this.deliveryService) {
+        const res = await this.deliveryService.markOrderReadyForPickupInTx(
+          tx,
+          order.id,
+          sellerUserId,
+          'SELLER',
+        );
+        plainOtp = res.plainOtp;
+      }
       return tx.order.findUniqueOrThrow({
         where: { id: order.id },
         include: SELLER_ORDER_INCLUDE,
       });
     });
+
+    if (plainOtp) {
+      void this.notifications.notifyDeliveryEvent({
+        orderId: updated.id,
+        orderNumber: updated.orderNumber,
+        customerId: updated.customerId,
+        customerEmail: updated.customer?.email,
+        storeName: updated.storeNameSnapshot || seller.businessName,
+        eventTitle: `Delivery OTP for order ${updated.orderNumber}`,
+        message: `Your order ${updated.orderNumber} is packed and ready for pickup. Share Delivery OTP ${plainOtp} with your delivery partner upon arrival.`,
+      });
+    }
 
     void this.notifications.notifyOrderStatusChanged({
       orderId: updated.id,

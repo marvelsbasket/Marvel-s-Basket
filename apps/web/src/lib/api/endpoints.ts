@@ -200,4 +200,37 @@ export const ENDPOINTS = {
     REFUNDS_LIST: '/admin/refunds',
     REFUND_DETAIL: (refundId: string) => `/admin/refunds/${refundId}`,
   },
+  CUSTOMER_DELIVERY: {
+    DETAIL: (orderId: string) => `/customer/orders/${orderId}/delivery`,
+    TRACKING: (orderId: string) => `/customer/orders/${orderId}/delivery/tracking`,
+    HISTORY: (orderId: string) => `/customer/orders/${orderId}/delivery/history`,
+  },
+  SELLER_DELIVERIES: {
+    LIST: '/seller/deliveries',
+    DETAIL: (deliveryId: string) => `/seller/deliveries/${deliveryId}`,
+    READY_FOR_PICKUP: (deliveryId: string) =>
+      `/seller/deliveries/${deliveryId}/ready-for-pickup`,
+    HANDOVER: (deliveryId: string) => `/seller/deliveries/${deliveryId}/handover`,
+    REPORT_ISSUE: (deliveryId: string) => `/seller/deliveries/${deliveryId}/report-issue`,
+  },
+  RIDER_DELIVERY: {
+    PROFILE: '/delivery/profile',
+    AVAILABILITY: '/delivery/availability',
+    ASSIGNMENTS: '/delivery/assignments',
+    DETAIL: (deliveryId: string) => `/delivery/assignments/${deliveryId}`,
+    ACCEPT: (deliveryId: string) => `/delivery/assignments/${deliveryId}/accept`,
+    REJECT: (deliveryId: string) => `/delivery/assignments/${deliveryId}/reject`,
+    PICKUP: (deliveryId: string) => `/delivery/assignments/${deliveryId}/pickup`,
+    COMPLETE: (deliveryId: string) => `/delivery/assignments/${deliveryId}/complete`,
+    FAIL: (deliveryId: string) => `/delivery/assignments/${deliveryId}/fail`,
+  },
+  ADMIN_DELIVERIES: {
+    LIST: '/admin/deliveries',
+    DETAIL: (deliveryId: string) => `/admin/deliveries/${deliveryId}`,
+    HISTORY: (deliveryId: string) => `/admin/deliveries/${deliveryId}/history`,
+    ASSIGN: (deliveryId: string) => `/admin/deliveries/${deliveryId}/assign`,
+    REASSIGN: (deliveryId: string) => `/admin/deliveries/${deliveryId}/reassign`,
+    CANCEL: (deliveryId: string) => `/admin/deliveries/${deliveryId}/cancel`,
+    PARTNERS: '/admin/delivery-partners',
+  },
 } as const;

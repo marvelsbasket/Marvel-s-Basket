@@ -144,4 +144,33 @@ export class OrderNotificationsService {
 
     await Promise.allSettled(tasks);
   }
+
+  async notifyDeliveryEvent(params: {
+    orderId: string;
+    orderNumber: string;
+    customerId: string;
+    customerEmail?: string | null;
+    storeName: string;
+    eventTitle: string;
+    message: string;
+  }): Promise<void> {
+    await Promise.allSettled([
+      this.createInAppNotification({
+        userId: params.customerId,
+        type: NotificationType.DELIVERY,
+        title: params.eventTitle,
+        message: params.message,
+        metadata: {
+          orderId: params.orderId,
+          orderNumber: params.orderNumber,
+          storeName: params.storeName,
+        },
+      }),
+      this.sendOrderEmail(
+        params.customerEmail,
+        `${params.eventTitle} — Marvel's Basket`,
+        params.message,
+      ),
+    ]);
+  }
 }

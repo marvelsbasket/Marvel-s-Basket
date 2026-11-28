@@ -1152,12 +1152,20 @@ export type RefundStatusType =
 
 export type DeliveryStatusType =
   | 'PENDING'
+  | 'READY_FOR_PICKUP'
   | 'ASSIGNED'
   | 'ACCEPTED'
   | 'PICKED_UP'
   | 'IN_TRANSIT'
   | 'DELIVERED'
   | 'FAILED'
+  | 'CANCELLED';
+
+export type DeliveryAssignmentStatusType =
+  | 'OFFERED'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'EXPIRED'
   | 'CANCELLED';
 
 export type OrderComplaintCategoryType =
@@ -1421,4 +1429,141 @@ export interface PaymentReconciliationResponse {
   discrepancyReason: string | null;
   resolutionAction: string | null;
   reconciledAt: string;
+}
+
+// ============================================================================
+// Phase 14: Delivery & Fulfillment Types
+// ============================================================================
+
+export type DeliveryFailureReasonType =
+  | 'CUSTOMER_UNAVAILABLE'
+  | 'CUSTOMER_UNREACHABLE'
+  | 'WRONG_ADDRESS'
+  | 'ADDRESS_NOT_FOUND'
+  | 'CUSTOMER_REFUSED'
+  | 'ACCESS_RESTRICTED'
+  | 'RIDER_UNAVAILABLE'
+  | 'STORE_HANDOVER_FAILED'
+  | 'DAMAGED_PACKAGE'
+  | 'OTHER';
+
+export interface DeliveryPartnerSummary {
+  id: string;
+  userId: string;
+  name: string;
+  phone: string | null;
+  vehicleType: string;
+  vehicleNumber: string | null;
+  verificationStatus: string;
+  availabilityStatus: string;
+  rating: number;
+}
+
+export interface DeliveryStatusHistoryItem {
+  id: string;
+  previousStatus: DeliveryStatusType;
+  newStatus: DeliveryStatusType;
+  actorRole: string | null;
+  note: string | null;
+  updatedBy: string | null;
+  createdAt: string;
+}
+
+export interface DeliveryAssignmentItem {
+  id: string;
+  deliveryId: string;
+  deliveryPartnerId: string;
+  partnerName?: string;
+  partnerPhone?: string | null;
+  status: DeliveryAssignmentStatusType;
+  rejectionReason: string | null;
+  expiresAt: string | null;
+  assignedAt: string;
+  respondedAt: string | null;
+}
+
+export interface DeliverySummaryItem {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  orderStatus: OrderStatusType;
+  paymentMethod: PaymentMethodType;
+  paymentStatus: PaymentStatusType;
+  orderTotal: number;
+  deliveryFee: number;
+  sellerId: string;
+  storeName: string;
+  customerId: string;
+  customerName: string | null;
+  status: DeliveryStatusType;
+  attemptCount: number;
+  maxAttempts: number;
+  deliveryPartner: DeliveryPartnerSummary | null;
+  estimatedDeliveryAt: string | null;
+  readyForPickupAt: string | null;
+  assignedAt: string | null;
+  acceptedAt: string | null;
+  pickedUpAt: string | null;
+  deliveredAt: string | null;
+  failedAt: string | null;
+  cancelledAt: string | null;
+  failureReason: string | null;
+  codCollected: boolean;
+  createdAt: string;
+}
+
+export interface DeliveryDetailResponse extends DeliverySummaryItem {
+  pickupAddressSnapshot: Record<string, unknown>;
+  deliveryAddressSnapshot: Record<string, unknown>;
+  deliveryInstructions: string | null;
+  cancellationReason: string | null;
+  codCollectedAmount: number | null;
+  recipientName: string | null;
+  deliveryNotes: string | null;
+  assignments: DeliveryAssignmentItem[];
+  statusHistory: DeliveryStatusHistoryItem[];
+}
+
+export interface CustomerDeliveryTrackingResponse {
+  deliveryId: string;
+  orderId: string;
+  orderNumber: string;
+  orderStatus: OrderStatusType;
+  status: DeliveryStatusType;
+  storeName: string;
+  deliveryAddressSnapshot: Record<string, unknown>;
+  estimatedDeliveryAt: string | null;
+  deliveryInstructions: string | null;
+  rider: {
+    name: string;
+    vehicleType: string;
+    vehicleNumber: string | null;
+    rating: number;
+  } | null;
+  milestones: Array<{
+    status: DeliveryStatusType;
+    label: string;
+    completed: boolean;
+    timestamp: string | null;
+  }>;
+  history: DeliveryStatusHistoryItem[];
+  failureReason: string | null;
+  lastUpdatedAt: string;
+  trackingNote: string;
+}
+
+export interface PaginatedDeliveriesResponse {
+  items: DeliverySummaryItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PaginatedDeliveryPartnersResponse {
+  items: DeliveryPartnerSummary[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

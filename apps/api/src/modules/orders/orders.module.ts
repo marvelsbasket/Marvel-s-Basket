@@ -5,6 +5,7 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { EmailModule } from '../email/email.module';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { DeliveryModule } from '../delivery/delivery.module';
 import { OrdersController } from './orders.controller';
 import { SellerOrdersController } from './seller-orders.controller';
 import { AdminOrdersController } from './admin-orders.controller';
@@ -22,6 +23,7 @@ import { OrderNotificationsService } from './order-notifications.service';
     EmailModule,
     CloudinaryModule,
     forwardRef(() => PaymentsModule),
+    forwardRef(() => DeliveryModule),
   ],
   controllers: [OrdersController, SellerOrdersController, AdminOrdersController],
   providers: [
