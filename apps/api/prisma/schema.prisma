@@ -212,6 +212,7 @@ enum SettlementStatus {
 
 enum DeliveryStatus {
   PENDING
+  READY_FOR_PICKUP
   ASSIGNED
   ACCEPTED
   PICKED_UP
@@ -1391,11 +1392,26 @@ model Delivery {
   pickupAddressSnapshot   Json           @map("pickup_address_snapshot")
   deliveryAddressSnapshot Json           @map("delivery_address_snapshot")
   deliveryInstructions    String?        @map("delivery_instructions")
+  attemptCount            Int            @default(0) @map("attempt_count")
+  maxAttempts             Int            @default(3) @map("max_attempts")
   estimatedDeliveryAt     DateTime?      @map("estimated_delivery_at")
+  readyForPickupAt        DateTime?      @map("ready_for_pickup_at")
+  assignedAt              DateTime?      @map("assigned_at")
+  acceptedAt              DateTime?      @map("accepted_at")
   pickedUpAt              DateTime?      @map("picked_up_at")
   deliveredAt             DateTime?      @map("delivered_at")
+  failedAt                DateTime?      @map("failed_at")
+  cancelledAt             DateTime?      @map("cancelled_at")
   failureReason           String?        @map("failure_reason")
+  cancellationReason      String?        @map("cancellation_reason")
   proofOfDeliveryOtp      String?        @map("proof_of_delivery_otp")
+  otpHash                 String?        @map("otp_hash")
+  otpExpiresAt            DateTime?      @map("otp_expires_at")
+  otpAttempts             Int            @default(0) @map("otp_attempts")
+  codCollected            Boolean        @default(false) @map("cod_collected")
+  codCollectedAmount      Decimal?       @map("cod_collected_amount") @db.Decimal(12, 2)
+  recipientName           String?        @map("recipient_name")
+  deliveryNotes           String?        @map("delivery_notes")
   createdAt               DateTime       @default(now()) @map("created_at")
   updatedAt               DateTime       @updatedAt @map("updated_at")
 
@@ -1414,6 +1430,9 @@ model DeliveryAssignment {
   deliveryId        String                   @map("delivery_id") @db.Uuid
   deliveryPartnerId String                   @map("delivery_partner_id") @db.Uuid
   status            DeliveryAssignmentStatus @default(OFFERED)
+  rejectionReason   String?                  @map("rejection_reason")
+  assignedBy        String?                  @map("assigned_by") @db.Uuid
+  expiresAt         DateTime?                @map("expires_at")
   assignedAt        DateTime                 @default(now()) @map("assigned_at")
   respondedAt       DateTime?                @map("responded_at")
   createdAt         DateTime                 @default(now()) @map("created_at")
@@ -1423,6 +1442,7 @@ model DeliveryAssignment {
 
   @@index([deliveryId])
   @@index([deliveryPartnerId])
+  @@index([status])
   @@map("delivery_assignments")
 }
 
@@ -1431,6 +1451,7 @@ model DeliveryStatusHistory {
   deliveryId     String         @map("delivery_id") @db.Uuid
   previousStatus DeliveryStatus @map("previous_status")
   newStatus      DeliveryStatus @map("new_status")
+  actorRole      String?        @map("actor_role")
   note           String?
   updatedBy      String?        @map("updated_by") @db.Uuid
   createdAt      DateTime       @default(now()) @map("created_at")

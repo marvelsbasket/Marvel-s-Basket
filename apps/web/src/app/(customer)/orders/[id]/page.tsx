@@ -16,12 +16,14 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
+  CustomerDeliveryTrackingResponse,
   OrderComplaintCategoryType,
   OrderDetailResponse,
   OrderTrackingResponse,
 } from '@marvels-basket/shared';
 import { OrdersService } from '@/features/orders/services/orders.service';
 import { PaymentsService } from '@/features/payments/services/payments.service';
+import { DeliveryService } from '@/features/delivery/services/delivery.service';
 import { openRazorpayCheckout } from '@/features/payments/utils/razorpay-checkout';
 import { ApiError } from '@/lib/api/errors';
 import { Button } from '@/components/ui/button';
@@ -45,6 +47,8 @@ export default function CustomerOrderDetailPage() {
 
   const [order, setOrder] = useState<OrderDetailResponse | null>(null);
   const [tracking, setTracking] = useState<OrderTrackingResponse | null>(null);
+  const [deliveryTracking, setDeliveryTracking] =
+    useState<CustomerDeliveryTrackingResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,12 +72,14 @@ export default function CustomerOrderDetailPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [detail, track] = await Promise.all([
+      const [detail, track, delTrack] = await Promise.all([
         OrdersService.getCustomerOrderDetail(orderId),
         OrdersService.getOrderTracking(orderId),
+        DeliveryService.getCustomerTracking(orderId).catch(() => null),
       ]);
       setOrder(detail);
       setTracking(track);
+      setDeliveryTracking(delTrack);
     } catch {
       setError('Order not found or could not be loaded.');
     } finally {

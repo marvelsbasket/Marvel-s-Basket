@@ -1,9 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
+  forwardRef,
 } from '@nestjs/common';
 import {
   CheckoutSessionStatus,
@@ -30,6 +33,7 @@ import { CancelOrderDto, CreateOrderDto, QueryOrdersDto } from './dto/orders.dto
 import { assertValidOrderTransition, CUSTOMER_CANCELLABLE_STATUSES } from './order-state-machine';
 import { OrderNotificationsService } from './order-notifications.service';
 import { mapOrderDetail, mapOrderSummary } from './order-mapper';
+import { DeliveryService } from '../delivery/delivery.service';
 
 const ORDER_DETAIL_INCLUDE = {
   seller: {
@@ -57,6 +61,9 @@ export class OrdersService {
     private readonly storesService: StoresService,
     private readonly reservationService: InventoryReservationService,
     private readonly notifications: OrderNotificationsService,
+    @Optional()
+    @Inject(forwardRef(() => DeliveryService))
+    private readonly deliveryService?: DeliveryService,
   ) {}
 
   private generateOrderNumber(): string {
@@ -518,6 +525,14 @@ export class OrdersService {
             quantity: i.quantity,
           })),
         });
+
+        await this.deliveryService?.cancelDeliveryForOrderInTx(
+          tx,
+          order.id,
+          dto.reason.trim(),
+          userId,
+          'CUSTOMER',
+        );
       }
 
       return tx.order.findUniqueOrThrow({
