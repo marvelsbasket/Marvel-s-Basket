@@ -1651,3 +1651,134 @@ export interface PublicOfferItem {
   firstOrderOnly: boolean;
   expiresAt: string;
 }
+
+// ============================================================================
+// Phase 16: Reviews & Ratings Types
+// ============================================================================
+
+export type ReviewStatusType = 'PENDING' | 'APPROVED' | 'REJECTED' | 'HIDDEN' | 'REMOVED';
+export type ReviewReportReasonType =
+  | 'SPAM'
+  | 'OFFENSIVE'
+  | 'FAKE_OR_MISLEADING'
+  | 'PERSONAL_INFO'
+  | 'IRRELEVANT'
+  | 'OTHER';
+export type ReviewReportStatusType = 'OPEN' | 'RESOLVED' | 'DISMISSED';
+
+export interface ProductRatingSummary {
+  productId: string;
+  averageRating: number;
+  totalReviews: number;
+  distribution: {
+    1: number;
+    2: number;
+    3: number;
+    4: number;
+    5: number;
+  };
+}
+
+export interface PublicReviewItem {
+  id: string;
+  productId: string;
+  authorName: string;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  isVerifiedPurchase: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MyReviewItem extends PublicReviewItem {
+  status: ReviewStatusType;
+  productName: string;
+  productSlug: string;
+  orderItemId: string | null;
+}
+
+export interface ReviewEligibilityResponse {
+  eligible: boolean;
+  reason: string | null;
+  existingReviewId: string | null;
+  eligibleOrderItemId: string | null;
+}
+
+export interface PaginatedPublicReviewsResponse {
+  summary: ProductRatingSummary;
+  items: PublicReviewItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ReviewModerationLogItem {
+  id: string;
+  previousStatus: ReviewStatusType | null;
+  newStatus: ReviewStatusType;
+  actorRole: string;
+  action: string;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface ReviewReportItem {
+  id: string;
+  reviewId: string;
+  reason: ReviewReportReasonType;
+  explanation: string | null;
+  status: ReviewReportStatusType;
+  resolutionNote: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  reviewSummary?: {
+    productId: string;
+    productName: string;
+    rating: number;
+    title: string | null;
+    comment: string | null;
+    status: ReviewStatusType;
+  };
+}
+
+export interface AdminReviewItem {
+  id: string;
+  productId: string;
+  productName: string;
+  userId: string;
+  authorName: string;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  status: ReviewStatusType;
+  moderationReason: string | null;
+  isVerifiedPurchase: boolean;
+  isPublished: boolean;
+  reportCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminReviewDetailResponse extends AdminReviewItem {
+  reports: ReviewReportItem[];
+  moderationLogs: ReviewModerationLogItem[];
+}
+
+export interface PaginatedAdminReviewsResponse {
+  items: AdminReviewItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  statusCounts?: Record<string, number>;
+}
+
+export interface PaginatedReviewReportsResponse {
+  items: ReviewReportItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
