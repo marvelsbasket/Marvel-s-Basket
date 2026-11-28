@@ -1567,3 +1567,87 @@ export interface PaginatedDeliveryPartnersResponse {
   limit: number;
   totalPages: number;
 }
+
+// ============================================================================
+// Phase 15: Coupons, Seller Product Discounts & Promotions Types
+// ============================================================================
+
+export type DiscountTypeValue = 'PERCENTAGE' | 'FLAT';
+
+export type SellerDiscountStatusType =
+  | 'DRAFT'
+  | 'SCHEDULED'
+  | 'ACTIVE'
+  | 'PAUSED'
+  | 'EXPIRED'
+  | 'ENDED';
+
+export interface SellerProductDiscountItem {
+  id: string;
+  sellerId: string;
+  sellerProductId: string;
+  productName: string;
+  variantName: string | null;
+  packSize: string | null;
+  title: string | null;
+  discountType: DiscountTypeValue;
+  discountValue: number;
+  baseSellingPrice: number;
+  mrp: number;
+  discountAmount: number;
+  effectiveSellingPrice: number;
+  status: SellerDiscountStatusType;
+  startsAt: string;
+  expiresAt: string;
+  pausedAt: string | null;
+  endedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedSellerDiscountsResponse {
+  items: SellerProductDiscountItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface AdminCouponItem {
+  id: string;
+  code: string;
+  description: string | null;
+  discountType: DiscountTypeValue;
+  discountValue: number;
+  minimumOrderAmount: number;
+  maximumDiscount: number | null;
+  usageLimit: number | null;
+  currentUsageCount: number;
+  perUserLimit: number;
+  firstOrderOnly: boolean;
+  isStackableWithSellerDiscount: boolean;
+  startsAt: string;
+  expiresAt: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedCouponsResponse {
+  items: AdminCouponItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PublicOfferItem {
+  code: string;
+  description: string | null;
+  discountType: DiscountTypeValue;
+  discountValue: number;
+  minimumOrderAmount: number;
+  maximumDiscount: number | null;
+  firstOrderOnly: boolean;
+  expiresAt: string;
+}

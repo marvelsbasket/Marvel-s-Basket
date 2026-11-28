@@ -21,6 +21,7 @@ import {
   InventoryReservationService,
 } from '../inventory/services/inventory-reservation.service';
 import { CancelCheckoutDto, PrepareCheckoutDto } from './dto/checkout.dto';
+import { resolveEffectiveListingPrice } from '../promotions/discount-calculator';
 
 @Injectable()
 export class CheckoutService {
@@ -157,6 +158,9 @@ export class CheckoutService {
                 product: { include: { images: { where: { isPrimary: true }, take: 1 } } },
                 variant: true,
                 inventory: true,
+                discounts: {
+                  where: { status: { in: ['ACTIVE', 'SCHEDULED'] } },
+                },
               },
             },
           },
@@ -236,8 +240,13 @@ export class CheckoutService {
         });
       }
 
-      const unitPricePaise = this.pricingService.toPaise(sp.sellingPrice);
-      const mrpPaise = this.pricingService.toPaise(variant?.mrp ?? sp.mrp ?? sp.sellingPrice);
+      const resolvedPrice = resolveEffectiveListingPrice({
+        baseSellingPrice: sp.sellingPrice,
+        mrp: variant?.mrp ?? sp.mrp ?? sp.sellingPrice,
+        discounts: sp.discounts,
+      });
+      const unitPricePaise = this.pricingService.toPaise(resolvedPrice.effectiveSellingPrice);
+      const mrpPaise = this.pricingService.toPaise(resolvedPrice.mrp);
       if (mrpPaise > 0 && unitPricePaise > mrpPaise) {
         throw new ConflictException({
           code: 'PRICE_EXCEEDS_MRP',

@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { DiscountType } from '@prisma/client';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { DiscountType, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../database/prisma.service';
 import { StoresService } from '../stores/stores.service';
@@ -199,6 +199,7 @@ export class PricingService {
     code: string;
     userId: string;
     itemSubtotalPaise: number;
+    hasSellerDiscount?: boolean;
   }): Promise<CouponEvaluationResult> {
     const normalizedCode = params.code.trim().toUpperCase();
     if (!normalizedCode) {
@@ -243,7 +244,35 @@ export class PricingService {
       });
     }
 
+    if (params.hasSellerDiscount && !coupon.isStackableWithSellerDiscount) {
+      throw new BadRequestException({
+        code: 'COUPON_NOT_STACKABLE',
+        message: `Coupon "${normalizedCode}" cannot be combined with seller product discounts in your basket.`,
+      });
+    }
+
+    if (coupon.firstOrderOnly) {
+      const priorOrders = await this.prisma.order.count({
+        where: {
+          customerId: params.userId,
+          status: { notIn: ['CANCELLED', 'REJECTED', 'FAILED'] },
+        },
+      });
+      if (priorOrders > 0) {
+        throw new BadRequestException({
+          code: 'COUPON_FIRST_ORDER_ONLY',
+          message: `Coupon "${normalizedCode}" is valid only on your first order.`,
+        });
+      }
+    }
+
     if (coupon.usageLimit !== null) {
+      if (coupon.currentUsageCount >= coupon.usageLimit) {
+        throw new BadRequestException({
+          code: 'COUPON_USAGE_LIMIT_REACHED',
+          message: `Coupon "${normalizedCode}" has reached its maximum usage limit.`,
+        });
+      }
       const totalUsages = await this.prisma.couponUsage.count({
         where: { couponId: coupon.id },
       });
@@ -288,5 +317,65 @@ export class PricingService {
       discountPaise,
       description: coupon.description,
     };
+  }
+
+  /**
+   * Atomically redeems a coupon inside an order/payment transaction.
+   * Uses a conditional SQL increment on current_usage_count so concurrent
+   * checkouts can never exceed usage_limit.
+   */
+  async redeemCouponInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      couponId: string;
+      userId: string;
+      orderId: string;
+      discountAmount: Decimal | number;
+    },
+  ): Promise<void> {
+    const existing = await tx.couponUsage.findFirst({
+      where: { orderId: params.orderId, couponId: params.couponId },
+    });
+    if (existing) return;
+
+    const now = new Date();
+    const updatedRows = await tx.$queryRaw<Array<{ id: string; per_user_limit: number }>>`
+      UPDATE coupons
+      SET current_usage_count = current_usage_count + 1,
+          updated_at = NOW()
+      WHERE id = ${params.couponId}::uuid
+        AND is_active = true
+        AND starts_at <= ${now}
+        AND expires_at > ${now}
+        AND (usage_limit IS NULL OR current_usage_count < usage_limit)
+      RETURNING id, per_user_limit
+    `;
+
+    if (updatedRows.length === 0) {
+      throw new ConflictException({
+        code: 'COUPON_USAGE_LIMIT_REACHED',
+        message: 'Coupon is no longer available or has reached its maximum redemption limit.',
+      });
+    }
+
+    const perUserLimit = updatedRows[0].per_user_limit;
+    const userCount = await tx.couponUsage.count({
+      where: { couponId: params.couponId, userId: params.userId },
+    });
+    if (userCount >= perUserLimit) {
+      throw new ConflictException({
+        code: 'COUPON_USER_LIMIT_REACHED',
+        message: 'You have already redeemed this coupon the maximum number of times.',
+      });
+    }
+
+    await tx.couponUsage.create({
+      data: {
+        couponId: params.couponId,
+        userId: params.userId,
+        orderId: params.orderId,
+        discountAmount: params.discountAmount,
+      },
+    });
   }
 }
