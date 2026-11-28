@@ -31,8 +31,17 @@ async function bootstrap() {
     }),
   );
 
-  // 2. Request body limits & Cookie Parser
-  app.use(express.json({ limit: '10mb' }));
+  // 2. Request body limits & Cookie Parser (preserve rawBody for Razorpay webhooks)
+  app.use(
+    express.json({
+      limit: '10mb',
+      verify: (req: express.Request & { rawBody?: Buffer }, _res, buf) => {
+        if (req.originalUrl?.includes('/payments/webhooks/razorpay')) {
+          req.rawBody = buf;
+        }
+      },
+    }),
+  );
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
   app.use(cookieParser());
 

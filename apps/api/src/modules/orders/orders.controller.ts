@@ -16,6 +16,7 @@ import { ResponseMessage } from '../../common/decorators/response-message.decora
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { OrdersService } from './orders.service';
 import { ComplaintsService } from './complaints.service';
+import { PaymentsService } from '../payments/payments.service';
 import {
   CancelOrderDto,
   CreateComplaintDto,
@@ -30,6 +31,7 @@ export class OrdersController {
   constructor(
     private readonly ordersService: OrdersService,
     private readonly complaintsService: ComplaintsService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   @Post()
@@ -64,6 +66,13 @@ export class OrdersController {
     @Body() dto: CancelOrderDto,
   ) {
     return this.ordersService.cancelCustomerOrder(userId, orderId, dto);
+  }
+
+  @Get(':orderId/payment')
+  @ApiOperation({ summary: 'Get latest payment status for an authenticated customer order' })
+  @ResponseMessage('Order payment status retrieved')
+  async getOrderPayment(@CurrentUser('id') userId: string, @Param('orderId') orderId: string) {
+    return this.paymentsService.getCustomerOrderPayment(userId, orderId);
   }
 
   @Get(':orderId/tracking')

@@ -102,12 +102,12 @@ export class OrdersService {
       return mapOrderDetail(existingBySession);
     }
 
-    // 2. Payment gateway boundary (Phase 13 handles Razorpay verification)
-    if (paymentMethod === PaymentMethod.RAZORPAY && !dto.paymentReferenceId?.trim()) {
+    // 2. Payment gateway boundary: Razorpay orders must be initiated via POST /payments/initiate
+    if (paymentMethod === PaymentMethod.RAZORPAY) {
       throw new BadRequestException({
-        code: 'PAYMENT_VERIFICATION_REQUIRED',
+        code: 'USE_PAYMENT_INITIATE_ENDPOINT',
         message:
-          'Online payment requires server-verified Razorpay transaction confirmation (Phase 13). Please select Cash on Delivery (COD) or provide a verified payment reference.',
+          'Online Razorpay payments must be initiated via POST /api/v1/payments/initiate and verified server-side.',
       });
     }
 
@@ -220,10 +220,7 @@ export class OrdersService {
           totalAmount: session.grandTotal,
           status: OrderStatus.PENDING,
           paymentMethod,
-          paymentStatus:
-            paymentMethod === PaymentMethod.RAZORPAY
-              ? PaymentStatus.SUCCESS
-              : PaymentStatus.PENDING,
+          paymentStatus: PaymentStatus.PENDING,
           deliveryStatus: DeliveryStatus.PENDING,
           notes: dto.notes?.trim() || null,
           items: {

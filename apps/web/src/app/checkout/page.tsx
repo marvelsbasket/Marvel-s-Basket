@@ -7,8 +7,11 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
+  Banknote,
   CheckCircle2,
   Clock,
+  CreditCard,
+  Loader2,
   MapPin,
   RefreshCw,
   ShieldCheck,
@@ -18,13 +21,20 @@ import {
   Timer,
   XCircle,
 } from 'lucide-react';
-import { CheckoutSummaryResponse, CustomerAddressResponse } from '@marvels-basket/shared';
+import {
+  CheckoutSummaryResponse,
+  CustomerAddressResponse,
+  PaymentMethodType,
+  PaymentStatusResponse,
+} from '@marvels-basket/shared';
 import { StorefrontLayout } from '@/components/layout/storefront-layout';
 import { AuthGuard } from '@/features/auth/components/auth-guard';
 import { useBasket } from '@/features/basket/context/basket-context';
 import { addressService } from '@/features/addresses/services/address.service';
 import { CheckoutService } from '@/features/checkout/services/checkout.service';
 import { OrdersService } from '@/features/orders/services/orders.service';
+import { PaymentsService } from '@/features/payments/services/payments.service';
+import { openRazorpayCheckout } from '@/features/payments/utils/razorpay-checkout';
 import { ApiError } from '@/lib/api/errors';
 import { Button } from '@/components/ui/button';
 import { formatINR } from '@/lib/utils/currency';
@@ -55,6 +65,16 @@ function CheckoutContent() {
   const [isPreparing, setIsPreparing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('RAZORPAY');
+  const [paymentUiState, setPaymentUiState] = useState<
+    'idle' | 'opening' | 'verifying' | 'pending_recheck' | 'failed'
+  >('idle');
+  const [activePaymentMeta, setActivePaymentMeta] = useState<{
+    paymentId: string;
+    orderId: string;
+    orderNumber: string;
+    message?: string;
+  } | null>(null);
   const [deliveryNotes, setDeliveryNotes] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [priceChanges, setPriceChanges] = useState<PriceChangeDelta[] | null>(null);
@@ -536,16 +556,128 @@ function CheckoutContent() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="rounded-xl border border-brand/25 bg-brand-tint/60 p-3 text-xs text-ink space-y-1">
-                    <p className="font-bold text-brand flex items-center gap-1.5">
-                      <ShieldCheck className="h-4 w-4 shrink-0" />
-                      Payment Method: Cash on Delivery (COD)
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold text-ink uppercase tracking-wide">
+                      Select Payment Method
                     </p>
-                    <p className="text-ink-secondary">
-                      Pay in cash or UPI at your doorstep. Online Razorpay checkout connects here in
-                      Phase 13.
-                    </p>
+                    <button
+                      type="button"
+                      disabled={isPlacingOrder || paymentUiState === 'verifying'}
+                      onClick={() => setPaymentMethod('RAZORPAY')}
+                      className={`w-full text-left rounded-xl border p-3 transition-all flex items-start gap-3 ${
+                        paymentMethod === 'RAZORPAY'
+                          ? 'border-brand bg-brand-tint/60 ring-1 ring-brand'
+                          : 'border-border bg-white hover:bg-surface'
+                      }`}
+                    >
+                      <CreditCard className="h-4 w-4 text-brand shrink-0 mt-0.5" />
+                      <div className="text-xs">
+                        <p className="font-bold text-ink">
+                          Pay Online (UPI, Cards, Net Banking)
+                        </p>
+                        <p className="text-muted mt-0.5">
+                          Secured by Razorpay Standard Checkout
+                        </p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isPlacingOrder || paymentUiState === 'verifying'}
+                      onClick={() => setPaymentMethod('COD')}
+                      className={`w-full text-left rounded-xl border p-3 transition-all flex items-start gap-3 ${
+                        paymentMethod === 'COD'
+                          ? 'border-brand bg-brand-tint/60 ring-1 ring-brand'
+                          : 'border-border bg-white hover:bg-surface'
+                      }`}
+                    >
+                      <Banknote className="h-4 w-4 text-brand shrink-0 mt-0.5" />
+                      <div className="text-xs">
+                        <p className="font-bold text-ink">Cash on Delivery (COD)</p>
+                        <p className="text-muted mt-0.5">
+                          Pay in cash or UPI at your doorstep
+                        </p>
+                      </div>
+                    </button>
                   </div>
+
+                  {paymentUiState === 'verifying' && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 flex items-center gap-2.5">
+                      <Loader2 className="h-4 w-4 animate-spin text-brand shrink-0" />
+                      <div>
+                        <p className="font-bold">Verifying payment with bank...</p>
+                        <p className="text-emerald-800">
+                          Please do not refresh or close this window.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {(paymentUiState === 'pending_recheck' || paymentUiState === 'failed') &&
+                    activePaymentMeta && (
+                      <div
+                        className={`rounded-xl border p-3 text-xs space-y-2 ${
+                          paymentUiState === 'failed'
+                            ? 'border-red-200 bg-red-50 text-red-900'
+                            : 'border-amber-200 bg-amber-50 text-amber-900'
+                        }`}
+                      >
+                        <p className="font-bold">
+                          {paymentUiState === 'failed'
+                            ? 'Payment was not completed'
+                            : 'Payment status pending confirmation'}
+                        </p>
+                        <p>{activePaymentMeta.message}</p>
+                        <p className="font-mono text-[11px] opacity-80">
+                          Ref: {activePaymentMeta.orderNumber} ({activePaymentMeta.paymentId.slice(0, 8)})
+                        </p>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              setIsPlacingOrder(true);
+                              try {
+                                const statusRes: PaymentStatusResponse =
+                                  await PaymentsService.getPaymentStatus(
+                                    activePaymentMeta.paymentId,
+                                  );
+                                if (
+                                  statusRes.status === 'CAPTURED' ||
+                                  statusRes.status === 'SUCCESS'
+                                ) {
+                                  notify(
+                                    `Payment confirmed for order ${statusRes.orderNumber}!`,
+                                    'success',
+                                  );
+                                  await refreshBasket();
+                                  router.push(`/orders/${statusRes.orderId}`);
+                                } else {
+                                  notify(
+                                    `Current payment status: ${statusRes.status}`,
+                                    'info',
+                                  );
+                                }
+                              } catch {
+                                notify('Could not refresh payment status.', 'error');
+                              } finally {
+                                setIsPlacingOrder(false);
+                              }
+                            }}
+                            className="text-xs font-bold bg-white"
+                          >
+                            Recheck Status
+                          </Button>
+                          <Link
+                            href={`/orders/${activePaymentMeta.orderId}`}
+                            className="inline-flex items-center rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-bold text-ink hover:bg-surface"
+                          >
+                            View Order
+                          </Link>
+                        </div>
+                      </div>
+                    )}
 
                   <textarea
                     value={deliveryNotes}
@@ -557,34 +689,146 @@ function CheckoutContent() {
 
                   <Button
                     type="button"
-                    disabled={isExpired || isPreparing || isCancelling}
-                    isLoading={isPlacingOrder}
+                    disabled={
+                      isExpired ||
+                      isPreparing ||
+                      isCancelling ||
+                      isPlacingOrder ||
+                      paymentUiState === 'opening' ||
+                      paymentUiState === 'verifying'
+                    }
+                    isLoading={isPlacingOrder || paymentUiState === 'verifying'}
                     onClick={async () => {
                       if (!summary || isExpired) return;
                       setIsPlacingOrder(true);
                       setErrorMsg(null);
+
+                      if (paymentMethod === 'COD') {
+                        try {
+                          const order = await OrdersService.createOrder({
+                            checkoutSessionId: summary.checkoutSessionId,
+                            paymentMethod: 'COD',
+                            idempotencyKey: `order:${summary.checkoutSessionId}`,
+                            notes: deliveryNotes.trim() || undefined,
+                          });
+                          notify(`Order ${order.orderNumber} placed!`, 'success');
+                          await refreshBasket();
+                          router.push(`/orders/${order.id}`);
+                        } catch (err) {
+                          const msg =
+                            err instanceof ApiError ? err.message : 'Unable to place order.';
+                          setErrorMsg(msg);
+                          notify(msg, 'error');
+                        } finally {
+                          setIsPlacingOrder(false);
+                        }
+                        return;
+                      }
+
+                      // Razorpay Online Payment Flow
                       try {
-                        const order = await OrdersService.createOrder({
-                          checkoutSessionId: summary.checkoutSessionId,
-                          paymentMethod: 'COD',
-                          idempotencyKey: `order:${summary.checkoutSessionId}`,
+                        setPaymentUiState('opening');
+                        const initRes = await PaymentsService.initiatePayment({
+                          checkoutSessionId: activePaymentMeta?.orderId
+                            ? undefined
+                            : summary.checkoutSessionId,
+                          orderId: activePaymentMeta?.orderId,
                           notes: deliveryNotes.trim() || undefined,
                         });
-                        notify(`Order ${order.orderNumber} placed!`, 'success');
-                        await refreshBasket();
-                        router.push(`/orders/${order.id}`);
+
+                        setActivePaymentMeta({
+                          paymentId: initRes.paymentId,
+                          orderId: initRes.orderId,
+                          orderNumber: initRes.orderNumber,
+                        });
+
+                        await openRazorpayCheckout(initRes.checkout, {
+                          onSuccess: async (rpResponse) => {
+                            setPaymentUiState('verifying');
+                            try {
+                              const verified = await PaymentsService.verifyPayment({
+                                orderId: initRes.orderId,
+                                razorpayOrderId: rpResponse.razorpay_order_id,
+                                razorpayPaymentId: rpResponse.razorpay_payment_id,
+                                razorpaySignature: rpResponse.razorpay_signature,
+                              });
+                              if (
+                                verified.status === 'CAPTURED' ||
+                                verified.status === 'SUCCESS'
+                              ) {
+                                notify(
+                                  `Payment confirmed for order ${verified.orderNumber}!`,
+                                  'success',
+                                );
+                                await refreshBasket();
+                                router.push(`/orders/${verified.orderId}`);
+                              } else {
+                                setPaymentUiState('pending_recheck');
+                                setActivePaymentMeta({
+                                  paymentId: initRes.paymentId,
+                                  orderId: initRes.orderId,
+                                  orderNumber: initRes.orderNumber,
+                                  message: `Payment is currently ${verified.status}. We will update your order automatically once confirmed.`,
+                                });
+                              }
+                            } catch (verifyErr) {
+                              setPaymentUiState('pending_recheck');
+                              setActivePaymentMeta({
+                                paymentId: initRes.paymentId,
+                                orderId: initRes.orderId,
+                                orderNumber: initRes.orderNumber,
+                                message:
+                                  verifyErr instanceof ApiError
+                                    ? verifyErr.message
+                                    : 'Verification timed out. Click Recheck Status before retrying.',
+                              });
+                            } finally {
+                              setIsPlacingOrder(false);
+                            }
+                          },
+                          onFailure: (failRes) => {
+                            setPaymentUiState('failed');
+                            setActivePaymentMeta({
+                              paymentId: initRes.paymentId,
+                              orderId: initRes.orderId,
+                              orderNumber: initRes.orderNumber,
+                              message:
+                                failRes.error?.description ||
+                                'Your payment could not be completed. You can retry safely.',
+                            });
+                            setIsPlacingOrder(false);
+                          },
+                          onDismiss: () => {
+                            setPaymentUiState('pending_recheck');
+                            setActivePaymentMeta({
+                              paymentId: initRes.paymentId,
+                              orderId: initRes.orderId,
+                              orderNumber: initRes.orderNumber,
+                              message:
+                                'Checkout was closed before completion. Recheck status or click Pay Now to retry.',
+                            });
+                            setIsPlacingOrder(false);
+                          },
+                        });
                       } catch (err) {
                         const msg =
-                          err instanceof ApiError ? err.message : 'Unable to place order.';
+                          err instanceof ApiError
+                            ? err.message
+                            : err instanceof Error
+                              ? err.message
+                              : 'Unable to start online payment.';
+                        setPaymentUiState('idle');
                         setErrorMsg(msg);
                         notify(msg, 'error');
-                      } finally {
                         setIsPlacingOrder(false);
                       }
                     }}
-                    className="w-full py-3.5 rounded-2xl bg-brand hover:bg-forest text-white font-black"
+                    className="w-full py-3.5 rounded-2xl bg-brand hover:bg-forest text-white font-black flex items-center justify-center gap-2"
                   >
-                    Place Order (COD) • {formatINR(summary.priceBreakdown.grandTotal)}
+                    <ShieldCheck className="h-4 w-4" />
+                    {paymentMethod === 'COD'
+                      ? `Place Order (COD) • ${formatINR(summary.priceBreakdown.grandTotal)}`
+                      : `Pay Now • ${formatINR(summary.priceBreakdown.grandTotal)}`}
                   </Button>
                 </div>
 

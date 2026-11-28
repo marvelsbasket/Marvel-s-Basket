@@ -54,4 +54,14 @@ export default (): RootConfig => ({
   security: {
     encryptionKey: process.env.ENCRYPTION_KEY || 'marvels-basket-aes256-default-key-32b!',
   },
+  razorpay: {
+    mode: (process.env.RAZORPAY_MODE as 'test' | 'live') || 'test',
+    keyId: process.env.RAZORPAY_KEY_ID || '',
+    keySecret: process.env.RAZORPAY_KEY_SECRET || '',
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
+    previousWebhookSecret: process.env.RAZORPAY_PREVIOUS_WEBHOOK_SECRET || undefined,
+    currency: (process.env.RAZORPAY_CURRENCY || 'INR').toUpperCase(),
+    captureMode: (process.env.RAZORPAY_CAPTURE_MODE as 'automatic' | 'manual') || 'automatic',
+    codMaxAmount: parseInt(process.env.COD_MAX_AMOUNT || '1500', 10),
+  },
 });

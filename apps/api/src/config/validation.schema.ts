@@ -69,4 +69,60 @@ export const environmentValidationSchema = Joi.object({
   CLOUDINARY_API_SECRET: Joi.string().allow('').optional(),
 
   ENCRYPTION_KEY: Joi.string().min(32).default('marvels-basket-aes256-default-key-32b!'),
-}).unknown(true);
+
+  RAZORPAY_MODE: Joi.string().valid('test', 'live').default('test'),
+
+  RAZORPAY_KEY_ID: Joi.string().allow('').optional(),
+
+  RAZORPAY_KEY_SECRET: Joi.string().allow('').optional(),
+
+  RAZORPAY_WEBHOOK_SECRET: Joi.string().allow('').optional(),
+
+  RAZORPAY_PREVIOUS_WEBHOOK_SECRET: Joi.string().allow('').optional(),
+
+  RAZORPAY_CURRENCY: Joi.string().valid('INR').default('INR'),
+
+  RAZORPAY_CAPTURE_MODE: Joi.string().valid('automatic', 'manual').default('automatic'),
+
+  COD_MAX_AMOUNT: Joi.number().min(100).max(50000).default(1500),
+})
+  .custom((value, helpers) => {
+    const isProd = value.NODE_ENV === 'production';
+    const mode = value.RAZORPAY_MODE || 'test';
+    const keyId: string = value.RAZORPAY_KEY_ID || '';
+    const keySecret: string = value.RAZORPAY_KEY_SECRET || '';
+    const webhookSecret: string = value.RAZORPAY_WEBHOOK_SECRET || '';
+
+    if (isProd && mode !== 'live') {
+      return helpers.message({
+        custom: 'RAZORPAY_MODE must be "live" when NODE_ENV is "production"',
+      });
+    }
+
+    if (mode === 'live') {
+      if (!keyId || !keyId.startsWith('rzp_live_')) {
+        return helpers.message({
+          custom: 'RAZORPAY_KEY_ID must be a valid Live Mode key (rzp_live_*) when RAZORPAY_MODE=live',
+        });
+      }
+      if (!keySecret || keySecret.includes('placeholder')) {
+        return helpers.message({
+          custom: 'RAZORPAY_KEY_SECRET is required and cannot be a placeholder in live mode',
+        });
+      }
+      if (!webhookSecret || webhookSecret.includes('placeholder')) {
+        return helpers.message({
+          custom: 'RAZORPAY_WEBHOOK_SECRET is required and cannot be a placeholder in live mode',
+        });
+      }
+    }
+
+    if (mode === 'test' && keyId.startsWith('rzp_live_')) {
+      return helpers.message({
+        custom: 'Live Razorpay key (rzp_live_*) cannot be used when RAZORPAY_MODE=test',
+      });
+    }
+
+    return value;
+  })
+  .unknown(true);
