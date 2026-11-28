@@ -244,6 +244,29 @@ enum SellerDiscountStatus {
   ENDED
 }
 
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  HIDDEN
+  REMOVED
+}
+
+enum ReviewReportReason {
+  SPAM
+  OFFENSIVE
+  FAKE_OR_MISLEADING
+  PERSONAL_INFO
+  IRRELEVANT
+  OTHER
+}
+
+enum ReviewReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
 enum NotificationType {
   ORDER
   PAYMENT
@@ -1568,27 +1591,89 @@ model Banner {
 // ==============================================================================
 
 model Review {
-  id                 String   @id @default(uuid()) @db.Uuid
-  userId             String   @map("user_id") @db.Uuid
-  productId          String   @map("product_id") @db.Uuid
-  sellerId           String?  @map("seller_id") @db.Uuid
-  sellerProductId    String?  @map("seller_product_id") @db.Uuid
-  orderItemId        String?  @map("order_item_id") @db.Uuid
+  id                 String       @id @default(uuid()) @db.Uuid
+  userId             String       @map("user_id") @db.Uuid
+  productId          String       @map("product_id") @db.Uuid
+  sellerId           String?      @map("seller_id") @db.Uuid
+  sellerProductId    String?      @map("seller_product_id") @db.Uuid
+  orderItemId        String?      @map("order_item_id") @db.Uuid
   rating             Int
   title              String?
   comment            String?
-  isVerifiedPurchase Boolean  @default(true) @map("is_verified_purchase")
-  isPublished        Boolean  @default(true) @map("is_published")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  status             ReviewStatus @default(PENDING)
+  moderationReason   String?      @map("moderation_reason")
+  moderatedBy        String?      @map("moderated_by") @db.Uuid
+  moderatedAt        DateTime?    @map("moderated_at")
+  isVerifiedPurchase Boolean      @default(true) @map("is_verified_purchase")
+  isPublished        Boolean      @default(false) @map("is_published")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
 
-  user      User       @relation(fields: [userId], references: [id], onDelete: Restrict)
-  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  product        Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItem      OrderItem?            @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  reports        ReviewReport[]
+  moderationLogs ReviewModerationLog[]
 
-  @@index([productId, rating])
+  @@unique([userId, productId])
+  @@index([productId, status, rating])
+  @@index([status, createdAt])
   @@index([userId])
   @@map("reviews")
+}
+
+model ReviewReport {
+  id             String             @id @default(uuid()) @db.Uuid
+  reviewId       String             @map("review_id") @db.Uuid
+  reporterUserId String             @map("reporter_user_id") @db.Uuid
+  reason         ReviewReportReason
+  explanation    String?
+  status         ReviewReportStatus @default(OPEN)
+  resolutionNote String?            @map("resolution_note")
+  resolvedBy     String?            @map("resolved_by") @db.Uuid
+  resolvedAt     DateTime?          @map("resolved_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, reporterUserId])
+  @@index([reviewId])
+  @@index([status, createdAt])
+  @@map("review_reports")
+}
+
+model ReviewModerationLog {
+  id             String        @id @default(uuid()) @db.Uuid
+  reviewId       String        @map("review_id") @db.Uuid
+  previousStatus ReviewStatus? @map("previous_status")
+  newStatus      ReviewStatus  @map("new_status")
+  actorUserId    String        @map("actor_user_id") @db.Uuid
+  actorRole      String        @map("actor_role")
+  action         String
+  reason         String?
+  metadata       Json?
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId, createdAt])
+  @@map("review_moderation_logs")
+}
+
+model ProductRatingAggregate {
+  id            String   @id @default(uuid()) @db.Uuid
+  productId     String   @unique @map("product_id") @db.Uuid
+  averageRating Decimal  @default(0) @map("average_rating") @db.Decimal(3, 2)
+  totalReviews  Int      @default(0) @map("total_reviews")
+  count1        Int      @default(0) @map("count_1")
+  count2        Int      @default(0) @map("count_2")
+  count3        Int      @default(0) @map("count_3")
+  count4        Int      @default(0) @map("count_4")
+  count5        Int      @default(0) @map("count_5")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("product_rating_aggregates")
 }
 
 model Wishlist {

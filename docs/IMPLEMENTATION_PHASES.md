@@ -799,7 +799,23 @@ Discounts must be validated and calculated on the backend according to approved 
 # 18. Phase 16 — Reviews & Ratings
 
 **Priority:** Medium  
-**Status:** Not Started
+**Status:** Completed (Verified on 28 November 2026)
+
+### Objective
+
+Implement a verified-purchase customer review, rating, reporting, and admin moderation system.
+
+### Tasks
+
+- [x] Implement verified-purchase review eligibility (`Order.status === DELIVERED`).
+- [x] Implement review creation, editing (with re-moderation), and soft deletion (`REMOVED`).
+- [x] Implement duplicate review prevention (`@@unique([userId, productId])`).
+- [x] Implement XSS/HTML sanitization and Redis rate limiting.
+- [x] Implement review reporting (`ReviewReport`) with duplicate report prevention.
+- [x] Implement admin moderation (`APPROVE`, `REJECT`, `HIDE`, `RESTORE`, report resolution) and `ReviewModerationLog`.
+- [x] Implement transactional `ProductRatingAggregate` calculation and reconciliation.
+- [x] Build PDP `ProductReviewsSection`, Customer `/reviews`, and Admin `/admin/reviews`.
+- [x] Test eligibility, concurrency, moderation, reporting, and rating aggregation.
 
 ### Objective
 

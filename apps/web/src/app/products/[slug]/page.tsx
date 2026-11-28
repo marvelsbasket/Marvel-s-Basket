@@ -25,6 +25,7 @@ import {
 } from '@marvels-basket/shared';
 import { StorefrontLayout } from '@/components/layout/storefront-layout';
 import { ProductCard } from '@/features/catalog/components/product-card';
+import { ProductReviewsSection } from '@/features/reviews/components/product-reviews-section';
 import { CatalogService } from '@/features/catalog/services/catalog.service';
 import { useLocation } from '@/features/location/context/location-context';
 import { useBasket } from '@/features/basket/context/basket-context';
@@ -784,6 +785,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ slug: 
             )}
           </div>
         </section>
+
+        {/* Verified Customer Reviews & Ratings */}
+        <ProductReviewsSection productId={product.id} />
 
         {/* Related Products */}
         {relatedProducts.length > 0 && (
