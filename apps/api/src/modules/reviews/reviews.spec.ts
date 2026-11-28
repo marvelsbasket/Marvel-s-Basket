@@ -33,16 +33,20 @@ describe('Phase 16 — Reviews & Ratings Unit Suite', () => {
     it('computes exact weighted average and distribution from APPROVED reviews', async () => {
       const upsert = jest.fn().mockResolvedValue({});
       const tx = {
-        $queryRaw: jest.fn().mockResolvedValue([
-          { rating: 5, cnt: 2 },
-          { rating: 4, cnt: 1 },
-        ]),
+        $queryRaw: jest
+          .fn()
+          .mockResolvedValueOnce([{ id: 'prod-1' }])
+          .mockResolvedValueOnce([
+            { rating: 5, cnt: 2 },
+            { rating: 4, cnt: 1 },
+          ]),
         productRatingAggregate: { upsert },
       } as any;
 
       const service = new RatingAggregationService({} as any);
       const summary = await service.recomputeProductAggregateInTx(tx, 'prod-1');
 
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
       expect(summary.totalReviews).toBe(3);
       expect(summary.averageRating).toBe(4.67);
       expect(summary.distribution).toEqual({ 1: 0, 2: 0, 3: 0, 4: 1, 5: 2 });

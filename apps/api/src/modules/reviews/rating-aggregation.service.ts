@@ -16,6 +16,11 @@ export class RatingAggregationService {
     tx: Prisma.TransactionClient,
     productId: string,
   ): Promise<ProductRatingSummary> {
+    // Serialize concurrent rating aggregate updates for the same product.
+    await tx.$queryRaw`
+      SELECT id FROM products WHERE id = ${productId}::uuid FOR UPDATE
+    `;
+
     const rows = await tx.$queryRaw<Array<{ rating: number; cnt: number }>>`
       SELECT rating, COUNT(*)::int AS cnt
       FROM reviews

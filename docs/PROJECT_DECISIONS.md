@@ -1236,6 +1236,7 @@ In high-velocity grocery quick-commerce, multiple customers frequently attempt t
 | **ADR-054** | Interactive Center-Pin Map, Server Geocoding Proxy & Single-Default Address Index | **Accepted** | Maps/Addresses | Browser Leaflet/OSM interactive center-pin map + server-side Google Maps/Nominatim geocoding proxy (zero exposed API keys) + PostgreSQL partial unique default address index |
 | **ADR-055** | CheckoutSession Snapshots, Paise-Exact Pricing & BullMQ 15-Minute Reservation Expiration | **Accepted** | Cart/Checkout | `CheckoutSession` immutable snapshots, integer-paise `PricingService` reading `PlatformSetting` (MOV, distance tiers, coupons), guarded `StockReservation` state transitions, BullMQ `reservation-expiration` delayed jobs + 60s DB recovery sweep |
 | **ADR-056** | Single-Store Order Lifecycle, ACID Reservation Commit & Idempotent Stock Restoration | **Accepted** | Orders | `OrdersModule` single-store order creation from `CheckoutSession`, `commitReservationInTx`, `restoreOrderStockInTx` with per-item idempotency keys, `OrderStateMachine`, `OrderComplaint` workflow |
+| **ADR-057** | Verified-Purchase Reviews, Moderation Lifecycle & Locked Rating Aggregation | **Accepted** | Reviews/Catalog | `ReviewsModule` (`DELIVERED`-only eligibility, `@@unique([userId, productId])` & `@@unique([reviewId, reporterUserId])`, XSS sanitization, Redis fail-open rate limiting, admin-only moderation with `PENDING_MODERATION` on edit and `REMOVED` terminal soft-delete, `ProductRatingAggregate` serialized via `SELECT ... FOR UPDATE` on `products`) |
 
 ---
 

@@ -2250,6 +2250,12 @@ The initial release will prioritize reliability and correctness over unnecessary
 - **State Machine (`OrderStateMachine`)**: Enforces `PENDING -> CONFIRMED -> PACKED -> OUT_FOR_DELIVERY -> DELIVERED`, pre-pack customer cancellation (`PENDING`/`CONFIRMED`), seller rejection (`PENDING`/`CONFIRMED`), and audited admin interventions.
 - **Idempotent Stock Restoration (`restoreOrderStockInTx`)**: Restores stock on pre-pack cancellation or seller rejection using per-item `idempotency_key` (`order-restore:<orderId>:<orderItemId>`).
 
+## Phase 16 Addendum — Reviews, Moderation & Rating Aggregation
+
+- **Reviews (`ReviewsModule` / `ReviewsService`)**: Enforces server-derived `DELIVERED` verified-purchase eligibility, one-review-per-product (`@@unique([userId, productId])`), XSS/HTML sanitization, and Redis sliding-window rate limiting (fail-open if Redis is transiently unavailable). Customer edits revert `APPROVED` reviews to `PENDING_MODERATION`; soft deletion sets terminal `REMOVED`.
+- **Moderation & Reporting (`AdminReviewsService`)**: Admin-only (`ADMIN` / `SUPER_ADMIN`) approve/reject/hide/restore transitions with idempotency, terminal `REMOVED` protection, `ReviewReport` uniqueness (`@@unique([reviewId, reporterUserId])`), and immutable `ReviewModerationLog` + `AdminActivityLog` entries.
+- **Rating Aggregation (`RatingAggregationService`)**: Maintains `ProductRatingAggregate` exclusively from `APPROVED` reviews inside transactions serialized by `SELECT id FROM products WHERE id = $1::uuid FOR UPDATE`, with an admin reconciliation endpoint (`POST /api/v1/admin/products/:productId/rating-reconcile`).
+
 # 25. RELATED DOCUMENTATION
 
 The following documents define the complete project specification.

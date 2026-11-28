@@ -456,17 +456,17 @@ Customers must be able to:
 - View refund status.
 - Reorder eligible products.
 
-## 4.12 Ratings and Reviews
+## 4.12 Ratings and Reviews (Phase 16)
 
 Requirements:
 
-- Rate eligible products.
-- Review purchased products.
-- Rate sellers where supported.
-- Display verified purchase indicators.
-- Prevent duplicate reviews where policy prohibits them.
-- Report inappropriate reviews.
-- Allow administrator moderation.
+- Rate and review eligible products (`Order.status === DELIVERED` verified-purchase check derived server-side).
+- Display verified purchase indicators (`isVerifiedPurchase`) and `ProductRatingAggregate` summary (average rating, total reviews, 1–5 star distribution) on Product Detail Pages.
+- Enforce one review per customer per product (`@@unique([userId, productId])`), persisting across soft-deletion (`REMOVED`).
+- Allow customers to edit their own reviews (reverting published reviews to `PENDING_MODERATION` for re-approval) or soft-delete them (`REMOVED`).
+- Allow authenticated customers to report inappropriate reviews (`ReviewReport` with `@@unique([reviewId, reporterUserId])`) without auto-hiding.
+- Restrict moderation (`approve`, `reject`, `hide`, `restore`, report resolution, and rating reconciliation) strictly to administrators with full `ReviewModerationLog` audit trails.
+- Note: Separate seller/store ratings are deferred; product reviews capture `sellerId` context from the qualifying order.
 
 ---
 
