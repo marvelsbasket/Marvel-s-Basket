@@ -51,6 +51,17 @@ export interface SecurityConfig {
   encryptionKey: string;
 }
 
+export interface RazorpayConfig {
+  mode: 'test' | 'live';
+  keyId: string;
+  keySecret: string;
+  webhookSecret: string;
+  previousWebhookSecret?: string;
+  currency: string;
+  captureMode: 'automatic' | 'manual';
+  codMaxAmount: number;
+}
+
 export interface RootConfig {
   app: AppConfig;
   database: DatabaseConfig;
@@ -59,4 +70,5 @@ export interface RootConfig {
   email: EmailConfig;
   cloudinary: CloudinaryConfig;
   security: SecurityConfig;
+  razorpay: RazorpayConfig;
 }

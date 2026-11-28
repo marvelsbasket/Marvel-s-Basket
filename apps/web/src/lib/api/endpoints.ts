@@ -185,4 +185,19 @@ export const ENDPOINTS = {
     COMMIT_RESERVATION: (reservationId: string) =>
       `/inventory/reservations/${reservationId}/commit`,
   },
+  PAYMENTS: {
+    INITIATE: '/payments/initiate',
+    VERIFY: '/payments/verify',
+    STATUS: (paymentId: string) => `/payments/${paymentId}/status`,
+    ORDER_PAYMENT: (orderId: string) => `/orders/${orderId}/payment`,
+  },
+  ADMIN_PAYMENTS: {
+    LIST: '/admin/payments',
+    DETAIL: (paymentId: string) => `/admin/payments/${paymentId}`,
+    HISTORY: (paymentId: string) => `/admin/payments/${paymentId}/history`,
+    RECONCILE: (paymentId: string) => `/admin/payments/${paymentId}/reconcile`,
+    CREATE_REFUND: (paymentId: string) => `/admin/payments/${paymentId}/refunds`,
+    REFUNDS_LIST: '/admin/refunds',
+    REFUND_DETAIL: (refundId: string) => `/admin/refunds/${refundId}`,
+  },
 } as const;

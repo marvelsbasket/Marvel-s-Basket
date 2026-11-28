@@ -21,6 +21,8 @@ import {
   OrderTrackingResponse,
 } from '@marvels-basket/shared';
 import { OrdersService } from '@/features/orders/services/orders.service';
+import { PaymentsService } from '@/features/payments/services/payments.service';
+import { openRazorpayCheckout } from '@/features/payments/utils/razorpay-checkout';
 import { ApiError } from '@/lib/api/errors';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -59,6 +61,7 @@ export default function CustomerOrderDetailPage() {
   const [complaintItemId, setComplaintItemId] = useState('');
   const [complaintDesc, setComplaintDesc] = useState('');
   const [complaintBusy, setComplaintBusy] = useState(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
 
   const loadOrder = useCallback(async () => {
     if (!orderId) return;
@@ -156,6 +159,54 @@ export default function CustomerOrderDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {order.paymentMethod === 'RAZORPAY' &&
+            (order.paymentStatus === 'PENDING' ||
+              order.paymentStatus === 'FAILED' ||
+              order.paymentStatus === 'PROCESSING') &&
+            order.status === 'PENDING' && (
+              <Button
+                type="button"
+                isLoading={paymentBusy}
+                onClick={async () => {
+                  setPaymentBusy(true);
+                  setActionError(null);
+                  try {
+                    const initRes = await PaymentsService.initiatePayment({ orderId: order.id });
+                    await openRazorpayCheckout(initRes.checkout, {
+                      onSuccess: async (rp) => {
+                        try {
+                          await PaymentsService.verifyPayment({
+                            orderId: order.id,
+                            razorpayOrderId: rp.razorpay_order_id,
+                            razorpayPaymentId: rp.razorpay_payment_id,
+                            razorpaySignature: rp.razorpay_signature,
+                          });
+                        } finally {
+                          await loadOrder();
+                          setPaymentBusy(false);
+                        }
+                      },
+                      onFailure: async () => {
+                        await loadOrder();
+                        setPaymentBusy(false);
+                      },
+                      onDismiss: async () => {
+                        await loadOrder();
+                        setPaymentBusy(false);
+                      },
+                    });
+                  } catch (err) {
+                    setActionError(
+                      err instanceof ApiError ? err.message : 'Unable to resume payment.',
+                    );
+                    setPaymentBusy(false);
+                  }
+                }}
+                className="bg-brand hover:bg-forest text-white text-xs font-bold"
+              >
+                Complete / Retry Online Payment
+              </Button>
+            )}
           {order.canCancel && (
             <Button
               type="button"

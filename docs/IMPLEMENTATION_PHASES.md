@@ -688,7 +688,7 @@ Order creation and status transitions must strictly follow approved single-store
 # 15. Phase 13 — Payment Integration
 
 **Priority:** Critical  
-**Status:** Not Started
+**Status:** Completed (Verified on 28 November 2026)
 
 ### Objective
 
@@ -696,19 +696,19 @@ Integrate the approved payment provider and implement reliable payment processin
 
 ### Tasks
 
-- [ ] Configure payment provider.
-- [ ] Implement payment initiation.
-- [ ] Implement payment verification.
-- [ ] Implement webhook handling.
-- [ ] Verify webhook signatures.
-- [ ] Implement idempotency.
-- [ ] Store payment transactions.
-- [ ] Implement payment status transitions.
-- [ ] Implement payment failure handling.
-- [ ] Implement payment retries where appropriate.
-- [ ] Implement refund workflows.
-- [ ] Implement COD handling if approved.
-- [ ] Test duplicate and delayed webhook events.
+- [x] Configure payment provider.
+- [x] Implement payment initiation.
+- [x] Implement payment verification.
+- [x] Implement webhook handling.
+- [x] Verify webhook signatures.
+- [x] Implement idempotency.
+- [x] Store payment transactions.
+- [x] Implement payment status transitions.
+- [x] Implement payment failure handling.
+- [x] Implement payment retries where appropriate.
+- [x] Implement refund workflows.
+- [x] Implement COD handling if approved.
+- [x] Test duplicate and delayed webhook events.
 
 ### Deliverables
 

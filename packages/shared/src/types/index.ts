@@ -1130,14 +1130,25 @@ export type OrderStatusType =
 
 export type PaymentMethodType = 'RAZORPAY' | 'COD';
 export type PaymentStatusType =
+  | 'CREATED'
   | 'PENDING'
   | 'PROCESSING'
+  | 'AUTHORIZED'
+  | 'CAPTURED'
   | 'SUCCESS'
   | 'FAILED'
   | 'CANCELLED'
   | 'REFUND_PENDING'
   | 'PARTIALLY_REFUNDED'
   | 'REFUNDED';
+
+export type RefundStatusType =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'PROCESSED'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'REJECTED';
 
 export type DeliveryStatusType =
   | 'PENDING'
@@ -1276,4 +1287,138 @@ export interface OrderTrackingResponse {
   storeName: string;
   milestones: OrderTrackingMilestone[];
   history: OrderStatusHistoryItem[];
+}
+
+// ============================================================================
+// Phase 13: Payment Gateway (Razorpay) & Refunds Types
+// ============================================================================
+
+export interface RazorpayCheckoutConfig {
+  keyId: string;
+  orderId: string;
+  amountPaise: number;
+  currency: string;
+  name: string;
+  description: string;
+  prefill: {
+    name?: string;
+    email?: string;
+    contact?: string;
+  };
+  notes?: Record<string, string>;
+}
+
+export interface InitiatePaymentResponse {
+  paymentId: string;
+  orderId: string;
+  orderNumber: string;
+  paymentMethod: PaymentMethodType;
+  status: PaymentStatusType;
+  amount: number;
+  amountPaise: number;
+  currency: string;
+  attemptNumber: number;
+  checkout: RazorpayCheckoutConfig;
+}
+
+export interface PaymentStatusResponse {
+  paymentId: string;
+  orderId: string;
+  orderNumber: string;
+  orderStatus: OrderStatusType;
+  orderPaymentStatus: PaymentStatusType;
+  paymentMethod: PaymentMethodType;
+  provider: string;
+  method: string;
+  providerOrderId: string | null;
+  providerPaymentId: string | null;
+  amount: number;
+  capturedAmount: number;
+  refundedAmount: number;
+  currency: string;
+  status: PaymentStatusType;
+  gatewayStatus: string | null;
+  failureCode: string | null;
+  failureReason: string | null;
+  attemptNumber: number;
+  paidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentStatusHistoryItem {
+  id: string;
+  previousStatus: PaymentStatusType;
+  newStatus: PaymentStatusType;
+  source: string;
+  providerEventId: string | null;
+  providerPaymentId: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface RefundSummaryItem {
+  id: string;
+  orderId: string;
+  orderNumber?: string;
+  paymentId: string;
+  refundNumber: string;
+  amount: number;
+  reason: string;
+  status: RefundStatusType;
+  providerRefundId: string | null;
+  speedRequested: string | null;
+  speedProcessed: string | null;
+  gatewayStatus: string | null;
+  failureReason: string | null;
+  requestedBy: string;
+  approvedBy: string | null;
+  processedAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminPaymentDetailResponse extends PaymentStatusResponse {
+  customerId: string;
+  customerName: string | null;
+  customerEmail: string | null;
+  sellerId: string;
+  storeName: string | null;
+  statusHistory: PaymentStatusHistoryItem[];
+  refunds: RefundSummaryItem[];
+}
+
+export interface PaginatedPaymentsResponse {
+  items: Array<
+    PaymentStatusResponse & {
+      customerName?: string | null;
+      storeName?: string | null;
+    }
+  >;
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PaginatedRefundsResponse {
+  items: RefundSummaryItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PaymentReconciliationResponse {
+  paymentId: string;
+  orderId: string;
+  orderNumber: string;
+  previousStatus: PaymentStatusType;
+  newStatus: PaymentStatusType;
+  gatewayStatus: string | null;
+  expectedAmount: number;
+  gatewayAmount: number | null;
+  discrepancyDetected: boolean;
+  discrepancyReason: string | null;
+  resolutionAction: string | null;
+  reconciledAt: string;
 }

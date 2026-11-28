@@ -665,6 +665,96 @@ export class InventoryReservationService {
   }
 
   /**
+   * Attempts to atomically acquire and commit stock directly for an order when
+   * its original CheckoutSession reservation expired before late payment capture.
+   * Locks inventory rows in ascending order to prevent deadlocks and never
+   * creates negative stock.
+   */
+  async tryAcquireAndCommitForOrderInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      orderId: string;
+      orderNumber: string;
+      items: Array<{
+        sellerProductId: string;
+        productNameSnapshot: string;
+        quantity: number;
+      }>;
+    },
+  ): Promise<{ acquired: boolean; unavailableItems: string[] }> {
+    const sorted = [...params.items].sort((a, b) =>
+      a.sellerProductId.localeCompare(b.sellerProductId),
+    );
+    const unavailableItems: string[] = [];
+    const lockedInventories = new Map<
+      string,
+      { id: string; stockOnHand: number; reservedQuantity: number; availableQuantity: number }
+    >();
+
+    for (const item of sorted) {
+      const rows = await tx.$queryRaw<
+        Array<{
+          id: string;
+          stock_on_hand: number;
+          reserved_quantity: number;
+          available_quantity: number;
+        }>
+      >`
+        SELECT id, stock_on_hand, reserved_quantity, available_quantity
+        FROM inventories
+        WHERE seller_product_id = ${item.sellerProductId}::uuid
+        FOR UPDATE
+      `;
+
+      const inv = rows[0];
+      if (!inv || inv.available_quantity < item.quantity || inv.stock_on_hand < item.quantity) {
+        unavailableItems.push(item.productNameSnapshot);
+      } else {
+        lockedInventories.set(item.sellerProductId, {
+          id: inv.id,
+          stockOnHand: inv.stock_on_hand,
+          reservedQuantity: inv.reserved_quantity,
+          availableQuantity: inv.available_quantity,
+        });
+      }
+    }
+
+    if (unavailableItems.length > 0) {
+      return { acquired: false, unavailableItems };
+    }
+
+    for (const item of sorted) {
+      const inv = lockedInventories.get(item.sellerProductId)!;
+      const newStockOnHand = inv.stockOnHand - item.quantity;
+      const newAvailable = newStockOnHand - inv.reservedQuantity;
+
+      await tx.inventory.update({
+        where: { id: inv.id },
+        data: {
+          stockOnHand: newStockOnHand,
+          availableQuantity: newAvailable,
+        },
+      });
+
+      await tx.inventoryTransaction.create({
+        data: {
+          inventoryId: inv.id,
+          type: InventoryTransactionType.ORDER_COMMITTED,
+          quantity: -item.quantity,
+          stockBefore: inv.stockOnHand,
+          stockAfter: newStockOnHand,
+          referenceType: 'ORDER',
+          referenceId: params.orderId,
+          note: `Late payment capture stock commit for order ${params.orderNumber}`,
+          idempotencyKey: `late-commit:${params.orderId}:${item.sellerProductId}`,
+        },
+      });
+    }
+
+    return { acquired: true, unavailableItems: [] };
+  }
+
+  /**
    * RELEASE RESERVATION (Payment Failed, Cancelled, or Abandoned)
    * Decreases reserved stock and restores available stock.
    */
