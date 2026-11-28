@@ -1782,3 +1782,153 @@ export interface PaginatedReviewReportsResponse {
   limit: number;
   totalPages: number;
 }
+
+// ============================================================================
+// Phase 17: Notifications Types
+// ============================================================================
+
+export type NotificationCategoryType =
+  | 'ORDER'
+  | 'PAYMENT'
+  | 'DELIVERY'
+  | 'REFUND'
+  | 'PROMOTION'
+  | 'ACCOUNT'
+  | 'SYSTEM'
+  | 'REVIEW';
+
+export type NotificationChannelType = 'IN_APP' | 'EMAIL' | 'SMS' | 'PUSH';
+
+export type NotificationPriorityType = 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
+
+export type NotificationDeliveryStatusType =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'SENT'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'RETRY_SCHEDULED'
+  | 'SKIPPED'
+  | 'BOUNCED'
+  | 'COMPLAINED';
+
+export type OutboxEventStatusType = 'PENDING' | 'PUBLISHED' | 'PROCESSED' | 'FAILED';
+
+export interface NotificationItem {
+  id: string;
+  type: NotificationCategoryType;
+  channel: NotificationChannelType;
+  priority: NotificationPriorityType;
+  eventKey: string | null;
+  title: string;
+  message: string;
+  actionUrl: string | null;
+  relatedEntityType: string | null;
+  relatedEntityId: string | null;
+  metadata: Record<string, unknown> | null;
+  isRead: boolean;
+  readAt: string | null;
+  sentAt: string;
+  createdAt: string;
+}
+
+export interface PaginatedNotificationsResponse {
+  items: NotificationItem[];
+  total: number;
+  unreadCount: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface NotificationCategoryPreferenceItem {
+  category: NotificationCategoryType;
+  channel: NotificationChannelType;
+  isEnabled: boolean;
+  isMandatory: boolean;
+}
+
+export interface NotificationPreferencesResponse {
+  channels: {
+    inApp: boolean;
+    email: boolean;
+    sms: boolean;
+    push: boolean;
+  };
+  categories: NotificationCategoryPreferenceItem[];
+}
+
+export interface AdminNotificationDeliveryItem {
+  id: string;
+  outboxEventId: string | null;
+  recipientUserId: string;
+  eventKey: string;
+  channel: NotificationChannelType;
+  templateId: string;
+  provider: string;
+  providerMessageId: string | null;
+  status: NotificationDeliveryStatusType;
+  attemptCount: number;
+  lastAttemptAt: string | null;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  failureReason: string | null;
+  isPermanentFailure: boolean;
+  createdAt: string;
+}
+
+export interface PaginatedAdminDeliveriesResponse {
+  items: AdminNotificationDeliveryItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface AdminOutboxEventItem {
+  id: string;
+  eventKey: string;
+  aggregateType: string;
+  aggregateId: string;
+  recipientUserId: string | null;
+  status: OutboxEventStatusType;
+  attempts: number;
+  lastAttemptAt: string | null;
+  processedAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface PaginatedAdminOutboxResponse {
+  items: AdminOutboxEventItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface AdminNotificationHealthResponse {
+  enabled: boolean;
+  channels: {
+    inApp: boolean;
+    email: boolean;
+    sms: boolean;
+    push: boolean;
+  };
+  queue: {
+    waiting: number;
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+  } | null;
+  outbox: {
+    pending: number;
+    failed: number;
+  };
+  deliveries: {
+    failed: number;
+    bounced: number;
+    complained: number;
+  };
+}

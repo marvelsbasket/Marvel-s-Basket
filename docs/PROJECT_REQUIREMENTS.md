@@ -468,6 +468,16 @@ Requirements:
 - Restrict moderation (`approve`, `reject`, `hide`, `restore`, report resolution, and rating reconciliation) strictly to administrators with full `ReviewModerationLog` audit trails.
 - Note: Separate seller/store ratings are deferred; product reviews capture `sellerId` context from the qualifying order.
 
+## 4.13 Notifications (Phase 17)
+
+Requirements:
+
+- Centralized asynchronous notification system for Customer, Seller, and Administrator events without blocking critical business transactions.
+- Core In-App (`Notification`) and Email (`Resend` via `EmailService`) channels active; SMS and Push kept behind extensible interfaces (`DisabledSmsProvider` / `DisabledPushProvider`) disabled by default until provider/DLT approval.
+- Channel-level and category-level user preferences (`NotificationPreference`, `NotificationCategoryPreference`) enforcing mandatory security, payment, and refund notifications.
+- Per-channel delivery tracking (`NotificationDelivery`), retry classification, and Resend webhook signature verification.
+- Dedicated Customer (`/notifications` + navbar `NotificationBell`), Seller (`/seller/notifications`), and Admin (`/admin/notifications`) interfaces.
+
 ---
 
 # 5. SELLER MANAGEMENT REQUIREMENTS

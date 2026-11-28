@@ -30,6 +30,7 @@ import {
 import { Logo } from '@/components/shared/logo';
 import { DropdownMenu, DropdownItem, DropdownDivider } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/features/auth';
+import { NotificationBell } from '@/features/notifications/components/notification-bell';
 import { useLocation } from '@/features/location/context/location-context';
 import { LocationSelectorModal } from '@/features/location/components/location-selector-modal';
 import { useBasket } from '@/features/basket/context/basket-context';
@@ -580,6 +581,7 @@ export function Header({ basketItemCount, cartItemCount, currentLocation, onSear
 
           {/* 4. User Actions */}
           <div className="flex items-center gap-1 sm:gap-4 shrink-0">
+            {isAuthenticated && <NotificationBell />}
             {/* Desktop Account / Login Action (strictly hidden on mobile < sm) */}
             <div className="hidden sm:flex items-center">
               {isAuthenticated && user ? (
@@ -606,6 +608,7 @@ export function Header({ basketItemCount, cartItemCount, currentLocation, onSear
                   <DropdownDivider />
                   <DropdownItem href="/profile">My Profile</DropdownItem>
                   <DropdownItem href="/orders">My Orders</DropdownItem>
+                  <DropdownItem href="/notifications">Notifications</DropdownItem>
                   <DropdownItem href="/addresses">Delivery Addresses</DropdownItem>
                   <DropdownItem href="/account">Account Settings</DropdownItem>
                   <DropdownDivider />

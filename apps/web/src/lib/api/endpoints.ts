@@ -265,4 +265,25 @@ export const ENDPOINTS = {
     REPORTS: '/admin/reviews/reports',
     RESOLVE_REPORT: (reportId: string) => `/admin/reviews/reports/${reportId}/resolve`,
   },
+  NOTIFICATIONS: {
+    LIST: '/notifications',
+    UNREAD_COUNT: '/notifications/unread-count',
+    MARK_READ: (id: string) => `/notifications/${id}/read`,
+    READ_ALL: '/notifications/read-all',
+    DISMISS: (id: string) => `/notifications/${id}`,
+    PREFERENCES: '/notifications/preferences',
+  },
+  SELLER_NOTIFICATIONS: {
+    LIST: '/seller/notifications',
+    UNREAD_COUNT: '/seller/notifications/unread-count',
+    MARK_READ: (id: string) => `/seller/notifications/${id}/read`,
+    READ_ALL: '/seller/notifications/read-all',
+    PREFERENCES: '/seller/notifications/preferences',
+  },
+  ADMIN_NOTIFICATIONS: {
+    DELIVERIES: '/admin/notifications/deliveries',
+    OUTBOX: '/admin/notifications/outbox',
+    HEALTH: '/admin/notifications/health',
+    RETRY_DELIVERY: (id: string) => `/admin/notifications/deliveries/${id}/retry`,
+  },
 } as const;

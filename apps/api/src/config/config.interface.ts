@@ -62,6 +62,17 @@ export interface RazorpayConfig {
   codMaxAmount: number;
 }
 
+export interface NotificationsConfig {
+  enabled: boolean;
+  inAppEnabled: boolean;
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  pushEnabled: boolean;
+  devMode: boolean;
+  logContent: boolean;
+  resendWebhookSecret: string;
+}
+
 export interface RootConfig {
   app: AppConfig;
   database: DatabaseConfig;
@@ -71,4 +82,5 @@ export interface RootConfig {
   cloudinary: CloudinaryConfig;
   security: SecurityConfig;
   razorpay: RazorpayConfig;
+  notifications: NotificationsConfig;
 }

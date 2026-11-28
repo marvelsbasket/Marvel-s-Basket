@@ -18,6 +18,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../../cache/redis.service';
 import { RatingAggregationService } from './rating-aggregation.service';
 import { sanitizeAndValidateReviewText } from './review-sanitizer';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreateReviewDto,
   QueryProductReviewsDto,
@@ -31,6 +32,7 @@ export class ReviewsService {
     private readonly prisma: PrismaService,
     private readonly ratingAggregation: RatingAggregationService,
     @Optional() private readonly redis?: RedisService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   private async enforceRateLimit(key: string, maxRequests: number, windowSeconds: number) {
@@ -444,6 +446,23 @@ export class ReviewsService {
           explanation,
         },
       });
+      if (this.notificationsService) {
+        void this.notificationsService.publishEvent({
+          eventKey: 'REVIEW_REPORTED_ADMIN',
+          aggregateType: 'Review',
+          aggregateId: review.id,
+          recipientUserId: null,
+          idempotencyKey: `review_reported_admin:${report.id}`,
+          payload: {
+            reviewId: review.id,
+            reportId: report.id,
+            reason: dto.reason,
+            title: 'Review reported for moderation',
+            message: `A product review was reported (${dto.reason}).`,
+            actionUrl: '/admin/reviews',
+          },
+        });
+      }
       return {
         id: report.id,
         reviewId: report.reviewId,

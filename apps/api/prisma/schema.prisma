@@ -275,6 +275,7 @@ enum NotificationType {
   PROMOTION
   ACCOUNT
   SYSTEM
+  REVIEW
 }
 
 enum NotificationChannel {
@@ -282,6 +283,32 @@ enum NotificationChannel {
   EMAIL
   SMS
   PUSH
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum OutboxEventStatus {
+  PENDING
+  PUBLISHED
+  PROCESSED
+  FAILED
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  DELIVERED
+  FAILED
+  RETRY_SCHEDULED
+  SKIPPED
+  BOUNCED
+  COMPLAINED
 }
 
 enum AddressType {
@@ -322,8 +349,11 @@ model User {
   orderComplaints         OrderComplaint[]         @relation("CustomerOrderComplaints")
   reviews                 Review[]
   wishlist                Wishlist?
-  notifications           Notification[]
-  notificationPreferences NotificationPreference[]
+  notifications                   Notification[]
+  notificationPreferences         NotificationPreference[]
+  notificationCategoryPreferences NotificationCategoryPreference[]
+  outboxEvents                    OutboxEvent[]                    @relation("RecipientOutboxEvents")
+  notificationDeliveries          NotificationDelivery[]           @relation("RecipientDeliveries")
   couponUsages            CouponUsage[]
   auditLogs               AuditLog[]               @relation("ActorAuditLogs")
   adminActivityLogs       AdminActivityLog[]       @relation("AdminLogs")
@@ -1706,21 +1736,31 @@ model WishlistItem {
 // ==============================================================================
 
 model Notification {
-  id        String              @id @default(uuid()) @db.Uuid
-  userId    String              @map("user_id") @db.Uuid
-  type      NotificationType
-  channel   NotificationChannel @default(IN_APP)
-  title     String
-  message   String
-  metadata  Json?
-  isRead    Boolean             @default(false) @map("is_read")
-  readAt    DateTime?           @map("read_at")
-  sentAt    DateTime            @default(now()) @map("sent_at")
-  createdAt DateTime            @default(now()) @map("created_at")
+  id                String               @id @default(uuid()) @db.Uuid
+  userId            String               @map("user_id") @db.Uuid
+  type              NotificationType
+  channel           NotificationChannel  @default(IN_APP)
+  priority          NotificationPriority @default(NORMAL)
+  eventKey          String?              @map("event_key")
+  title             String
+  message           String
+  actionUrl         String?              @map("action_url")
+  relatedEntityType String?              @map("related_entity_type")
+  relatedEntityId   String?              @map("related_entity_id")
+  metadata          Json?
+  idempotencyKey    String?              @unique @map("idempotency_key")
+  isRead            Boolean              @default(false) @map("is_read")
+  readAt            DateTime?            @map("read_at")
+  dismissedAt       DateTime?            @map("dismissed_at")
+  sentAt            DateTime             @default(now()) @map("sent_at")
+  createdAt         DateTime             @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
 
   @@index([userId, isRead])
+  @@index([userId, dismissedAt, createdAt])
+  @@index([userId, type, createdAt])
   @@index([createdAt])
   @@map("notifications")
 }
@@ -1737,6 +1777,83 @@ model NotificationPreference {
 
   @@unique([userId, channel])
   @@map("notification_preferences")
+}
+
+model NotificationCategoryPreference {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  channel   NotificationChannel
+  category  NotificationType
+  isEnabled Boolean             @default(true) @map("is_enabled")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channel, category])
+  @@index([userId, category])
+  @@map("notification_category_preferences")
+}
+
+model OutboxEvent {
+  id              String            @id @default(uuid()) @db.Uuid
+  eventKey        String            @map("event_key")
+  eventVersion    Int               @default(1) @map("event_version")
+  aggregateType   String            @map("aggregate_type")
+  aggregateId     String            @map("aggregate_id")
+  recipientUserId String?           @map("recipient_user_id") @db.Uuid
+  payload         Json
+  idempotencyKey  String            @unique @map("idempotency_key")
+  status          OutboxEventStatus @default(PENDING)
+  attempts        Int               @default(0)
+  lastAttemptAt   DateTime?         @map("last_attempt_at")
+  nextRetryAt     DateTime?         @map("next_retry_at")
+  processedAt     DateTime?         @map("processed_at")
+  errorMessage    String?           @map("error_message")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  recipientUser User?                  @relation("RecipientOutboxEvents", fields: [recipientUserId], references: [id], onDelete: SetNull)
+  deliveries    NotificationDelivery[]
+
+  @@index([status, nextRetryAt, createdAt])
+  @@index([aggregateType, aggregateId])
+  @@index([eventKey, createdAt])
+  @@map("outbox_events")
+}
+
+model NotificationDelivery {
+  id                   String                     @id @default(uuid()) @db.Uuid
+  outboxEventId        String?                    @map("outbox_event_id") @db.Uuid
+  notificationId       String?                    @map("notification_id") @db.Uuid
+  recipientUserId      String                     @map("recipient_user_id") @db.Uuid
+  eventKey             String                     @map("event_key")
+  channel              NotificationChannel
+  templateId           String                     @map("template_id")
+  provider             String
+  providerMessageId    String?                    @map("provider_message_id")
+  status               NotificationDeliveryStatus @default(PENDING)
+  attemptCount         Int                        @default(0) @map("attempt_count")
+  lastAttemptAt        DateTime?                  @map("last_attempt_at")
+  nextRetryAt          DateTime?                  @map("next_retry_at")
+  sentAt               DateTime?                  @map("sent_at")
+  deliveredAt          DateTime?                  @map("delivered_at")
+  failureReason        String?                    @map("failure_reason")
+  isPermanentFailure   Boolean                    @default(false) @map("is_permanent_failure")
+  providerMetadata     Json?                      @map("provider_metadata")
+  idempotencyKey       String                     @unique @map("idempotency_key")
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  updatedAt            DateTime                   @updatedAt @map("updated_at")
+
+  outboxEvent   OutboxEvent?  @relation(fields: [outboxEventId], references: [id], onDelete: SetNull)
+  notification  Notification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  recipientUser User          @relation("RecipientDeliveries", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@index([recipientUserId, createdAt])
+  @@index([status, createdAt])
+  @@index([providerMessageId])
+  @@index([outboxEventId])
+  @@map("notification_deliveries")
 }
 
 // ==============================================================================

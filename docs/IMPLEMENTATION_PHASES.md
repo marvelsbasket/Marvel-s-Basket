@@ -832,7 +832,7 @@ Only authorized customers must be able to submit reviews according to the approv
 # 19. Phase 17 — Notifications
 
 **Priority:** Medium  
-**Status:** Not Started
+**Status:** Completed (28 November 2026)
 
 ### Objective
 
@@ -840,16 +840,15 @@ Build the notification system for important customer, seller, and administrative
 
 ### Tasks
 
-- [ ] Define notification events.
-- [ ] Implement in-app notifications.
-- [ ] Implement email notifications if selected.
-- [ ] Implement SMS notifications if selected.
-- [ ] Implement push notifications if selected.
-- [ ] Implement notification preferences.
-- [ ] Implement delivery status tracking.
-- [ ] Implement retry handling.
-- [ ] Build notification interfaces.
-- [ ] Test notification delivery.
+- [x] Define centralized notification event catalog (`NOTIFICATION_EVENTS`).
+- [x] Implement persistent in-app notifications (`Notification` + `NotificationBell` + `/notifications`, `/seller/notifications`).
+- [x] Implement email notifications via existing `EmailService` (Resend) with HTML-escaped responsive templates.
+- [x] Keep SMS and Push behind provider interfaces (`ISmsProvider`, `IPushProvider`) disabled by default pending vendor/platform approval.
+- [x] Implement channel-level and category-level notification preferences with mandatory transactional protection.
+- [x] Implement transactional outbox (`OutboxEvent`), BullMQ `notifications` worker, Redis-locked outbox sweep, and `NotificationDelivery` tracking.
+- [x] Implement exponential backoff + jitter retry handling, permanent vs transient failure classification, and Resend Svix webhook verification.
+- [x] Build Customer `/notifications`, Seller `/seller/notifications`, and Admin `/admin/notifications` interfaces.
+- [x] Test event catalog, templates, preferences, webhook verification, outbox idempotency, IDOR isolation, and delivery tracking.
 
 ### Deliverables
 

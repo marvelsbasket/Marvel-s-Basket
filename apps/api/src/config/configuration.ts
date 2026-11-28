@@ -64,4 +64,16 @@ export default (): RootConfig => ({
     captureMode: (process.env.RAZORPAY_CAPTURE_MODE as 'automatic' | 'manual') || 'automatic',
     codMaxAmount: parseInt(process.env.COD_MAX_AMOUNT || '1500', 10),
   },
+  notifications: {
+    enabled: process.env.NOTIFICATIONS_ENABLED !== 'false',
+    inAppEnabled: process.env.NOTIFICATIONS_IN_APP_ENABLED !== 'false',
+    emailEnabled: process.env.NOTIFICATIONS_EMAIL_ENABLED !== 'false',
+    smsEnabled: process.env.NOTIFICATIONS_SMS_ENABLED === 'true',
+    pushEnabled: process.env.NOTIFICATIONS_PUSH_ENABLED === 'true',
+    devMode:
+      process.env.NODE_ENV !== 'production' && process.env.NOTIFICATIONS_DEV_MODE !== 'false',
+    logContent:
+      process.env.NODE_ENV !== 'production' && process.env.NOTIFICATIONS_LOG_CONTENT === 'true',
+    resendWebhookSecret: process.env.RESEND_WEBHOOK_SECRET || '',
+  },
 });
