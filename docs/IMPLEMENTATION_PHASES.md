@@ -817,22 +817,6 @@ Implement a verified-purchase customer review, rating, reporting, and admin mode
 - [x] Build PDP `ProductReviewsSection`, Customer `/reviews`, and Admin `/admin/reviews`.
 - [x] Test eligibility, concurrency, moderation, reporting, and rating aggregation.
 
-### Objective
-
-Allow customers to submit reviews and ratings for eligible purchases.
-
-### Tasks
-
-- [ ] Implement review creation.
-- [ ] Implement rating validation.
-- [ ] Restrict reviews to eligible customers.
-- [ ] Implement review editing rules.
-- [ ] Implement review moderation.
-- [ ] Implement review reporting.
-- [ ] Display product ratings.
-- [ ] Build review interfaces.
-- [ ] Test duplicate review restrictions.
-
 ### Deliverables
 
 - Review APIs.

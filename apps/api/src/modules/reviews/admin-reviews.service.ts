@@ -143,14 +143,35 @@ export class AdminReviewsService {
     targetStatus: ReviewStatus;
     action: string;
     reason?: string;
+    allowedFromStatuses?: ReviewStatus[];
   }): Promise<AdminReviewItem> {
     const now = new Date();
     const updated = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.review.findUnique({ where: { id: params.reviewId } });
+      const existing = await tx.review.findUnique({
+        where: { id: params.reviewId },
+        include: {
+          user: { select: { name: true } },
+          product: { select: { name: true } },
+          _count: { select: { reports: true } },
+        },
+      });
       if (!existing) throw new NotFoundException('Review not found.');
 
       if (existing.status === ReviewStatus.REMOVED) {
         throw new ConflictException('Customer-removed reviews cannot be re-published.');
+      }
+
+      if (existing.status === params.targetStatus) {
+        return existing;
+      }
+
+      if (
+        params.allowedFromStatuses &&
+        !params.allowedFromStatuses.includes(existing.status)
+      ) {
+        throw new ConflictException(
+          `Cannot transition review from ${existing.status} to ${params.targetStatus} via ${params.action}.`,
+        );
       }
 
       const isPublished = params.targetStatus === ReviewStatus.APPROVED;
@@ -236,6 +257,7 @@ export class AdminReviewsService {
       targetStatus: ReviewStatus.APPROVED,
       action: 'RESTORE_REVIEW',
       reason: dto.reason || 'Restored by administrator',
+      allowedFromStatuses: [ReviewStatus.HIDDEN, ReviewStatus.REJECTED],
     });
   }
 

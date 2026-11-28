@@ -2043,6 +2043,15 @@ IDENTITY
 - Extended `OrderStatusHistory` with `actor_role`.
 - Added `OrderComplaintCategory`, `OrderComplaintStatus`, and `order_complaints` table (`20261125110500_phase12_order_management`).
 
+## Phase 16 Addendum — Reviews & Ratings
+
+- Extended `ReviewStatus` enum with `HIDDEN` and `REMOVED` (`20261128070000_phase16_review_enums`).
+- Added `ReviewReportReason` (`SPAM`, `OFFENSIVE_LANGUAGE`, `FAKE_REVIEW`, `IRRELEVANT`, `MISLEADING`, `OTHER`) and `ReviewReportStatus` (`OPEN`, `RESOLVED`, `DISMISSED`) enums.
+- Extended `reviews` (`Review`) with `seller_id`, `title`, `is_verified_purchase`, `is_edited`, `edited_at`, `moderation_reason`, `moderated_by`, `moderated_at`, `deleted_at`, and unique constraint `@@unique([userId, productId])` (`20261128070001_phase16_reviews_and_ratings`).
+- Added `review_reports` (`ReviewReport`) with `@@unique([reviewId, reporterUserId])` to prevent duplicate reports from the same user.
+- Added `review_moderation_logs` (`ReviewModerationLog`) for immutable moderation & customer edit/delete audit history.
+- Added `product_rating_aggregates` (`ProductRatingAggregate`) keyed by `product_id` (`average_rating`, `total_reviews`, `rating_1_count`..`rating_5_count`), serialized via `SELECT ... FOR UPDATE` on `products`.
+
 # 31. RELATED DOCUMENTATION
 
 1. PROJECT_CONTEXT.md

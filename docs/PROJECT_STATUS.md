@@ -176,10 +176,7 @@ Phase 06 delivered the complete customer profile and delivery address management
 
 ## 9. Immediate Next Steps
 
-1. Transition to **Phase 10 — Customer Shopping Experience**:
-   - Customer-facing homepage enhancements, quick-add carousel rails, and category landing pages.
-   - Live location picker and serviceable store mapping.
-   - Dynamic store switching modal with basket retention/clearing confirmation.
-   - Product search with debounce, fuzzy matching, and Indian regional grocery synonyms.
+1. Transition to **Phase 17 — Notifications**:
+   - Multi-channel transactional notifications (order, delivery, payment, and review moderation alerts) via Resend and approved channels.
 
 **Document End — PROJECT_STATUS.md**

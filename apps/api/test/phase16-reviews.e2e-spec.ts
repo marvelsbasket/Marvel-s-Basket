@@ -330,6 +330,33 @@ describe('Phase 16 — Reviews & Ratings (E2E)', () => {
       .send({})
       .expect(200);
 
+    // Repeated approve on already APPROVED review is idempotent (no extra moderation log)
+    const detailBeforeRepeat = await request(app.getHttpServer())
+      .get(`/api/v1/admin/reviews/${reviewId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const logCountBefore = detailBeforeRepeat.body.moderationLogs.length;
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/admin/reviews/${reviewId}/approve`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(200);
+
+    const detailAfterRepeat = await request(app.getHttpServer())
+      .get(`/api/v1/admin/reviews/${reviewId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(detailAfterRepeat.body.moderationLogs).toHaveLength(logCountBefore);
+
+    // Admin rating reconciliation matches APPROVED reviews
+    const reconcileBeforeDelete = await request(app.getHttpServer())
+      .post(`/api/v1/admin/products/${productId}/rating-reconcile`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(reconcileBeforeDelete.body.totalReviews).toBe(1);
+    expect(reconcileBeforeDelete.body.averageRating).toBe(4);
+
     await request(app.getHttpServer())
       .delete(`/api/v1/reviews/${reviewId}`)
       .set('Authorization', `Bearer ${cust1Token}`)
@@ -338,5 +365,12 @@ describe('Phase 16 — Reviews & Ratings (E2E)', () => {
       .get(`/api/v1/products/${productId}/rating-summary`)
       .expect(200);
     expect(sumDeleted.body.totalReviews).toBe(0);
+
+    // Customer-removed reviews cannot be re-published by admin
+    await request(app.getHttpServer())
+      .post(`/api/v1/admin/reviews/${reviewId}/approve`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({})
+      .expect(409);
   });
 });
